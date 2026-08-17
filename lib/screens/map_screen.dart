@@ -18,12 +18,14 @@ import '../providers/theme_provider.dart';
 import '../models/route_field_kind.dart';
 import '../models/itinerary.dart';
 import '../models/journey_stop.dart';
+import '../models/nav_destination.dart';
 import '../models/saved_place.dart';
 import '../models/stop_time.dart';
 import '../models/time_selection.dart';
 import '../models/trip_history_item.dart';
 import '../screens/itinerary_list_screen.dart';
 import '../screens/location_settings_screen.dart';
+import '../screens/suggestions_map_picker_screen.dart';
 import '../screens/timetables_screen.dart';
 import '../services/favorites_service.dart';
 import '../services/location_service.dart';
@@ -87,7 +89,7 @@ class MapScreen extends StatefulWidget {
   final ValueChanged<bool>? onCollapseChanged;
   final ValueChanged<double>? onCollapseProgressChanged;
   final ValueChanged<bool>? onOverlayVisibilityChanged;
-  final ValueChanged<int>? onTabChangeRequested;
+  final ValueChanged<NavDestination>? onTabChangeRequested;
   final ValueChanged<TransitousLocationSuggestion>? onTimetableRequested;
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -1943,6 +1945,15 @@ class _MapScreenState extends State<MapScreen>
                               favorites: _favorites,
                               onFavoriteTap: _onFavoriteTap,
                               hasLocationPermission: _hasLocationPermission,
+                              homeSections: context
+                                  .watch<ThemeProvider>()
+                                  .homeSections,
+                              nearbyStops: _nearbyDepartureStops(),
+                              onStopSelected: _selectStopFromDeparturesList,
+                              onFromSubmitted: (_) =>
+                                  _handleFieldSubmitted(RouteFieldKind.from),
+                              onToSubmitted: (_) =>
+                                  _handleFieldSubmitted(RouteFieldKind.to),
                             ),
                       if (!_isTripFocus && !_isQuickSettings)
                         CompositedTransformFollower(
@@ -1984,6 +1995,7 @@ class _MapScreenState extends State<MapScreen>
                                     isLoading: _isFetchingSuggestions,
                                     onSuggestionTap: _onSuggestionSelected,
                                     onDismissRequest: _unfocusInputs,
+                                    onSeeOnMapTap: _openSuggestionsMapPicker,
                                   ),
                           ),
                         ),
@@ -2343,6 +2355,7 @@ class _MapScreenState extends State<MapScreen>
   }
 
   LatLng? _placeBiasLatLng() {
+    if (!context.read<ThemeProvider>().geocodeLocationBiasEnabled) return null;
     if (!_hasLocationPermission) return null;
     if (_lastUserLatLng != null) return _lastUserLatLng;
     if (_startCam.target != _initCam.target) return _startCam.target;
@@ -2375,6 +2388,27 @@ class _MapScreenState extends State<MapScreen>
     } else {
       _unfocusInputs();
     }
+  }
+
+  void _handleFieldSubmitted(RouteFieldKind kind) {
+    if (_activeSuggestionField != kind || _suggestions.isEmpty) return;
+    _openSuggestionsMapPicker(kind);
+  }
+
+  Future<void> _openSuggestionsMapPicker(RouteFieldKind field) async {
+    if (_suggestions.isEmpty) return;
+    final suggestions = List<TransitousLocationSuggestion>.from(_suggestions);
+    final title = field == RouteFieldKind.to ? 'Destination' : 'Origin';
+    final result = await Navigator.of(context).push<TransitousLocationSuggestion>(
+      CustomPageRoute(
+        child: SuggestionsMapPickerScreen(
+          suggestions: suggestions,
+          title: title,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    _onSuggestionSelected(field, result);
   }
 
   void _setControllerText(RouteFieldKind kind, String value) {
@@ -3844,7 +3878,7 @@ class _MapScreenState extends State<MapScreen>
     _dismissStopOverlay();
     if (widget.onTimetableRequested != null) {
       widget.onTimetableRequested!(suggestion);
-      widget.onTabChangeRequested?.call(1);
+      widget.onTabChangeRequested?.call(NavDestination.departures);
       return;
     }
     Navigator.of(context).push(
@@ -3858,7 +3892,7 @@ class _MapScreenState extends State<MapScreen>
     if (_isQuickSettings) {
       _closeQuickSettings();
     }
-    widget.onTabChangeRequested?.call(2);
+    widget.onTabChangeRequested?.call(NavDestination.settings);
   }
 
   Future<void> _loadStopTimesPreview(MapStop stop) async {
@@ -3911,6 +3945,53 @@ class _MapScreenState extends State<MapScreen>
         stopTime.place.scheduledDeparture ??
         stopTime.place.arrival ??
         stopTime.place.scheduledArrival;
+  }
+
+  static const int _maxDepartureStops = 8;
+
+  List<MapStop> _nearbyDepartureStops() {
+    final center = _lastCam.target;
+    final stops =
+        _visibleStops.values
+            .where((s) => s.stopId != null && s.stopId!.isNotEmpty)
+            .toList()
+          ..sort((a, b) {
+            final da = coordinateDistanceInMeters(
+              center.latitude,
+              center.longitude,
+              a.lat,
+              a.lon,
+            );
+            final db = coordinateDistanceInMeters(
+              center.latitude,
+              center.longitude,
+              b.lat,
+              b.lon,
+            );
+            return da.compareTo(db);
+          });
+    return stops.take(_maxDepartureStops).toList();
+  }
+
+  void _selectStopFromDeparturesList(MapStop stop) {
+    Haptics.lightTick();
+    final collapsedTop = _lastComputedCollapsedTop;
+    if (collapsedTop != null) {
+      _animateTo(collapsedTop, collapsedTop);
+    }
+    unawaited(
+      _controller?.animateCamera(
+        CameraUpdate.newLatLng(LatLng(stop.lat, stop.lon)),
+      ),
+    );
+    setState(() {
+      _selectedStop = stop;
+      _isStopOverlayClosing = false;
+      _stopTimesPreview = [];
+      _stopTimesError = null;
+      _isStopTimesLoading = true;
+    });
+    unawaited(_loadStopTimesPreview(stop));
   }
 
   TransitousLocationSuggestion _suggestionFromStop(MapStop stop) {
