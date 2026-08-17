@@ -10,9 +10,12 @@ import '../models/time_selection.dart';
 import '../widgets/custom_card.dart';
 import '../widgets/empty_state.dart';
 import '../models/itinerary.dart';
+import '../models/saved_trip.dart';
 import '../providers/theme_provider.dart';
 import '../services/routing_service.dart';
+import '../services/saved_trips_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/haptics.dart';
 import '../widgets/custom_app_bar.dart';
 import '../utils/color_utils.dart';
 import '../utils/duration_formatter.dart';
@@ -20,6 +23,7 @@ import '../utils/time_utils.dart';
 import 'itinerary_detail_screen.dart';
 import '../widgets/load_more_button.dart';
 import '../widgets/skeletons/skeleton_list.dart';
+import '../widgets/validation_toast.dart';
 
 class ItineraryListScreen extends StatefulWidget {
   final FutureOr<double> fromLat;
@@ -228,6 +232,7 @@ class _ItineraryListScreenState extends State<ItineraryListScreen> {
                                   ),
                                 );
                               },
+                              onLongPress: () => _saveTrip(itin),
                               child: ItineraryCard(itinerary: itin),
                             );
                           }
@@ -294,6 +299,20 @@ class _ItineraryListScreenState extends State<ItineraryListScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _saveTrip(Itinerary itin) async {
+    if (itin.legs.isEmpty) return;
+    unawaited(Haptics.mediumTick());
+    final saved = await SavedTripsService.saveTrip(
+      SavedTrip.fromItinerary(itin),
+    );
+    if (!mounted) return;
+    showValidationToast(
+      context,
+      saved ? 'Trip saved' : 'Already saved',
+      accentColor: AppColors.accentOf(context),
     );
   }
 
