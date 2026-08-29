@@ -77,6 +77,25 @@ class _ItineraryListScreenState extends State<ItineraryListScreen> {
     super.dispose();
   }
 
+  /// Replaces placeholder "START"/"END" leg endpoint names with the real
+  /// place names the user searched for, so every screen that reads a leg's
+  /// name directly (notification, stop rows, map markers, ...) shows
+  /// something meaningful instead. `'My Location'` mirrors the same
+  /// fallback already used for a from-point with no explicit selection
+  /// (e.g. current GPS position) in [TripHistoryItem.fromSelections].
+  List<Itinerary> _resolveEndpointNames(List<Itinerary> itineraries) {
+    final fromLabel = widget.fromSelection?.name ?? 'My Location';
+    final toLabel = widget.toSelection?.name;
+    return itineraries
+        .map(
+          (itin) => itin.withResolvedEndpointNames(
+            fromLabel: fromLabel,
+            toLabel: toLabel,
+          ),
+        )
+        .toList();
+  }
+
   Future<void> _loadInitial() async {
     setState(() => _isLoading = true);
     try {
@@ -92,7 +111,7 @@ class _ItineraryListScreenState extends State<ItineraryListScreen> {
       setState(() {
         _fromLat = fromLat;
         _fromLon = fromLon;
-        _itineraries = response.itineraries;
+        _itineraries = _resolveEndpointNames(response.itineraries);
         _centerIndex = 0;
         _nextPageCursor = response.nextPageCursor;
         _previousPageCursor = response.previousPageCursor;
@@ -121,7 +140,7 @@ class _ItineraryListScreenState extends State<ItineraryListScreen> {
       setState(() {
         _fromLat = fromLat;
         _fromLon = fromLon;
-        _itineraries.addAll(response.itineraries);
+        _itineraries.addAll(_resolveEndpointNames(response.itineraries));
         _nextPageCursor = response.nextPageCursor;
         _previousPageCursor =
             response.previousPageCursor ?? _previousPageCursor;
@@ -150,8 +169,9 @@ class _ItineraryListScreenState extends State<ItineraryListScreen> {
       setState(() {
         _fromLat = fromLat;
         _fromLon = fromLon;
-        _itineraries = [...response.itineraries, ..._itineraries];
-        _centerIndex += response.itineraries.length;
+        final resolved = _resolveEndpointNames(response.itineraries);
+        _itineraries = [...resolved, ..._itineraries];
+        _centerIndex += resolved.length;
         _previousPageCursor = response.previousPageCursor;
       });
     } catch (_) {

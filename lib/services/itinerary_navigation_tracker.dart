@@ -55,6 +55,12 @@ class ItineraryNavigationTracker extends ChangeNotifier
   double? remainingWalkMeters;
   int? remainingStops;
 
+  /// Fraction (0..1) of the current leg's distance completed — unlike
+  /// [remainingStops], this moves continuously with GPS position rather
+  /// than only on reaching a new stop. Used to drive the notification's
+  /// progress bar smoothly without changing the displayed stop count.
+  double legProgress = 0;
+
   void start(LatLng initialPos, {int? startLegIndex}) {
     if (isActive || legs.isEmpty) return;
     isActive = true;
@@ -116,6 +122,7 @@ class ItineraryNavigationTracker extends ChangeNotifier
 
   void _resetLegProgress() {
     _stopIndex = 0;
+    legProgress = 0;
     final leg = legs[currentLegIndex].leg;
     if (leg.mode == 'WALK') {
       remainingWalkMeters = leg.distance;
@@ -167,6 +174,7 @@ class ItineraryNavigationTracker extends ChangeNotifier
       );
       remainingStops = waypoints.length - 1 - _stopIndex;
     }
+    legProgress = legDistanceProgress(stopWaypoints(leg), pos, _stopIndex);
   }
 
   /// Makes [legIndex] the monitored leg, e.g. because the user manually

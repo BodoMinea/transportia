@@ -30,6 +30,50 @@ int advanceStopIndex(
   return best;
 }
 
+/// Fraction (0..1) of [waypoints]' total length completed, given the
+/// furthest waypoint index reached ([stopIndex]) and the live position —
+/// interpolates within the current stop-to-stop segment by straight-line
+/// distance from its start, so it moves continuously with GPS rather than
+/// jumping only when a new stop is reached. Same waypoint list works for
+/// both walk and transit legs.
+double legDistanceProgress(List<LatLng> waypoints, LatLng? pos, int stopIndex) {
+  if (waypoints.length < 2) return 0;
+
+  final segmentLengths = <double>[];
+  double total = 0;
+  for (int i = 0; i < waypoints.length - 1; i++) {
+    final length = coordinateDistanceInMeters(
+      waypoints[i].latitude,
+      waypoints[i].longitude,
+      waypoints[i + 1].latitude,
+      waypoints[i + 1].longitude,
+    );
+    segmentLengths.add(length);
+    total += length;
+  }
+  if (total <= 0) return 0;
+
+  double completed = 0;
+  for (int i = 0; i < stopIndex && i < segmentLengths.length; i++) {
+    completed += segmentLengths[i];
+  }
+
+  if (pos != null && stopIndex < segmentLengths.length) {
+    final segmentLength = segmentLengths[stopIndex];
+    if (segmentLength > 0) {
+      final distanceFromSegmentStart = coordinateDistanceInMeters(
+        waypoints[stopIndex].latitude,
+        waypoints[stopIndex].longitude,
+        pos.latitude,
+        pos.longitude,
+      );
+      completed += distanceFromSegmentStart.clamp(0, segmentLength);
+    }
+  }
+
+  return (completed / total).clamp(0.0, 1.0);
+}
+
 double minDistanceToRoute(List<List<LatLng>> legGeometries, LatLng pos) {
   double best = double.infinity;
   for (final geometry in legGeometries) {

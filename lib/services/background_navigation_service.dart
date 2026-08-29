@@ -11,6 +11,7 @@ import '../models/itinerary.dart';
 import '../utils/itinerary_leg_utils.dart';
 import '../utils/itinerary_navigation.dart';
 import '../utils/leg_helper.dart';
+import '../utils/time_utils.dart';
 import 'itinerary_navigation_tracker.dart';
 
 const String _channelId = 'itinerary_tracking';
@@ -163,13 +164,18 @@ Map<String, dynamic> _progressToMap(ItineraryNavigationTracker tracker) {
   };
 }
 
-/// "LINE to STOP" rather than "LINE • HEADSIGN" — the headsign is the
-/// vehicle's general destination, which often doesn't match any sign the
-/// user can actually see; the leg's own arrival stop name is what they can
-/// follow against real-world stop announcements/screens as they ride.
+/// "LINE to STOP" — the leg's own arrival stop name is what the user can
+/// follow against real-world stop announcements/screens as they ride — with
+/// the headsign appended when it adds information beyond the stop name
+/// itself, matching the carousel card the user tapped to start tracking.
 String _legTitle(Leg leg) {
   if (leg.mode == 'WALK') return 'Walking to ${leg.toName}';
-  return '${_legRouteLabel(leg)} to ${leg.toName}';
+  final base = '${_legRouteLabel(leg)} to ${leg.toName}';
+  final headsign = leg.headsign;
+  if (headsign == null || headsign.isEmpty || headsign == leg.toName) {
+    return base;
+  }
+  return '$base / $headsign';
 }
 
 String _legRouteLabel(Leg leg) {
@@ -182,21 +188,37 @@ String _legRouteLabel(Leg leg) {
   return getTransitModeName(leg.mode);
 }
 
+/// Drives the Android notification's progress bar. Uses [ItineraryNavigationTracker.legProgress]
+/// (continuous, GPS-distance-based) rather than the displayed stop count, so
+/// the bar creeps forward smoothly between stops instead of only jumping on
+/// arrival — for both walk and transit legs.
 int _progressPercent(ItineraryNavigationTracker tracker) {
   if (tracker.currentLegIndex >= tracker.legs.length) return 100;
-  final leg = tracker.legs[tracker.currentLegIndex].leg;
-  if (leg.mode == 'WALK') {
-    final total = leg.distance;
-    final remaining = tracker.remainingWalkMeters;
-    if (total == null || total <= 0 || remaining == null) return 0;
-    final completed = (total - remaining).clamp(0, total);
-    return ((completed / total) * 100).round();
+  return (tracker.legProgress * 100).round().clamp(0, 100);
+}
+
+/// A departure countdown for a transit leg not yet boarded, shown in place
+/// of the usual "N stops to go" line — null once departed (the live/
+/// scheduled departure time has passed, or GPS already shows movement) or
+/// for walk legs, at which point the caller falls back to the stop count.
+String? _waitingLabel(Leg leg, ItineraryNavigationTracker tracker) {
+  if (leg.mode == 'WALK') return null;
+
+  final hasDeparted =
+      !DateTime.now().isBefore(leg.startTime) || tracker.legProgress >= 0.05;
+  if (hasDeparted) return null;
+
+  if (!leg.realTime) {
+    final scheduled = leg.scheduledStartTime ?? leg.startTime;
+    return 'Scheduled at ${formatTime(scheduled)}';
   }
-  final totalStops = stopWaypoints(leg).length - 1;
-  final remaining = tracker.remainingStops;
-  if (totalStops <= 0 || remaining == null) return 0;
-  final completed = (totalStops - remaining).clamp(0, totalStops);
-  return ((completed / totalStops) * 100).round();
+
+  final remaining = leg.startTime.difference(DateTime.now());
+  if (remaining.inMinutes >= 20) {
+    return '🟢 Departs at ${formatTime(leg.startTime)}';
+  }
+  final minutes = remaining.inMinutes < 1 ? 1 : remaining.inMinutes;
+  return '🟢 Departs in $minutes min';
 }
 
 /// Rasterizes a Lucide glyph (the same ones used in-app for leg icons) into a
@@ -271,6 +293,7 @@ void _onServiceStart(ServiceInstance service) async {
         : null;
     final title = leg == null ? 'Trip complete' : _legTitle(leg);
     final progressLine =
+        (leg == null ? null : _waitingLabel(leg, current)) ??
         progressLabel(
           remainingWalkMeters: current.remainingWalkMeters,
           remainingStops: current.remainingStops,
