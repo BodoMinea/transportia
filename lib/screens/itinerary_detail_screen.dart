@@ -10,7 +10,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:timelines_plus/timelines_plus.dart';
 
 import '../models/itinerary.dart';
+import '../models/saved_trip.dart';
+import '../models/time_selection.dart';
 import '../providers/theme_provider.dart';
+import '../services/itinerary_tracking_controller.dart';
+import '../services/saved_trips_service.dart';
 import '../services/trip_details_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/color_utils.dart';
@@ -21,10 +25,13 @@ import '../utils/leg_helper.dart';
 import '../utils/time_utils.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/custom_card.dart';
+import '../widgets/gtfs_fields_row.dart';
 import '../widgets/info_chip.dart';
 import '../widgets/last_updated_footer.dart';
 import '../widgets/stop_departures_sheet.dart';
+import '../widgets/validation_toast.dart';
 import 'connection_info_screen.dart';
+import 'itinerary_list_screen.dart';
 import 'itinerary_map_screen.dart';
 
 /// Opens the [StopDeparturesSheet] for a tapped stop. Passed down through
@@ -39,7 +46,18 @@ typedef OpenStopSheet =
 class ItineraryDetailScreen extends StatefulWidget {
   final Itinerary itinerary;
 
-  const ItineraryDetailScreen({super.key, required this.itinerary});
+  /// True when viewing this itinerary from the Saved Trips list — swaps the
+  /// "Save" row for "Remove from saved" and adds a "Find current
+  /// connections" row that re-searches the itinerary's own endpoints.
+  final bool isSavedTrip;
+  final String? savedTripId;
+
+  const ItineraryDetailScreen({
+    super.key,
+    required this.itinerary,
+    this.isSavedTrip = false,
+    this.savedTripId,
+  });
 
   @override
   State<ItineraryDetailScreen> createState() => _ItineraryDetailScreenState();
@@ -47,6 +65,8 @@ class ItineraryDetailScreen extends StatefulWidget {
 
 class _ItineraryDetailScreenState extends State<ItineraryDetailScreen> {
   bool _isSharing = false;
+  bool _isSaving = false;
+  bool _isRemoving = false;
   late Itinerary _itinerary;
   DateTime? _lastUpdated;
   bool _isRefreshing = false;
@@ -65,6 +85,12 @@ class _ItineraryDetailScreenState extends State<ItineraryDetailScreen> {
   @override
   void dispose() {
     _agoTicker?.cancel();
+    // Leaving the itinerary entirely (back to search results/saved list)
+    // stops tracking — unlike popping the map view back to *this* screen,
+    // which only detaches a listener and leaves tracking running.
+    ItineraryTrackingController.stopIfMatches(
+      ItineraryTrackingController.fingerprintFor(_itinerary),
+    );
     super.dispose();
   }
 
@@ -174,7 +200,13 @@ class _ItineraryDetailScreenState extends State<ItineraryDetailScreen> {
                   final finishInsertIndex = legsEndIndex;
                   final shareIndex =
                       finishInsertIndex + (hasFinishCard ? 1 : 0);
-                  final footerIndex = shareIndex + 1;
+                  final saveIndex = shareIndex + 1;
+                  final findConnectionsIndex = widget.isSavedTrip
+                      ? saveIndex + 1
+                      : -1;
+                  final footerIndex =
+                      (widget.isSavedTrip ? findConnectionsIndex : saveIndex) +
+                      1;
                   final totalItems = footerIndex + 1;
 
                   return CustomScrollView(
@@ -250,6 +282,32 @@ class _ItineraryDetailScreenState extends State<ItineraryDetailScreen> {
                               );
                             }
 
+                            if (index == saveIndex) {
+                              return widget.isSavedTrip
+                                  ? LoadMoreButton(
+                                      onTap: _removeSavedTrip,
+                                      isLoading: _isRemoving,
+                                      label: 'Remove from saved',
+                                      icon: LucideIcons.bookmarkX,
+                                    )
+                                  : LoadMoreButton(
+                                      onTap: _saveTrip,
+                                      isLoading: _isSaving,
+                                      label: 'Save this trip',
+                                      icon: LucideIcons.bookmarkPlus,
+                                    );
+                            }
+
+                            if (widget.isSavedTrip &&
+                                index == findConnectionsIndex) {
+                              return LoadMoreButton(
+                                onTap: _findCurrentConnections,
+                                isLoading: false,
+                                label: 'Find current connections',
+                                icon: LucideIcons.refreshCw,
+                              );
+                            }
+
                             if (index == footerIndex) {
                               return LastUpdatedFooter(
                                 lastUpdated: _lastUpdated,
@@ -304,6 +362,59 @@ class _ItineraryDetailScreenState extends State<ItineraryDetailScreen> {
         setState(() => _isSharing = false);
       }
     }
+  }
+
+  Future<void> _saveTrip() async {
+    if (_isSaving || _itinerary.legs.isEmpty) return;
+    setState(() => _isSaving = true);
+    try {
+      final saved = await SavedTripsService.saveTrip(
+        SavedTrip.fromItinerary(_itinerary),
+      );
+      if (!mounted) return;
+      showValidationToast(
+        context,
+        saved ? 'Trip saved' : 'Already saved',
+        accentColor: AppColors.accentOf(context),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _removeSavedTrip() async {
+    final id = widget.savedTripId;
+    if (_isRemoving || id == null) return;
+    setState(() => _isRemoving = true);
+    try {
+      await SavedTripsService.removeTrip(id);
+      if (!mounted) return;
+      showValidationToast(
+        context,
+        'Removed from saved trips',
+        accentColor: AppColors.accentOf(context),
+      );
+      Navigator.of(context).pop();
+    } finally {
+      if (mounted) setState(() => _isRemoving = false);
+    }
+  }
+
+  void _findCurrentConnections() {
+    if (_itinerary.legs.isEmpty) return;
+    final firstLeg = _itinerary.legs.first;
+    final lastLeg = _itinerary.legs.last;
+    Navigator.of(context).push(
+      CustomPageRoute(
+        child: ItineraryListScreen(
+          fromLat: firstLeg.fromLat,
+          fromLon: firstLeg.fromLon,
+          toLat: lastLeg.toLat,
+          toLon: lastLeg.toLon,
+          timeSelection: TimeSelection.now(),
+        ),
+      ),
+    );
   }
 }
 
@@ -990,9 +1101,23 @@ class _LegDetailsWidgetState extends State<LegDetailsWidget> {
       metadata.add(const InfoChip(icon: LucideIcons.link, label: 'Interlined'));
     }
 
-    if (metadata.isEmpty) return const SizedBox.shrink();
+    final gtfsFields = GtfsFieldsRow(
+      fields: {
+        'trip': widget.leg.tripId,
+        'from stop': widget.leg.fromStopId,
+        'to stop': widget.leg.toStopId,
+      },
+    );
 
-    return Wrap(spacing: 8, runSpacing: 8, children: metadata);
+    if (metadata.isEmpty) return gtfsFields;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(spacing: 8, runSpacing: 8, children: metadata),
+        gtfsFields,
+      ],
+    );
   }
 
   Widget _buildStopInfo(_TimelineStop stop) {
@@ -1060,6 +1185,7 @@ class _LegDetailsWidgetState extends State<LegDetailsWidget> {
             ),
           ),
         ],
+        GtfsFieldsRow(fields: {'stop': stop.stopId}),
       ],
     );
   }

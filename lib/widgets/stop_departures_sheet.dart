@@ -1,16 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../models/stop_time.dart';
 import '../screens/connection_info_screen.dart';
 import '../services/stop_times_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/adhoc_tracking.dart';
 import '../utils/color_utils.dart';
 import '../utils/custom_page_route.dart';
 import '../utils/leg_helper.dart';
 import '../utils/time_utils.dart';
 import 'bottom_overlay_card.dart';
+import 'gtfs_fields_row.dart';
 import 'pressable_highlight.dart';
 import 'skeletons/skeleton_shimmer.dart';
 
@@ -253,15 +256,24 @@ class _DepartureTile extends StatelessWidget {
               const SizedBox(width: 10),
             ],
             Expanded(
-              child: Text(
-                stopTime.headsign,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.black,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    stopTime.headsign,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.black,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  GtfsFieldsRow(
+                    fields: {'trip': stopTime.tripId, 'stop': place.stopId},
+                  ),
+                ],
               ),
             ),
             const SizedBox(width: 8),
@@ -286,6 +298,20 @@ class _DepartureTile extends StatelessWidget {
                     ),
                   ),
               ],
+            ),
+            const SizedBox(width: 4),
+            PressableHighlight(
+              onPressed: () => startAdHocTracking(context, stopTime),
+              borderRadius: BorderRadius.circular(10),
+              enableHaptics: false,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  LucideIcons.navigation,
+                  size: 18,
+                  color: AppColors.accentOf(context),
+                ),
+              ),
             ),
           ],
         ),

@@ -118,6 +118,19 @@ class Alert {
       severityLevel: json['severityLevel'],
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'cause': cause,
+      'causeDetail': causeDetail,
+      'effect': effect,
+      'effectDetail': effectDetail,
+      'url': url,
+      'headerText': headerText,
+      'descriptionText': descriptionText,
+      'severityLevel': severityLevel,
+    };
+  }
 }
 
 class IntermediateStop {
@@ -173,6 +186,23 @@ class IntermediateStop {
           : [],
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'stopId': stopId,
+      'lat': lat,
+      'lon': lon,
+      'arrival': arrival?.toIso8601String(),
+      'departure': departure?.toIso8601String(),
+      'scheduledArrival': scheduledArrival?.toIso8601String(),
+      'scheduledDeparture': scheduledDeparture?.toIso8601String(),
+      'track': track,
+      'scheduledTrack': scheduledTrack,
+      'cancelled': cancelled,
+      'alerts': alerts.map((a) => a.toJson()).toList(),
+    };
+  }
 }
 
 class EncodedPolyline {
@@ -192,6 +222,10 @@ class EncodedPolyline {
       precision: json['precision'] ?? 5,
       length: json['length'] ?? 0,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'points': points, 'precision': precision, 'length': length};
   }
 }
 
@@ -217,6 +251,21 @@ class Itinerary {
   });
 
   bool get hasTicketInfo => ticketInfo.isNotEmpty;
+
+  /// Serializes the core fields needed to re-render this itinerary later
+  /// (e.g. a saved trip snapshot). Deliberately omits [fare]/[ticketInfo],
+  /// which have no JSON round-trip of their own and are decorative on the
+  /// detail screen — it renders fine without them.
+  Map<String, dynamic> toJson() {
+    return {
+      'duration': duration,
+      'startTime': startTime.toIso8601String(),
+      'endTime': endTime.toIso8601String(),
+      'transfers': transfers,
+      'legs': legs.map((leg) => leg.toJson()).toList(),
+      'isDirect': isDirect,
+    };
+  }
 
   /// Returns a copy of this itinerary with [newLegs] substituted in,
   /// recomputing the fields derived from the leg list (e.g. after a
@@ -376,6 +425,32 @@ class Itinerary {
   }
 }
 
+/// A single stop along a leg's full run, used by [Leg.fullStopSequence] /
+/// [Leg.sliceBetween] to locate and slice out a boarding→alighting range.
+class TripStop {
+  final String name;
+  final String? stopId;
+  final double lat;
+  final double lon;
+  final DateTime? arrival;
+  final DateTime? departure;
+  final DateTime? scheduledArrival;
+  final DateTime? scheduledDeparture;
+  final String? track;
+
+  const TripStop({
+    required this.name,
+    this.stopId,
+    required this.lat,
+    required this.lon,
+    this.arrival,
+    this.departure,
+    this.scheduledArrival,
+    this.scheduledDeparture,
+    this.track,
+  });
+}
+
 class Leg {
   final String mode;
   final String fromName;
@@ -509,6 +584,115 @@ class Leg {
     );
   }
 
+  /// Every stop this leg passes through, from origin to terminus, as a flat
+  /// ordered list — its own endpoints plus its intermediate stops. Used for
+  /// ad-hoc tracking (started by picking a stop directly rather than
+  /// searching an itinerary), where the leg fetched from [TripDetailsService]
+  /// covers the trip's full run and needs narrowing to the boarding→alighting
+  /// sub-range the user actually picked.
+  List<TripStop> get fullStopSequence {
+    return [
+      TripStop(
+        name: fromName,
+        stopId: fromStopId,
+        lat: fromLat,
+        lon: fromLon,
+        arrival: startTime,
+        departure: startTime,
+        scheduledArrival: scheduledStartTime,
+        scheduledDeparture: scheduledStartTime,
+        track: fromTrack,
+      ),
+      for (final stop in intermediateStops)
+        TripStop(
+          name: stop.name,
+          stopId: stop.stopId,
+          lat: stop.lat,
+          lon: stop.lon,
+          arrival: stop.arrival,
+          departure: stop.departure,
+          scheduledArrival: stop.scheduledArrival,
+          scheduledDeparture: stop.scheduledDeparture,
+          track: stop.track,
+        ),
+      TripStop(
+        name: toName,
+        stopId: toStopId,
+        lat: toLat,
+        lon: toLon,
+        arrival: endTime,
+        departure: endTime,
+        scheduledArrival: scheduledEndTime,
+        scheduledDeparture: scheduledEndTime,
+        track: toTrack,
+      ),
+    ];
+  }
+
+  /// Builds a synthetic leg covering only the [boardingIndex]→[alightingIndex]
+  /// sub-range of [fullStopSequence] — route/trip metadata (route name,
+  /// colors, agency, tripId, ...) is copied as-is; endpoints, times and
+  /// intermediate stops are narrowed to that range. [legGeometry] is dropped
+  /// since it describes the full trip's shape, not the sliced sub-range; the
+  /// map falls back to a straight line between the new endpoints.
+  Leg sliceBetween(int boardingIndex, int alightingIndex) {
+    final sequence = fullStopSequence;
+    final boarding = sequence[boardingIndex];
+    final alighting = sequence[alightingIndex];
+    final between = sequence.sublist(boardingIndex + 1, alightingIndex);
+    final legStartTime = boarding.departure ?? boarding.arrival ?? startTime;
+    final legEndTime = alighting.arrival ?? alighting.departure ?? endTime;
+
+    return Leg(
+      mode: mode,
+      fromName: boarding.name,
+      toName: alighting.name,
+      startTime: legStartTime,
+      endTime: legEndTime,
+      scheduledStartTime: boarding.scheduledDeparture ?? boarding.scheduledArrival,
+      scheduledEndTime: alighting.scheduledArrival ?? alighting.scheduledDeparture,
+      duration: legEndTime.difference(legStartTime).inSeconds,
+      routeShortName: routeShortName,
+      routeLongName: routeLongName,
+      displayName: displayName,
+      headsign: headsign,
+      routeColor: routeColor,
+      routeTextColor: routeTextColor,
+      routeType: routeType,
+      agencyName: agencyName,
+      agencyUrl: agencyUrl,
+      agencyId: agencyId,
+      tripId: tripId,
+      tripShortName: tripShortName,
+      realTime: realTime,
+      cancelled: cancelled,
+      fromTrack: boarding.track,
+      toTrack: alighting.track,
+      fromStopId: boarding.stopId,
+      toStopId: alighting.stopId,
+      fromLat: boarding.lat,
+      fromLon: boarding.lon,
+      toLat: alighting.lat,
+      toLon: alighting.lon,
+      intermediateStops: [
+        for (final stop in between)
+          IntermediateStop(
+            name: stop.name,
+            stopId: stop.stopId,
+            lat: stop.lat,
+            lon: stop.lon,
+            arrival: stop.arrival,
+            departure: stop.departure,
+            scheduledArrival: stop.scheduledArrival,
+            scheduledDeparture: stop.scheduledDeparture,
+            track: stop.track,
+          ),
+      ],
+      alerts: alerts,
+      interlineWithPreviousLeg: false,
+    );
+  }
+
   factory Leg.fromJson(Map<String, dynamic> json) {
     try {
       final from = json['from'];
@@ -621,5 +805,51 @@ class Leg {
       developer.log('Leg JSON: $json', name: 'Itinerary');
       rethrow;
     }
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'mode': mode,
+      'from': {
+        'name': fromName,
+        'track': fromTrack,
+        'scheduledTrack': fromScheduledTrack,
+        'lat': fromLat,
+        'lon': fromLon,
+      },
+      'to': {
+        'name': toName,
+        'track': toTrack,
+        'scheduledTrack': toScheduledTrack,
+        'lat': toLat,
+        'lon': toLon,
+      },
+      'startTime': startTime.toIso8601String(),
+      'endTime': endTime.toIso8601String(),
+      'scheduledStartTime': scheduledStartTime?.toIso8601String(),
+      'scheduledEndTime': scheduledEndTime?.toIso8601String(),
+      'duration': duration,
+      'distance': distance,
+      'routeShortName': routeShortName,
+      'routeLongName': routeLongName,
+      'displayName': displayName,
+      'headsign': headsign,
+      'routeColor': routeColor,
+      'routeTextColor': routeTextColor,
+      'routeType': routeType,
+      'agencyName': agencyName,
+      'agencyUrl': agencyUrl,
+      'agencyId': agencyId,
+      'tripId': tripId,
+      'tripShortName': tripShortName,
+      'realTime': realTime,
+      'cancelled': cancelled,
+      'intermediateStops': intermediateStops.map((s) => s.toJson()).toList(),
+      'alerts': alerts.map((a) => a.toJson()).toList(),
+      'legGeometry': legGeometry?.toJson(),
+      'interlineWithPreviousLeg': interlineWithPreviousLeg,
+      'fareTransferIndex': fareTransferIndex,
+      'effectiveFareLegIndex': effectiveFareLegIndex,
+    };
   }
 }

@@ -18,6 +18,7 @@ import '../utils/journey_utils.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/custom_card.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/gtfs_fields_row.dart';
 import '../widgets/info_chip.dart';
 import '../widgets/last_updated_footer.dart';
 import '../widgets/skeletons/skeleton_card.dart';
@@ -376,6 +377,13 @@ class _ConnectionInfoScreenState extends State<ConnectionInfoScreen> {
                                     ),
                                   ),
                                 ],
+                                GtfsFieldsRow(
+                                  fields: {
+                                    'trip': leg.tripId,
+                                    'from stop': leg.fromStopId,
+                                    'to stop': leg.toStopId,
+                                  },
+                                ),
                               ],
                             ),
                           ),
