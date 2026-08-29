@@ -1,5 +1,12 @@
 import 'dart:developer' as developer;
 
+/// The routing API's generic placeholder for a walk leg endpoint that isn't
+/// a named GTFS stop (e.g. an arbitrary address or "my location").
+bool _isPlaceholderEndpointName(String name) {
+  final normalized = name.trim().toUpperCase();
+  return normalized == 'START' || normalized == 'END';
+}
+
 class FareInfo {
   final double amount;
   final String currency;
@@ -71,7 +78,20 @@ class FareLegInfo {
   final List<RouteBadge> routeBadges;
   final List<FareOption> options;
 
-  FareLegInfo({required this.routeBadges, required this.options});
+  /// A deep link straight to buying this fare, when the agency exposes one
+  /// (GTFS `ticketUrls`) — preferred over [fareUrl] wherever both exist.
+  final String? ticketUrl;
+
+  /// The agency's general fare-information page (GTFS `agencyFareUrl`),
+  /// shown only when there's no more specific [ticketUrl].
+  final String? fareUrl;
+
+  FareLegInfo({
+    required this.routeBadges,
+    required this.options,
+    this.ticketUrl,
+    this.fareUrl,
+  });
 
   String get _optionsKey => options
       .map(
@@ -287,6 +307,32 @@ class Itinerary {
     );
   }
 
+  /// Replaces a placeholder first/last leg endpoint name ("START"/"END",
+  /// what the routing API returns for a walk leg whose endpoint isn't a
+  /// named GTFS stop) with [fromLabel]/[toLabel] — the place the user
+  /// actually searched for. No-ops wherever a label isn't available or the
+  /// existing name isn't a placeholder, so it's safe to call unconditionally.
+  Itinerary withResolvedEndpointNames({String? fromLabel, String? toLabel}) {
+    if (legs.isEmpty) return this;
+    final newLegs = List<Leg>.from(legs);
+
+    final first = newLegs.first;
+    if (fromLabel != null &&
+        fromLabel.isNotEmpty &&
+        _isPlaceholderEndpointName(first.fromName)) {
+      newLegs[0] = first.withEndpointNames(fromName: fromLabel);
+    }
+
+    final last = newLegs.last;
+    if (toLabel != null &&
+        toLabel.isNotEmpty &&
+        _isPlaceholderEndpointName(last.toName)) {
+      newLegs[newLegs.length - 1] = last.withEndpointNames(toName: toLabel);
+    }
+
+    return withLegs(newLegs);
+  }
+
   double get walkingDistance {
     double totalDistance = 0.0;
     for (final leg in legs) {
@@ -336,14 +382,26 @@ class Itinerary {
 
       try {
         final routeBadgesByFareLeg = <String, List<RouteBadge>>{};
+        // Prefer a leg's own ticketing deep link over its agency's general
+        // fare page; both are keyed the same way as the route badges above
+        // so they land on the right merged FareLegInfo below.
+        final ticketUrlByFareLeg = <String, String>{};
+        final fareUrlByFareLeg = <String, String>{};
         for (final leg in legs) {
           if (leg.fareTransferIndex == null ||
               leg.effectiveFareLegIndex == null) {
             continue;
           }
+          final key = '${leg.fareTransferIndex}:${leg.effectiveFareLegIndex}';
+          if (leg.ticketUrl != null && !ticketUrlByFareLeg.containsKey(key)) {
+            ticketUrlByFareLeg[key] = leg.ticketUrl!;
+          }
+          if (leg.agencyFareUrl != null && !fareUrlByFareLeg.containsKey(key)) {
+            fareUrlByFareLeg[key] = leg.agencyFareUrl!;
+          }
+
           final name = leg.routeShortName ?? leg.displayName;
           if (name == null || name.isEmpty) continue;
-          final key = '${leg.fareTransferIndex}:${leg.effectiveFareLegIndex}';
           final badges = routeBadgesByFareLeg.putIfAbsent(key, () => []);
           if (!badges.any((b) => b.name == name)) {
             badges.add(
@@ -370,10 +428,13 @@ class Itinerary {
                 .where((o) => o.products.isNotEmpty)
                 .toList();
             if (options.isEmpty) continue;
+            final key = '$t:$i';
             rawTicketInfo.add(
               FareLegInfo(
-                routeBadges: routeBadgesByFareLeg['$t:$i'] ?? const [],
+                routeBadges: routeBadgesByFareLeg[key] ?? const [],
                 options: options,
+                ticketUrl: ticketUrlByFareLeg[key],
+                fareUrl: fareUrlByFareLeg[key],
               ),
             );
           }
@@ -398,6 +459,8 @@ class Itinerary {
             mergedByKey[key] = FareLegInfo(
               routeBadges: combinedBadges,
               options: existing.options,
+              ticketUrl: existing.ticketUrl ?? entry.ticketUrl,
+              fareUrl: existing.fareUrl ?? entry.fareUrl,
             );
           }
         }
@@ -492,6 +555,12 @@ class Leg {
   final int? fareTransferIndex;
   final int? effectiveFareLegIndex;
 
+  /// A deep link straight to buying this leg's fare (GTFS `ticketUrls.web`).
+  final String? ticketUrl;
+
+  /// The agency's general fare-information page (GTFS `agencyFareUrl`).
+  final String? agencyFareUrl;
+
   Leg({
     required this.mode,
     required this.fromName,
@@ -532,6 +601,8 @@ class Leg {
     this.interlineWithPreviousLeg = false,
     this.fareTransferIndex,
     this.effectiveFareLegIndex,
+    this.ticketUrl,
+    this.agencyFareUrl,
   });
 
   /// Returns a copy of this leg with the real-time fields (times, delay,
@@ -581,6 +652,58 @@ class Leg {
       interlineWithPreviousLeg: interlineWithPreviousLeg,
       fareTransferIndex: fareTransferIndex,
       effectiveFareLegIndex: effectiveFareLegIndex,
+      ticketUrl: ticketUrl,
+      agencyFareUrl: agencyFareUrl,
+    );
+  }
+
+  /// Returns a copy with [fromName]/[toName] overridden — used to replace a
+  /// placeholder endpoint name (e.g. "START"/"END", returned by the routing
+  /// API for a walk leg whose endpoint isn't a named GTFS stop) with the
+  /// place name the user actually searched for.
+  Leg withEndpointNames({String? fromName, String? toName}) {
+    return Leg(
+      mode: mode,
+      fromName: fromName ?? this.fromName,
+      toName: toName ?? this.toName,
+      startTime: startTime,
+      endTime: endTime,
+      scheduledStartTime: scheduledStartTime,
+      scheduledEndTime: scheduledEndTime,
+      duration: duration,
+      distance: distance,
+      routeShortName: routeShortName,
+      routeLongName: routeLongName,
+      displayName: displayName,
+      headsign: headsign,
+      routeColor: routeColor,
+      routeTextColor: routeTextColor,
+      routeType: routeType,
+      agencyName: agencyName,
+      agencyUrl: agencyUrl,
+      agencyId: agencyId,
+      tripId: tripId,
+      tripShortName: tripShortName,
+      realTime: realTime,
+      cancelled: cancelled,
+      fromTrack: fromTrack,
+      toTrack: toTrack,
+      fromScheduledTrack: fromScheduledTrack,
+      toScheduledTrack: toScheduledTrack,
+      fromStopId: fromStopId,
+      toStopId: toStopId,
+      fromLat: fromLat,
+      fromLon: fromLon,
+      toLat: toLat,
+      toLon: toLon,
+      intermediateStops: intermediateStops,
+      alerts: alerts,
+      legGeometry: legGeometry,
+      interlineWithPreviousLeg: interlineWithPreviousLeg,
+      fareTransferIndex: fareTransferIndex,
+      effectiveFareLegIndex: effectiveFareLegIndex,
+      ticketUrl: ticketUrl,
+      agencyFareUrl: agencyFareUrl,
     );
   }
 
@@ -690,6 +813,8 @@ class Leg {
       ],
       alerts: alerts,
       interlineWithPreviousLeg: false,
+      ticketUrl: ticketUrl,
+      agencyFareUrl: agencyFareUrl,
     );
   }
 
@@ -794,6 +919,10 @@ class Leg {
         interlineWithPreviousLeg: json['interlineWithPreviousLeg'] ?? false,
         fareTransferIndex: json['fareTransferIndex'],
         effectiveFareLegIndex: json['effectiveFareLegIndex'],
+        ticketUrl: (json['ticketUrls'] is Map)
+            ? (json['ticketUrls'] as Map)['web'] as String?
+            : null,
+        agencyFareUrl: json['agencyFareUrl'],
       );
     } catch (e, stackTrace) {
       developer.log(
@@ -850,6 +979,8 @@ class Leg {
       'interlineWithPreviousLeg': interlineWithPreviousLeg,
       'fareTransferIndex': fareTransferIndex,
       'effectiveFareLegIndex': effectiveFareLegIndex,
+      'ticketUrls': ticketUrl == null ? null : {'web': ticketUrl},
+      'agencyFareUrl': agencyFareUrl,
     };
   }
 }

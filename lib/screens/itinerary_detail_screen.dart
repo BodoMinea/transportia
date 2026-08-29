@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:timelines_plus/timelines_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/itinerary.dart';
 import '../models/saved_trip.dart';
@@ -28,6 +29,7 @@ import '../widgets/custom_card.dart';
 import '../widgets/gtfs_fields_row.dart';
 import '../widgets/info_chip.dart';
 import '../widgets/last_updated_footer.dart';
+import '../widgets/pressable_highlight.dart';
 import '../widgets/stop_departures_sheet.dart';
 import '../widgets/validation_toast.dart';
 import 'connection_info_screen.dart';
@@ -659,9 +661,52 @@ class _TicketInfoCardState extends State<TicketInfoCard> {
               ),
             ),
           ...legInfo.options.map(_buildFareOption),
+          if (legInfo.ticketUrl != null || legInfo.fareUrl != null)
+            _buildFareLink(legInfo),
         ],
       ),
     );
+  }
+
+  /// Prefers a direct ticket-purchase deep link over the agency's general
+  /// fare page — never shows both.
+  Widget _buildFareLink(FareLegInfo legInfo) {
+    final isTicketLink = legInfo.ticketUrl != null;
+    final url = legInfo.ticketUrl ?? legInfo.fareUrl!;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: PressableHighlight(
+        onPressed: () => _openFareUrl(url),
+        borderRadius: BorderRadius.circular(8),
+        enableHaptics: false,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isTicketLink ? LucideIcons.ticket : LucideIcons.info,
+              size: 14,
+              color: AppColors.accentOf(context),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              isTicketLink ? 'Buy tickets' : 'More info',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.accentOf(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openFareUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
   }
 
   Widget _buildRouteBadge(RouteBadge badge) {
