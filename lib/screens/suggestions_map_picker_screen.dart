@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -8,7 +9,9 @@ import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/transitous_geocode_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/geo_utils.dart';
 import '../utils/haptics.dart';
+import '../utils/itinerary_navigation.dart';
 import '../utils/map_marker_utils.dart';
 import '../widgets/custom_app_bar.dart';
 
@@ -21,10 +24,15 @@ class SuggestionsMapPickerScreen extends StatefulWidget {
     super.key,
     required this.suggestions,
     this.title = 'Choose on map',
+    this.userLocation,
   });
 
   final List<TransitousLocationSuggestion> suggestions;
   final String title;
+
+  /// The user's current position, if known — used to show a straight-line
+  /// distance on each suggestion chip.
+  final LatLng? userLocation;
 
   @override
   State<SuggestionsMapPickerScreen> createState() =>
@@ -33,7 +41,9 @@ class SuggestionsMapPickerScreen extends StatefulWidget {
 
 class _SuggestionsMapPickerScreenState
     extends State<SuggestionsMapPickerScreen> {
-  static const String _kMarkerImageId = 'suggestion-map-marker';
+  static const String _kMarkerImageIdPrefix = 'suggestion-map-marker-';
+  static const String _kSourceId = 'suggestion-map-source';
+  static const String _kLayerId = 'suggestion-map-layer';
   static const LatLng _kFallbackTarget = LatLng(50.087, 14.420);
 
   MapLibreMapController? _controller;
@@ -100,77 +110,86 @@ class _SuggestionsMapPickerScreenState
 
   void _onMapCreated(MapLibreMapController controller) {
     _controller = controller;
-    controller.onSymbolTapped.add(_handleSymbolTapped);
+    controller.onFeatureTapped.add(_handleFeatureTapped);
   }
 
   Future<void> _onStyleLoaded() async {
-    final controller = _controller;
-    if (controller != null) {
-      // Suggestions can sit close together (e.g. several results in the
-      // same street) — without this, MapLibre's default collision avoidance
-      // can hide pins it thinks would overlap, which otherwise looks
-      // identical to them never having been added at all.
-      try {
-        await controller.setSymbolIconAllowOverlap(true);
-        await controller.setSymbolTextAllowOverlap(true);
-      } catch (error, stackTrace) {
-        developer.log(
-          'Failed to configure symbol overlap',
-          name: 'SuggestionsMapPickerScreen',
-          error: error,
-          stackTrace: stackTrace,
-        );
-      }
-    }
     await _plotSuggestions();
     if (widget.suggestions.length > 1) {
       unawaited(_fitToSuggestions());
     }
   }
 
+  /// Plots suggestions as a GeoJSON source + symbol layer, the same pattern
+  /// [ItineraryMapScreen] uses for its stop markers — the annotation-based
+  /// `addSymbol` API this screen used previously requires the map's
+  /// annotation managers, and silently dropped every marker with nothing
+  /// but a caught, easy-to-miss log line when that wasn't set up the way it
+  /// expected, leaving the map blank with no visible error. Each marker's
+  /// number is baked directly into its icon image (via [buildNumberedMarkerImage])
+  /// rather than layered on top with the layer's own `textField` — the same
+  /// recipe the main map's live vehicle markers use, since a symbol layer's
+  /// `textField` depends on the style having glyphs available and silently
+  /// drops the whole symbol without them.
   Future<void> _plotSuggestions() async {
     final controller = _controller;
     if (controller == null || widget.suggestions.isEmpty) return;
 
     try {
-      final image = await buildStopMarkerImage(AppColors.accentOf(context));
-      await controller.addImage(_kMarkerImageId, image);
+      final accent = AppColors.accentOf(context);
+      final features = <Map<String, dynamic>>[];
+      for (int i = 0; i < widget.suggestions.length; i++) {
+        final imageId = '$_kMarkerImageIdPrefix$i';
+        final image = await buildNumberedMarkerImage(accent, '${i + 1}');
+        await controller.addImage(imageId, image);
+        features.add({
+          'type': 'Feature',
+          'id': i,
+          'properties': {'iconId': imageId},
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [
+              widget.suggestions[i].lon,
+              widget.suggestions[i].lat,
+            ],
+          },
+        });
+      }
+      final collection = {'type': 'FeatureCollection', 'features': features};
+
+      final sourceIds = (await controller.getSourceIds()).cast<String>().toSet();
+      if (sourceIds.contains(_kSourceId)) {
+        await controller.setGeoJsonSource(_kSourceId, collection);
+      } else {
+        await controller.addGeoJsonSource(
+          _kSourceId,
+          collection,
+          promoteId: 'id',
+        );
+      }
+
+      final layerIds = (await controller.getLayerIds()).cast<String>().toSet();
+      if (!layerIds.contains(_kLayerId)) {
+        await controller.addSymbolLayer(
+          _kSourceId,
+          _kLayerId,
+          SymbolLayerProperties(
+            iconImage: [Expressions.get, 'iconId'],
+            iconSize: 1.0,
+            iconAnchor: 'center',
+            iconAllowOverlap: true,
+            iconIgnorePlacement: true,
+          ),
+          enableInteraction: true,
+        );
+      }
     } catch (error, stackTrace) {
       developer.log(
-        'Failed to register suggestion marker image',
+        'Failed to plot suggestion markers',
         name: 'SuggestionsMapPickerScreen',
         error: error,
         stackTrace: stackTrace,
       );
-      return;
-    }
-
-    for (int i = 0; i < widget.suggestions.length; i++) {
-      try {
-        await controller.addSymbol(
-          SymbolOptions(
-            geometry: widget.suggestions[i].latLng,
-            iconImage: _kMarkerImageId,
-            // The base dot is small (meant for close-zoom stop markers
-            // elsewhere) — scale it up so it reads clearly at the wider
-            // zoom levels this picker uses to show several candidates.
-            iconSize: 1.8,
-            iconAnchor: 'center',
-            textField: '${i + 1}',
-            textSize: 12,
-            textColor: '#FFFFFF',
-            textAnchor: 'center',
-          ),
-          {'index': i},
-        );
-      } catch (error, stackTrace) {
-        developer.log(
-          'Failed to add suggestion marker #$i',
-          name: 'SuggestionsMapPickerScreen',
-          error: error,
-          stackTrace: stackTrace,
-        );
-      }
     }
   }
 
@@ -191,8 +210,15 @@ class _SuggestionsMapPickerScreenState
     } catch (_) {}
   }
 
-  void _handleSymbolTapped(Symbol symbol) {
-    final index = symbol.data?['index'] as int?;
+  void _handleFeatureTapped(
+    math.Point<double> point,
+    LatLng coordinate,
+    String id,
+    String layerId,
+    Annotation? annotation,
+  ) {
+    if (layerId != _kLayerId) return;
+    final index = int.tryParse(id);
     if (index == null) return;
     _selectSuggestion(index);
   }
@@ -205,7 +231,7 @@ class _SuggestionsMapPickerScreenState
 
   Widget _buildChipStrip() {
     return SizedBox(
-      height: 56,
+      height: 64,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -215,6 +241,7 @@ class _SuggestionsMapPickerScreenState
           return _SuggestionChip(
             index: index,
             suggestion: widget.suggestions[index],
+            userLocation: widget.userLocation,
             onTap: () => _selectSuggestion(index),
           );
         },
@@ -244,16 +271,34 @@ class _SuggestionChip extends StatelessWidget {
   const _SuggestionChip({
     required this.index,
     required this.suggestion,
+    required this.userLocation,
     required this.onTap,
   });
 
   final int index;
   final TransitousLocationSuggestion suggestion;
+  final LatLng? userLocation;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final accent = AppColors.accentOf(context);
+    final location = userLocation;
+    final distanceLabel = location == null
+        ? null
+        : formatWalkRemaining(
+            coordinateDistanceInMeters(
+              location.latitude,
+              location.longitude,
+              suggestion.lat,
+              suggestion.lon,
+            ),
+          );
+    final detailParts = [
+      if (suggestion.subtitle.isNotEmpty) suggestion.subtitle,
+      if (distanceLabel != null) distanceLabel,
+    ];
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -273,6 +318,7 @@ class _SuggestionChip extends StatelessWidget {
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
               width: 22,
@@ -290,15 +336,32 @@ class _SuggestionChip extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Flexible(
-              child: Text(
-                suggestion.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppColors.black,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    suggestion.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppColors.black,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (detailParts.isNotEmpty)
+                    Text(
+                      detailParts.join(' • '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.black.withValues(alpha: 0.5),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                ],
               ),
             ),
           ],

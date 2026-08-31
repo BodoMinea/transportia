@@ -2404,6 +2404,7 @@ class _MapScreenState extends State<MapScreen>
         child: SuggestionsMapPickerScreen(
           suggestions: suggestions,
           title: title,
+          userLocation: _lastUserLatLng,
         ),
       ),
     );
