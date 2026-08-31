@@ -1,10 +1,42 @@
 import 'dart:developer' as developer;
 
+import '../utils/geo_utils.dart';
+
 /// The routing API's generic placeholder for a walk leg endpoint that isn't
 /// a named GTFS stop (e.g. an arbitrary address or "my location").
 bool _isPlaceholderEndpointName(String name) {
   final normalized = name.trim().toUpperCase();
   return normalized == 'START' || normalized == 'END';
+}
+
+/// Finds the stop in [sequence] matching [stopId] (preferred) or nearest to
+/// ([lat], [lon]) otherwise — used to re-locate a leg's boarding/alighting
+/// point within a freshly re-fetched full trip.
+int? _matchStopIndex(
+  List<TripStop> sequence,
+  String? stopId,
+  double lat,
+  double lon,
+) {
+  if (stopId != null) {
+    final byId = sequence.indexWhere((s) => s.stopId == stopId);
+    if (byId != -1) return byId;
+  }
+  int? bestIndex;
+  double bestDistance = double.infinity;
+  for (int i = 0; i < sequence.length; i++) {
+    final distance = coordinateDistanceInMeters(
+      sequence[i].lat,
+      sequence[i].lon,
+      lat,
+      lon,
+    );
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
 }
 
 class FareInfo {
@@ -608,17 +640,22 @@ class Leg {
   /// Returns a copy of this leg with the real-time fields (times, delay,
   /// cancellation, track, intermediate stops, alerts) refreshed from
   /// [fresh], while keeping itinerary-specific context (fare indices,
-  /// geometry) from this leg.
+  /// geometry) from this leg. [fresh] is typically a full re-fetch of the
+  /// same trip and may cover more stops than this leg does (e.g. this leg
+  /// only boards partway through); it's narrowed down to this leg's own
+  /// boarding→alighting range first, so a refresh can't silently expand a
+  /// partial-trip leg into the whole trip.
   Leg withRealTimeFrom(Leg fresh) {
+    final matched = fresh._slicedToMatch(this);
     return Leg(
       mode: mode,
       fromName: fromName,
       toName: toName,
-      startTime: fresh.startTime,
-      endTime: fresh.endTime,
-      scheduledStartTime: fresh.scheduledStartTime ?? scheduledStartTime,
-      scheduledEndTime: fresh.scheduledEndTime ?? scheduledEndTime,
-      duration: fresh.duration,
+      startTime: matched.startTime,
+      endTime: matched.endTime,
+      scheduledStartTime: matched.scheduledStartTime ?? scheduledStartTime,
+      scheduledEndTime: matched.scheduledEndTime ?? scheduledEndTime,
+      duration: matched.duration,
       distance: distance,
       routeShortName: routeShortName,
       routeLongName: routeLongName,
@@ -632,10 +669,10 @@ class Leg {
       agencyId: agencyId,
       tripId: tripId,
       tripShortName: tripShortName,
-      realTime: fresh.realTime,
-      cancelled: fresh.cancelled,
-      fromTrack: fresh.fromTrack ?? fromTrack,
-      toTrack: fresh.toTrack ?? toTrack,
+      realTime: matched.realTime,
+      cancelled: matched.cancelled,
+      fromTrack: matched.fromTrack ?? fromTrack,
+      toTrack: matched.toTrack ?? toTrack,
       fromScheduledTrack: fromScheduledTrack,
       toScheduledTrack: toScheduledTrack,
       fromStopId: fromStopId,
@@ -644,17 +681,45 @@ class Leg {
       fromLon: fromLon,
       toLat: toLat,
       toLon: toLon,
-      intermediateStops: fresh.intermediateStops.isNotEmpty
-          ? fresh.intermediateStops
+      intermediateStops: matched.intermediateStops.isNotEmpty
+          ? matched.intermediateStops
           : intermediateStops,
-      alerts: fresh.alerts.isNotEmpty ? fresh.alerts : alerts,
+      alerts: matched.alerts.isNotEmpty ? matched.alerts : alerts,
       legGeometry: legGeometry,
       interlineWithPreviousLeg: interlineWithPreviousLeg,
       fareTransferIndex: fareTransferIndex,
       effectiveFareLegIndex: effectiveFareLegIndex,
-      ticketUrl: ticketUrl,
-      agencyFareUrl: agencyFareUrl,
+      ticketUrl: matched.ticketUrl ?? ticketUrl,
+      agencyFareUrl: matched.agencyFareUrl ?? agencyFareUrl,
     );
+  }
+
+  /// Narrows this leg (assumed to be the same trip as [original], but
+  /// possibly covering more of it — e.g. a full trip re-fetched for a
+  /// real-time refresh) down to just [original]'s own boarding→alighting
+  /// range. Falls back to itself unsliced if the endpoints can't be
+  /// matched (e.g. it turns out to be a genuinely different trip).
+  Leg _slicedToMatch(Leg original) {
+    final sequence = fullStopSequence;
+    if (sequence.length < 2) return this;
+    final boardingIndex = _matchStopIndex(
+      sequence,
+      original.fromStopId,
+      original.fromLat,
+      original.fromLon,
+    );
+    final alightingIndex = _matchStopIndex(
+      sequence,
+      original.toStopId,
+      original.toLat,
+      original.toLon,
+    );
+    if (boardingIndex == null ||
+        alightingIndex == null ||
+        boardingIndex >= alightingIndex) {
+      return this;
+    }
+    return sliceBetween(boardingIndex, alightingIndex);
   }
 
   /// Returns a copy with [fromName]/[toName] overridden — used to replace a
