@@ -164,18 +164,17 @@ Map<String, dynamic> _progressToMap(ItineraryNavigationTracker tracker) {
   };
 }
 
-/// "LINE to STOP" — the leg's own arrival stop name is what the user can
-/// follow against real-world stop announcements/screens as they ride — with
-/// the headsign appended when it adds information beyond the stop name
-/// itself, matching the carousel card the user tapped to start tracking.
+/// "LINE → HEADSIGN" — the headsign is what riders actually see displayed
+/// on the vehicle, so it's what lets them confirm they're getting on the
+/// right one.
 String _legTitle(Leg leg) {
   if (leg.mode == 'WALK') return 'Walking to ${leg.toName}';
-  final base = '${_legRouteLabel(leg)} to ${leg.toName}';
+  final routeLabel = _legRouteLabel(leg);
   final headsign = leg.headsign;
-  if (headsign == null || headsign.isEmpty || headsign == leg.toName) {
-    return base;
+  if (headsign == null || headsign.isEmpty || headsign == routeLabel) {
+    return routeLabel;
   }
-  return '$base / $headsign';
+  return '$routeLabel → $headsign';
 }
 
 String _legRouteLabel(Leg leg) {
