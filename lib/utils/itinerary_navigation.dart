@@ -98,14 +98,21 @@ String formatWalkRemaining(double meters) {
 }
 
 /// Shared "N stops/m to go" wording, used by both the in-app carousel and the
-/// background tracking notification so they never drift apart.
-String? progressLabel({double? remainingWalkMeters, int? remainingStops}) {
+/// background tracking notification so they never drift apart — except for
+/// exactly one stop left, where [nextStopLabel] lets each surface phrase it
+/// its own way (e.g. "Next stop" vs. "Your stop is next").
+String? progressLabel({
+  double? remainingWalkMeters,
+  int? remainingStops,
+  String nextStopLabel = 'Next stop',
+}) {
   if (remainingWalkMeters != null) {
     return '${formatWalkRemaining(remainingWalkMeters)} to go';
   }
   if (remainingStops != null) {
     if (remainingStops <= 0) return 'Arriving now';
-    return '$remainingStops ${remainingStops == 1 ? 'stop' : 'stops'} to go';
+    if (remainingStops == 1) return nextStopLabel;
+    return '$remainingStops stops to go';
   }
   return null;
 }

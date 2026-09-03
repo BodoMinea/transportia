@@ -296,6 +296,7 @@ void _onServiceStart(ServiceInstance service) async {
         progressLabel(
           remainingWalkMeters: current.remainingWalkMeters,
           remainingStops: current.remainingStops,
+          nextStopLabel: 'Your stop is next',
         ) ??
         '';
     final body = current.arrived
