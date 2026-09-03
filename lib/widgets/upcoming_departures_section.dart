@@ -68,6 +68,18 @@ class _UpcomingDeparturesSectionState
         stopTime.place.scheduledArrival;
   }
 
+  /// Some backends (MOTIS included) split one physical stop into several
+  /// nearby stop IDs (separate platforms/directions, or just duplicate
+  /// entries) that end up serving the exact same departures — rather than
+  /// merging them into one stop themselves. Two stops with the same name
+  /// and the same trips at the same times are almost certainly that same
+  /// physical stop, so only the first (nearest) one is kept.
+  String _departuresSignature(List<StopTime> departures) {
+    return departures
+        .map((d) => '${d.tripId}@${_departureKey(d)?.toIso8601String()}')
+        .join('|');
+  }
+
   Future<void> _load() async {
     final stops = widget.stops;
     final requestId = ++_requestId;
@@ -138,7 +150,17 @@ class _UpcomingDeparturesSectionState
     final stopsWithDepartures = widget.stops
         .where((s) => (_departuresByStopId[s.stopId]?.isNotEmpty ?? false))
         .toList();
-    if (stopsWithDepartures.isEmpty) {
+
+    final seenSignatures = <String>{};
+    final dedupedStops = [
+      for (final stop in stopsWithDepartures)
+        if (seenSignatures.add(
+          '${stop.name.trim().toLowerCase()}::${_departuresSignature(_departuresByStopId[stop.stopId] ?? const [])}',
+        ))
+          stop,
+    ];
+
+    if (dedupedStops.isEmpty) {
       return const _EmptyMessage(
         message: 'No upcoming departures for stops in view.',
       );
@@ -146,7 +168,7 @@ class _UpcomingDeparturesSectionState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final stop in stopsWithDepartures) ...[
+        for (final stop in dedupedStops) ...[
           _StopDeparturesGroup(
             stop: stop,
             departures: _departuresByStopId[stop.stopId] ?? const [],
