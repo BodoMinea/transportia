@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../utils/color_utils.dart';
 import '../utils/stop_time_utils.dart';
 import '../utils/time_utils.dart';
+import 'gtfs_fields_row.dart';
 import 'skeletons/skeleton_shimmer.dart';
 
 class UpcomingDeparturesSection extends StatefulWidget {
@@ -235,6 +236,7 @@ class _StopDeparturesGroup extends StatelessWidget {
                 ),
               ],
             ),
+            GtfsFieldsRow(fields: {'stop': stop.stopId}),
             const SizedBox(height: 10),
             for (int i = 0; i < departures.length; i++) ...[
               _DepartureRow(stopTime: departures[i]),

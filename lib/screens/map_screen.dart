@@ -48,6 +48,7 @@ import '../utils/stop_time_utils.dart';
 import '../utils/journey_utils.dart';
 import '../widgets/custom_card.dart';
 import '../widgets/error_notice.dart';
+import '../widgets/gtfs_fields_row.dart';
 import '../widgets/info_chip.dart';
 import '../widgets/app_toggle_switch.dart';
 import '../widgets/pressable_highlight.dart';

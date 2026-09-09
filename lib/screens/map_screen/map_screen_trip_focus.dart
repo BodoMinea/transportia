@@ -277,6 +277,13 @@ class _TripFocusContent extends StatelessWidget {
                                     ),
                                   ),
                                 ],
+                                GtfsFieldsRow(
+                                  fields: {
+                                    'trip': focusLeg.tripId,
+                                    'from stop': focusLeg.fromStopId,
+                                    'to stop': focusLeg.toStopId,
+                                  },
+                                ),
                               ],
                             ),
                           ),
@@ -595,6 +602,7 @@ class _TripFocusContent extends StatelessWidget {
                                           ),
                                         ),
                                       ],
+                                      GtfsFieldsRow(fields: {'stop': stop.stopId}),
                                     ],
                                   ),
                                 ),
