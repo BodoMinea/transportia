@@ -1,6 +1,9 @@
 import 'dart:developer' as developer;
 
+import 'package:maplibre_gl/maplibre_gl.dart' show LatLng;
+
 import '../utils/geo_utils.dart';
+import '../utils/polyline_utils.dart';
 
 /// The routing API's generic placeholder for a walk leg endpoint that isn't
 /// a named GTFS stop (e.g. an arbitrary address or "my location").
@@ -819,10 +822,10 @@ class Leg {
 
   /// Builds a synthetic leg covering only the [boardingIndex]→[alightingIndex]
   /// sub-range of [fullStopSequence] — route/trip metadata (route name,
-  /// colors, agency, tripId, ...) is copied as-is; endpoints, times and
-  /// intermediate stops are narrowed to that range. [legGeometry] is dropped
-  /// since it describes the full trip's shape, not the sliced sub-range; the
-  /// map falls back to a straight line between the new endpoints.
+  /// colors, agency, tripId, ...) is copied as-is; endpoints, times,
+  /// intermediate stops and [legGeometry] are all narrowed to that range, so
+  /// the map draws the real route shape rather than a straight line between
+  /// the new endpoints.
   Leg sliceBetween(int boardingIndex, int alightingIndex) {
     final sequence = fullStopSequence;
     final boarding = sequence[boardingIndex];
@@ -877,10 +880,66 @@ class Leg {
           ),
       ],
       alerts: alerts,
+      legGeometry: _slicedGeometry(boarding, alighting),
       interlineWithPreviousLeg: false,
       ticketUrl: ticketUrl,
       agencyFareUrl: agencyFareUrl,
     );
+  }
+
+  /// Narrows this leg's route shape down to just the boarding→alighting
+  /// sub-range, by finding the polyline points nearest each stop and
+  /// keeping only what's between them. Returns null (map falls back to a
+  /// straight line) if there's no geometry to slice, or if the nearest
+  /// points can't be resolved into a sensible sub-range.
+  EncodedPolyline? _slicedGeometry(TripStop boarding, TripStop alighting) {
+    final geometry = legGeometry;
+    if (geometry == null || geometry.points.isEmpty) return null;
+
+    List<LatLng> points;
+    try {
+      points = decodePolyline(geometry.points, geometry.precision);
+    } catch (_) {
+      return null;
+    }
+    if (points.length < 2) return null;
+
+    final startIndex = _nearestPolylinePointIndex(
+      points,
+      boarding.lat,
+      boarding.lon,
+    );
+    final endIndex = _nearestPolylinePointIndex(
+      points,
+      alighting.lat,
+      alighting.lon,
+    );
+    if (startIndex >= endIndex) return null;
+
+    final sliced = points.sublist(startIndex, endIndex + 1);
+    return EncodedPolyline(
+      points: encodePolyline(sliced, geometry.precision),
+      precision: geometry.precision,
+      length: sliced.length,
+    );
+  }
+
+  int _nearestPolylinePointIndex(List<LatLng> points, double lat, double lon) {
+    int bestIndex = 0;
+    double bestDistance = double.infinity;
+    for (int i = 0; i < points.length; i++) {
+      final distance = coordinateDistanceInMeters(
+        points[i].latitude,
+        points[i].longitude,
+        lat,
+        lon,
+      );
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
   }
 
   factory Leg.fromJson(Map<String, dynamic> json) {
