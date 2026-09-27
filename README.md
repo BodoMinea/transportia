@@ -7,16 +7,13 @@
 <p align="center">
   <b>Transportia+</b> is a fork of
   <a href="https://github.com/Wafler1/transportia">Wafler1/transportia</a>,
-  a modern travel companion for public transportation.
+  like the original app this fork was mostly programmed by LLM assisted coding. This is mostly a personal project but if you like it feel free to use it and make suggestions.
 </p>
 
 ---
 
 ## What this fork adds
 
-Its own app ID, so it installs side by side with the original app, and every
-build on `dev-build` is published automatically to a self-hosted F-Droid
-repo — early builds, no Play Store account needed.
 
 ## Install
 
@@ -28,11 +25,7 @@ Add the F-Droid repo: **https://blauertee.github.io/fdroid/**
   rel="noopener"
   style="width: 230px;"
 >
-  <img
-    src="https://peerpush.net/p/transportia/badge.png"
-    alt="Transportia badge"
-    style="width: 230px;"
-  />
+
 </a>
 </p>
 
