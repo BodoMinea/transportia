@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../widgets/validation_toast.dart';
@@ -8,6 +7,7 @@ import '../models/my_location.dart';
 import '../theme/journey_metrics.dart';
 import '../utils/journey_colors.dart';
 import 'journey/spine_rail.dart';
+import 'search/editable_value.dart';
 import 'skeletons/skeleton_shimmer.dart';
 
 /// The origin and destination of a search, stacked in travel order.
@@ -29,6 +29,8 @@ class RouteFieldBox extends StatefulWidget {
     this.fromLoading = false,
     this.toLoading = false,
     this.middle,
+    this.timeLine,
+    this.footer,
     required this.onFromPressed,
     required this.onToPressed,
     this.isFromFavourite = false,
@@ -51,6 +53,13 @@ class RouteFieldBox extends StatefulWidget {
   /// Sits between the two fields, sharing their gutter so the rail continues
   /// the line the two markers start and end.
   final Widget? middle;
+
+  /// When the trip leaves or arrives, under where it starts.
+  final Widget? timeLine;
+
+  /// Closes the card — the Search button, so the action sits with the
+  /// fields it acts on rather than in a bar of its own below them.
+  final Widget? footer;
 
   /// Opens the place picker. The fields are not edited in place: picking a
   /// place is a search with favourites and recents of its own.
@@ -115,36 +124,43 @@ class _RouteFieldBoxState extends State<RouteFieldBox> {
             ),
           ],
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _EndpointRow(
               railFrom: _EndpointRailFrom.marker,
+              markerCenter: _EndpointRow.originMarkerCenter,
               marker: _EndpointDot(color: widget.accentColor, filled: false),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _HeartButton(
-                    filled: widget.isFromFavourite,
-                    accentColor: widget.accentColor,
-                    label: 'origin',
-                    onPressed: widget.onToggleFromFavourite,
-                  ),
-                  const SizedBox(width: 6),
+                  // Where you are is not a place to keep.
+                  if (!_originIsMyLocation) ...[
+                    _HeartButton(
+                      filled: widget.isFromFavourite,
+                      accentColor: widget.accentColor,
+                      label: 'origin',
+                      onPressed: widget.onToggleFromFavourite,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   _buildSwapButton(context),
                 ],
               ),
-              child: _InlineField(
-                controller: widget.fromController,
-                focusNode: widget.fromFocusNode,
-                hintText: 'From',
-                isFromField: true,
-                showMyLocationDefault: widget.showMyLocationDefault,
-                accentColor: widget.accentColor,
-                showLoading: widget.fromLoading,
-                onPressed: widget.onFromPressed,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildOrigin(),
+                    if (widget.timeLine case final timeLine?) ...[
+                      const SizedBox(height: 2),
+                      timeLine,
+                    ],
+                  ],
+                ),
               ),
             ),
             if (widget.middle case final middle?)
@@ -163,7 +179,12 @@ class _RouteFieldBoxState extends State<RouteFieldBox> {
               ),
             _EndpointRow(
               railFrom: _EndpointRailFrom.top,
-              marker: _EndpointDot(color: widget.accentColor, filled: true),
+              markerCenter: _EndpointRow.prominentMarkerCenter,
+              marker: _EndpointDot(
+                color: widget.accentColor,
+                filled: true,
+                size: 11,
+              ),
               trailing: _HeartButton(
                 filled: widget.isToFavourite,
                 accentColor: widget.accentColor,
@@ -173,17 +194,43 @@ class _RouteFieldBoxState extends State<RouteFieldBox> {
               child: _InlineField(
                 controller: widget.toController,
                 focusNode: widget.toFocusNode,
-                hintText: 'To',
-                isFromField: false,
-                showMyLocationDefault: false,
-                accentColor: widget.accentColor,
+                hintText: 'Search destination',
                 showLoading: widget.toLoading,
                 onPressed: widget.onToPressed,
               ),
             ),
+            if (widget.footer case final footer?) ...[
+              const SizedBox(height: 10),
+              footer,
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  /// Where the trip starts, as a value to tap rather than a field to fill:
+  /// most searches start from where the rider is, so that is what it says
+  /// until they pick somewhere else.
+  bool get _originIsMyLocation =>
+      widget.fromController.text.isEmpty && widget.showMyLocationDefault;
+
+  Widget _buildOrigin() {
+    final text = widget.fromController.text;
+    final isMyLocation = _originIsMyLocation;
+    final chip = EditableValue.primary(
+      icon: isMyLocation ? LucideIcons.mousePointer2 : LucideIcons.mapPin,
+      label: isMyLocation ? myLocationName : (text.isEmpty ? 'From' : text),
+      emphasised: isMyLocation,
+      semanticsLabel: 'Change origin',
+      onTap: widget.onFromPressed,
+    );
+    if (!widget.fromLoading) return chip;
+    return SkeletonShimmer(
+      baseColor: const Color(0xFFE2E7EC),
+      highlightColor: const Color(0xFFF7F9FC),
+      period: const Duration(milliseconds: 1100),
+      child: chip,
     );
   }
 
@@ -262,6 +309,7 @@ class _EndpointRow extends StatelessWidget {
     required this.child,
     required this.railFrom,
     this.trailing,
+    this.markerCenter = _defaultMarkerCenter,
   });
 
   final Widget marker;
@@ -270,7 +318,17 @@ class _EndpointRow extends StatelessWidget {
   final _EndpointRailFrom railFrom;
 
   /// Half the height of a field row, which is where the marker sits.
-  static const double _markerCenter = 22;
+  final double markerCenter;
+
+  static const double _defaultMarkerCenter = 22;
+
+  /// The destination's row: a little taller, as the one field every search
+  /// has to fill.
+  static const double prominentMarkerCenter = 26;
+
+  /// The origin's row is two lines, place over time; the marker belongs to
+  /// the place.
+  static const double originMarkerCenter = 16;
 
   @override
   Widget build(BuildContext context) {
@@ -286,15 +344,16 @@ class _EndpointRow extends StatelessWidget {
           child: SpineRail(
             color: kStreetLegColor,
             dashed: true,
-            topInset: fromMarker ? _markerCenter : 0,
-            bottomInset: fromMarker ? 0 : _markerCenter,
+            topInset: fromMarker ? markerCenter : 0,
+            bottomInset: fromMarker ? 0 : markerCenter,
           ),
         ),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
               width: JourneyMetrics.gutter,
-              height: _markerCenter * 2,
+              height: markerCenter * 2,
               child: Center(child: marker),
             ),
             // The same gap the spine's rows keep between the rail and their
@@ -304,7 +363,10 @@ class _EndpointRow extends StatelessWidget {
             Expanded(child: child),
             if (trailing case final trailing?) ...[
               const SizedBox(width: 8),
-              trailing,
+              SizedBox(
+                height: markerCenter * 2,
+                child: Center(child: trailing),
+              ),
             ],
           ],
         ),
@@ -314,9 +376,14 @@ class _EndpointRow extends StatelessWidget {
 }
 
 class _EndpointDot extends StatelessWidget {
-  const _EndpointDot({required this.color, required this.filled});
+  const _EndpointDot({
+    required this.color,
+    required this.filled,
+    this.size = 9,
+  });
 
   final Color color;
+  final double size;
 
   /// Hollow for where you start, solid for where you end — the convention
   /// every map app already taught people.
@@ -325,8 +392,8 @@ class _EndpointDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 9,
-      height: 9,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: filled ? color : AppColors.white,
         shape: BoxShape.circle,
@@ -336,13 +403,12 @@ class _EndpointDot extends StatelessWidget {
   }
 }
 
+/// The destination: the one field every search has to fill, so it is set a
+/// size up from the rest of the card.
 class _InlineField extends StatelessWidget {
   const _InlineField({
     required this.controller,
     required this.hintText,
-    required this.isFromField,
-    required this.showMyLocationDefault,
-    required this.accentColor,
     required this.onPressed,
     this.focusNode,
     this.showLoading = false,
@@ -350,127 +416,86 @@ class _InlineField extends StatelessWidget {
 
   final TextEditingController controller;
   final String hintText;
-  final bool isFromField;
-  final bool showMyLocationDefault;
-  final Color accentColor;
   final FocusNode? focusNode;
   final bool showLoading;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final wantsOverlay =
-        isFromField &&
-        showMyLocationDefault &&
-        controller.text.isEmpty &&
-        !(focusNode?.hasFocus ?? false);
-    final isFocused = focusNode?.hasFocus ?? false;
-    return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-      tween: Tween<double>(begin: 0.0, end: wantsOverlay ? 1.0 : 0.0),
-      builder: (context, overlayT, _) {
-        return Stack(
-          alignment: Alignment.centerLeft,
-          children: [
-            CupertinoTextField(
-              controller: controller,
-              focusNode: focusNode,
-              placeholder:
-                  (isFromField &&
-                      showMyLocationDefault &&
-                      controller.text.isEmpty &&
-                      !isFocused)
-                  ? ''
-                  : hintText,
-              placeholderStyle: TextStyle(
-                color: AppColors.black.withValues(alpha: 0.4),
-                fontSize: 16,
-              ),
-              style: TextStyle(color: AppColors.black, fontSize: 16),
-              cursorColor: AppColors.accentOf(context),
-              decoration: null,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              maxLines: 1,
-              textInputAction: TextInputAction.next,
-              keyboardType: TextInputType.text,
-              // Held for its text, not for typing: tapping opens the picker,
-              // which has room for favourites and recents this row does not.
-              readOnly: true,
-              showCursor: false,
-              onTap: onPressed,
+    return Stack(
+      alignment: Alignment.centerLeft,
+      children: [
+        CupertinoTextField(
+          controller: controller,
+          focusNode: focusNode,
+          placeholder: hintText,
+          placeholderStyle: TextStyle(
+            color: AppColors.black.withValues(alpha: 0.45),
+            fontSize: 18,
+            fontWeight: FontWeight.w500,
+          ),
+          style: TextStyle(
+            color: AppColors.black,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+          cursorColor: AppColors.accentOf(context),
+          // A well rather than a bare line: an empty destination is the one
+          // thing a rider standing somewhere has to tap, so it should look
+          // like a place to type even though tapping opens the picker.
+          decoration: BoxDecoration(
+            color: AppColors.black.withValues(alpha: 0.045),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          prefix: Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: Icon(
+              LucideIcons.search,
+              size: 18,
+              color: AppColors.black.withValues(alpha: 0.45),
             ),
-            IgnorePointer(
-              ignoring: overlayT < 0.01,
-              child: Opacity(
-                opacity: overlayT,
-                child: Transform.translate(
-                  offset: Offset(0, (1 - overlayT) * 4),
-                  child: ImageFiltered(
-                    imageFilter: ImageFilter.blur(
-                      sigmaX: (1 - overlayT) * 2.0,
-                      sigmaY: (1 - overlayT) * 2.0,
-                    ),
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onPressed,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            LucideIcons.mousePointer2,
-                            size: 18,
-                            color: accentColor,
+          ),
+          padding: const EdgeInsets.fromLTRB(10, 12, 12, 12),
+          maxLines: 1,
+          textInputAction: TextInputAction.next,
+          keyboardType: TextInputType.text,
+          // Held for its text, not for typing: tapping opens the picker,
+          // which has room for favourites and recents this row does not.
+          readOnly: true,
+          showCursor: false,
+          onTap: onPressed,
+        ),
+        Positioned.fill(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            child: !showLoading
+                ? const SizedBox.shrink()
+                : IgnorePointer(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: SkeletonShimmer(
+                        baseColor: const Color(0xFFE2E7EC),
+                        highlightColor: const Color(0xFFF7F9FC),
+                        period: const Duration(milliseconds: 1100),
+                        child: Container(
+                          constraints: const BoxConstraints(
+                            maxWidth: 160,
+                            minWidth: 96,
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            myLocationName,
-                            style: TextStyle(
-                              color: accentColor,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Positioned.fill(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                child: !showLoading
-                    ? const SizedBox.shrink()
-                    : IgnorePointer(
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: SkeletonShimmer(
-                            baseColor: const Color(0xFFE2E7EC),
-                            highlightColor: const Color(0xFFF7F9FC),
-                            period: const Duration(milliseconds: 1100),
-                            child: Container(
-                              constraints: const BoxConstraints(
-                                maxWidth: 160,
-                                minWidth: 96,
-                              ),
-                              height: 18,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE2E7EC),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                            ),
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE2E7EC),
+                            borderRadius: BorderRadius.circular(999),
                           ),
                         ),
                       ),
-              ),
-            ),
-          ],
-        );
-      },
+                    ),
+                  ),
+          ),
+        ),
+      ],
     );
   }
 }

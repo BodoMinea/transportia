@@ -363,74 +363,65 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
 
   Widget _buildSearchField(BuildContext context) {
     final accent = AppColors.accentOf(context);
-    return Row(
-      children: [
-        Expanded(
-          child: CupertinoTextField(
-            controller: _controller,
-            focusNode: _focus,
-            placeholder: 'Search for a place',
-            placeholderStyle: TextStyle(
-              color: AppColors.black.withValues(alpha: 0.4),
-              fontSize: 16,
-            ),
-            style: TextStyle(color: AppColors.black, fontSize: 16),
-            cursorColor: accent,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.black.withValues(alpha: 0.12),
-              ),
-            ),
-            prefix: Padding(
-              padding: const EdgeInsets.only(left: 12),
-              child: Icon(
-                LucideIcons.search,
-                size: 17,
-                color: AppColors.black.withValues(alpha: 0.4),
-              ),
-            ),
-            suffix: _query.isEmpty
-                ? null
-                : GestureDetector(
-                    onTap: _controller.clear,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: Icon(
-                        LucideIcons.x,
-                        size: 16,
-                        color: AppColors.black.withValues(alpha: 0.4),
-                      ),
-                    ),
-                  ),
-            textInputAction: TextInputAction.search,
-          ),
+    return CupertinoTextField(
+      controller: _controller,
+      focusNode: _focus,
+      placeholder: 'Search for a place',
+      placeholderStyle: TextStyle(
+        color: AppColors.black.withValues(alpha: 0.4),
+        fontSize: 16,
+      ),
+      style: TextStyle(color: AppColors.black, fontSize: 16),
+      cursorColor: accent,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.black.withValues(alpha: 0.12)),
+      ),
+      prefix: Padding(
+        padding: const EdgeInsets.only(left: 12),
+        child: Icon(
+          LucideIcons.search,
+          size: 17,
+          color: AppColors.black.withValues(alpha: 0.4),
         ),
-        if (!_stopsOnly) const SizedBox(width: 10),
-        // Some places are easier to point at than to name — but a point is not
-        // a stop, so a timetable search is not offered one.
-        if (!_stopsOnly)
-          Semantics(
-            button: true,
-            label: 'Pick a point on the map',
-            child: GestureDetector(
+      ),
+      suffix: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_query.isNotEmpty)
+            GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: _pickOnMap,
-              child: Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: AppColors.accentWash(accent),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: accent.withValues(alpha: 0.35)),
+              onTap: _controller.clear,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Icon(
+                  LucideIcons.x,
+                  size: 16,
+                  color: AppColors.black.withValues(alpha: 0.4),
                 ),
-                child: Icon(LucideIcons.mapPlus, size: 19, color: accent),
               ),
             ),
-          ),
-      ],
+          // Some places are easier to point at than to name — but a point is
+          // not a stop, so a timetable search is not offered one.
+          if (!_stopsOnly)
+            Semantics(
+              button: true,
+              label: 'Pick a point on the map',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _pickOnMap,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 10, 14, 10),
+                  child: Icon(LucideIcons.mapPlus, size: 20, color: accent),
+                ),
+              ),
+            ),
+          if (_stopsOnly) const SizedBox(width: 4),
+        ],
+      ),
+      textInputAction: TextInputAction.search,
     );
   }
 
