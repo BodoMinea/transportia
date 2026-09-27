@@ -160,6 +160,10 @@ class _MapScreenState extends State<MapScreen>
   List<SavedTrip> _recentTrips = [];
   bool _isSearching = false;
   bool _isMapReady = false;
+
+  /// Whether the map is built at all. Starts false: see
+  /// [ThemeProvider.showsSearchMap] for why it waits for the setting.
+  bool _showsMap = false;
   Timer? _tripRefreshTimer;
   Timer? _tripRefreshDebounce;
   Timer? _stopRefreshDebounce;
@@ -389,6 +393,7 @@ class _MapScreenState extends State<MapScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _followMapSetting();
     final accent = AppColors.accentOf(context);
     if (_stopAccentColor?.toARGB32() == accent.toARGB32()) return;
     _stopAccentColor = accent;
@@ -412,10 +417,7 @@ class _MapScreenState extends State<MapScreen>
     _stopDragRumble();
     _activateListener?.call();
     _activateListener = null;
-    _tripRefreshTimer?.cancel();
-    _tripRefreshDebounce?.cancel();
-    _stopRefreshDebounce?.cancel();
-    _vehicleAnimationTimer?.cancel();
+    _stopMapTimers();
     _controller?.onFeatureTapped.remove(_handleFeatureTapped);
     unawaited(_clearVehicleMarkers());
     unawaited(_clearStopMarkers());
@@ -541,6 +543,36 @@ class _MapScreenState extends State<MapScreen>
     setState(() => _hasLocationPermission = ok);
     if (ok && _posSub == null) _startPositionStream();
     return ok;
+  }
+
+  void _followMapSetting() {
+    final showsMap = Provider.of<ThemeProvider>(context).showsSearchMap;
+    if (showsMap == _showsMap) return;
+    _showsMap = showsMap;
+    if (!showsMap) _releaseMap();
+  }
+
+  /// Lets go of everything the map held once it is turned off. Its timers
+  /// would otherwise go on fetching vehicles for a map that is gone, which is
+  /// the data the setting is there to save.
+  void _releaseMap() {
+    _stopMapTimers();
+    _controller?.onFeatureTapped.remove(_handleFeatureTapped);
+    _controller = null;
+    _isMapReady = false;
+    _isTripFocus = false;
+    _isQuickSettings = false;
+    _selectedStop = null;
+    _isStopOverlayClosing = false;
+    _longPressLatLng = null;
+    _isLongPressClosing = false;
+  }
+
+  void _stopMapTimers() {
+    _tripRefreshTimer?.cancel();
+    _tripRefreshDebounce?.cancel();
+    _stopRefreshDebounce?.cancel();
+    _vehicleAnimationTimer?.cancel();
   }
 
   Future<void> _onMapCreated(MapLibreMapController controller) async {
@@ -1650,300 +1682,283 @@ class _MapScreenState extends State<MapScreen>
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop:
-          !_isTripFocus &&
-          !_isQuickSettings &&
-          !_isSheetCollapsed &&
-          !_showTimeSelectionOverlay &&
-          _selectedStop == null &&
-          _longPressLatLng == null,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (!didPop) {
-          if (_isTripFocus) {
-            _exitTripFocus();
-          } else if (_isQuickSettings) {
-            _closeQuickSettings();
-          } else if (_selectedStop != null) {
-            _dismissStopOverlay();
-          } else if (_longPressLatLng != null) {
-            _dismissLongPressOverlay();
-          } else if (_showTimeSelectionOverlay) {
-            _closeTimeSelectionOverlay();
-          } else {
-            final expTop = _lastComputedExpandedTop;
-            final colTop = _lastComputedCollapsedTop;
-            if (expTop != null && colTop != null) {
-              _animateTo(expTop, colTop);
-              _stopDragRumble();
-            }
-          }
-        }
+      canPop: _canPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _stepBack();
       },
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final totalH = constraints.maxHeight;
-          final double bottomBarHeight = _isTripFocus
-              ? _tripFocusBottomBarHeight
-              : _bottomBarHeight;
-          final double collapsedTop = math.max(0.0, totalH - bottomBarHeight);
-          final double expandedCandidate = totalH * _collapsedMapFraction;
-          final double expandedTop = (expandedCandidate.clamp(
-            0.0,
-            collapsedTop,
-          ));
-          _lastComputedCollapsedTop = collapsedTop;
-          _lastComputedExpandedTop = expandedTop;
-          _lastBottomBarHeight = bottomBarHeight;
+      child: _showsMap ? _buildSplitLayout() : _buildPageLayout(),
+    );
+  }
 
-          _sheetTop ??= expandedTop;
-          if (_isBottomBarResizeAnimating) {
-            if (_sheetTop! < expandedTop) {
-              _sheetTop = expandedTop;
-            }
-          } else {
-            _sheetTop = ((_sheetTop!).clamp(expandedTop, collapsedTop));
-          }
-          final bool collapsed = ((_sheetTop! - collapsedTop).abs() < 1.0);
-          if (collapsed != _isSheetCollapsed) {
-            _isSheetCollapsed = collapsed;
-            widget.onCollapseChanged?.call(collapsed);
-          }
+  bool get _canPop =>
+      !_isTripFocus &&
+      !_isQuickSettings &&
+      !_isSheetCollapsed &&
+      !_showTimeSelectionOverlay &&
+      _selectedStop == null &&
+      _longPressLatLng == null;
 
-          final animDuration = Duration.zero;
+  /// Back closes whatever is open over the search, innermost first, and
+  /// finally raises a card left down over the map.
+  void _stepBack() {
+    if (_isTripFocus) return _exitTripFocus();
+    if (_isQuickSettings) return _closeQuickSettings();
+    if (_selectedStop != null) return _dismissStopOverlay();
+    if (_longPressLatLng != null) return _dismissLongPressOverlay();
+    if (_showTimeSelectionOverlay) return _closeTimeSelectionOverlay();
+    _expandSheetToCard();
+    _stopDragRumble();
+  }
 
-          final denom = (collapsedTop - expandedTop);
-          final progress = denom <= 0.0
-              ? 1.0
-              : ((_sheetTop! - expandedTop) / denom).clamp(0.0, 1.0);
+  /// Without the map the search is the page: the same card, nothing under it
+  /// to uncover, so it never collapses.
+  Widget _buildPageLayout() {
+    _reportSheetPosition(collapsed: false, progress: 0);
+    return _buildRouteCard();
+  }
 
-          widget.onCollapseProgressChanged?.call(progress);
+  /// The map, with the search as a sheet that can be dragged down off it.
+  Widget _buildSplitLayout() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final sheet = _layoutSheet(constraints.maxHeight);
+        return Stack(
+          children: [
+            Positioned.fill(child: RepaintBoundary(child: _buildMap())),
+            if (!_isTripFocus && !_isQuickSettings)
+              _buildControlPills(sheet.progress),
+            ..._buildMapOverlays(),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: _sheetTop!,
+              bottom: 0,
+              child: RepaintBoundary(child: _buildSheet(sheet)),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
-          final showLongPressOverlay =
-              _longPressLatLng != null || _isLongPressClosing;
-          final showStopOverlay =
-              _selectedStop != null || _isStopOverlayClosing;
-          const double pillRevealStart = 0.7;
-          final double pillProgress =
-              ((progress - pillRevealStart) / (1 - pillRevealStart)).clamp(
-                0.0,
-                1.0,
-              );
-          final double pillVisibility = Curves.easeOutCubic.transform(
-            pillProgress,
-          );
-          final double pillYOffset = (1 - pillVisibility) * 32;
-          return Stack(
-            children: [
-              Positioned.fill(
-                child: RepaintBoundary(
-                  child: MapLibreMap(
-                    onMapCreated: _onMapCreated,
-                    onStyleLoadedCallback: _onStyleLoaded,
-                    styleString: context.watch<ThemeProvider>().mapStyleUrl,
-                    myLocationEnabled: _hasLocationPermission,
-                    myLocationRenderMode: _hasLocationPermission
-                        ? MyLocationRenderMode.compass
-                        : MyLocationRenderMode.normal,
-                    myLocationTrackingMode: MyLocationTrackingMode.none,
-                    trackCameraPosition: true,
-                    rotateGesturesEnabled: true,
-                    tiltGesturesEnabled: false,
-                    initialCameraPosition: _startCam,
-                    compassEnabled: false,
-                    onCameraMove: _onCameraMove,
-                    onCameraIdle: _onCameraIdle,
-                    onMapClick: _onMapTap,
-                    onMapLongClick: _onMapLongClick,
-                    annotationConsumeTapEvents: const [AnnotationType.symbol],
-                  ),
-                ),
-              ),
+  /// Places the sheet for a screen [totalHeight] tall and reports where it
+  /// ended up.
+  _SheetLayout _layoutSheet(double totalHeight) {
+    final bottomBarHeight = _isTripFocus
+        ? _tripFocusBottomBarHeight
+        : _bottomBarHeight;
+    final collapsedTop = math.max(0.0, totalHeight - bottomBarHeight);
+    final expandedTop = (totalHeight * _collapsedMapFraction).clamp(
+      0.0,
+      collapsedTop,
+    );
+    _lastComputedCollapsedTop = collapsedTop;
+    _lastComputedExpandedTop = expandedTop;
+    _lastBottomBarHeight = bottomBarHeight;
 
-              if (_sheetTop != null && !_isTripFocus && !_isQuickSettings)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: math.max(0.0, _sheetTop! - 46),
-                  child: IgnorePointer(
-                    ignoring: pillVisibility < 0.05,
-                    child: Opacity(
-                      opacity: pillVisibility,
-                      child: Transform.translate(
-                        offset: Offset(0, pillYOffset),
-                        child: _MapControlPills(
-                          quickButton: _quickButtonConfig(context),
-                          onLocate: _centerOnUser2D,
-                          onSettings: _openQuickSettings,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+    _sheetTop ??= expandedTop;
+    _sheetTop = _isBottomBarResizeAnimating
+        ? math.max(_sheetTop!, expandedTop)
+        : _sheetTop!.clamp(expandedTop, collapsedTop);
 
-              if (showLongPressOverlay && _longPressLatLng != null)
-                Positioned.fill(
-                  child: LongPressSelectionModal(
-                    key: ValueKey(_longPressLatLng),
-                    latLng: _longPressLatLng!,
-                    isClosing: _isLongPressClosing,
-                    onSelectFrom: () => _onLongPressChoice(RouteFieldKind.from),
-                    onSelectTo: () => _onLongPressChoice(RouteFieldKind.to),
-                    onDismissRequested: () => _dismissLongPressOverlay(),
-                    onClosed: _handleLongPressOverlayClosed,
-                  ),
-                ),
-              if (showStopOverlay && _selectedStop != null)
-                Positioned.fill(
-                  child: StopSelectionModal(
-                    key: ValueKey(_selectedStop!.id),
-                    stop: _selectedStop!,
-                    stopTimes: _stopTimesPreview,
-                    isLoading: _isStopTimesLoading,
-                    errorMessage: _stopTimesError,
-                    isClosing: _isStopOverlayClosing,
-                    onSelectFrom: () =>
-                        _onStopChoice(RouteFieldKind.from, _selectedStop!),
-                    onSelectTo: () =>
-                        _onStopChoice(RouteFieldKind.to, _selectedStop!),
-                    onStopTimeTap: _onStopTimeSelected,
-                    onViewTimetable: () => _openStopTimetable(_selectedStop!),
-                    onDismissRequested: () => _dismissStopOverlay(),
-                    onClosed: _handleStopOverlayClosed,
-                  ),
-                ),
+    final travel = collapsedTop - expandedTop;
+    final progress = travel <= 0.0
+        ? 1.0
+        : ((_sheetTop! - expandedTop) / travel).clamp(0.0, 1.0);
+    _reportSheetPosition(
+      collapsed: (_sheetTop! - collapsedTop).abs() < 1.0,
+      progress: progress,
+    );
 
-              AnimatedPositioned(
-                duration: animDuration,
-                curve: Curves.linear,
-                left: 0,
-                right: 0,
-                top: _sheetTop!,
-                bottom: 0,
-                child: RepaintBoundary(
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      _isTripFocus
-                          ? _TripFocusBottomCard(
-                              onHandleTap: () =>
-                                  _toggleSheet(expandedTop, collapsedTop),
-                              onDragStart: _onSheetDragStart,
-                              onDragUpdate: (dy) => _onSheetDragUpdate(
-                                dy,
-                                expandedTop,
-                                collapsedTop,
-                              ),
-                              onDragEnd: (velocityDy) => _onSheetDragEnd(
-                                velocityDy,
-                                expandedTop,
-                                collapsedTop,
-                              ),
-                              onBack: _exitTripFocus,
-                              itinerary: _focusedItinerary,
-                              isLoading: _isTripFocusLoading,
-                              errorMessage: _tripFocusError,
-                              bottomSpacer: bottomBarHeight,
-                              onStopTap: _openStopDeparturesSheet,
-                              onRefresh: _refreshTripFocus,
-                              lastUpdated: _tripFocusLastUpdated,
-                            )
-                          : _isQuickSettings
-                          ? _QuickSettingsBottomCard(
-                              onHandleTap: () =>
-                                  _toggleSheet(expandedTop, collapsedTop),
-                              onDragStart: _onSheetDragStart,
-                              onDragUpdate: (dy) => _onSheetDragUpdate(
-                                dy,
-                                expandedTop,
-                                collapsedTop,
-                              ),
-                              onDragEnd: (velocityDy) => _onSheetDragEnd(
-                                velocityDy,
-                                expandedTop,
-                                collapsedTop,
-                              ),
-                              onBack: _closeQuickSettings,
-                              bottomSpacer: bottomBarHeight,
-                              quickButtonAction: _quickButtonAction,
-                              quickButtonOptions: _quickButtonOptions(),
-                              showVehicles: _showVehicles,
-                              hideNonRealtime: _hideNonRealtimeVehicles,
-                              showStops: _showStops,
-                              vehicleModeVisibility: _vehicleModeVisibility,
-                              onQuickButtonChanged: _setQuickButtonAction,
-                              onShowVehiclesChanged: _setShowVehicles,
-                              onHideNonRealtimeChanged:
-                                  _setHideNonRealtimeVehicles,
-                              onVehicleModeChanged: _setVehicleModeVisibility,
-                              onShowStopsChanged: _setShowStops,
-                              onOpenAllSettings: _openAllSettings,
-                            )
-                          : BottomCard(
-                              isCollapsed: _isSheetCollapsed,
-                              onHandleTap: () =>
-                                  _toggleSheet(expandedTop, collapsedTop),
-                              onDragStart: _onSheetDragStart,
-                              onDragUpdate: (dy) => _onSheetDragUpdate(
-                                dy,
-                                expandedTop,
-                                collapsedTop,
-                              ),
-                              onDragEnd: (velocityDy) => _onSheetDragEnd(
-                                velocityDy,
-                                expandedTop,
-                                collapsedTop,
-                              ),
-                              fromCtrl: _fromCtrl,
-                              toCtrl: _toCtrl,
-                              showMyLocationDefault: _hasLocationPermission,
-                              onUnfocus: _unfocusInputs,
-                              onSwapRequested: _handleSwapRequested,
-                              options: _options,
-                              storedOptions: _storedOptions,
-                              capabilities: _capabilities,
-                              onOptionsChanged: _onOptionsChanged,
-                              onResetOptions: _resetOptions,
-                              onSaveOptionsAsDefault: () =>
-                                  unawaited(_saveOptionsAsDefault()),
-                              onAddViaStop: _openViaStopPicker,
-                              onFromPressed: () => unawaited(
-                                _openLocationSearch(RouteFieldKind.from),
-                              ),
-                              onToPressed: () => unawaited(
-                                _openLocationSearch(RouteFieldKind.to),
-                              ),
-                              isFromFavourite: _isFavourite(_fromSelection),
-                              isToFavourite: _isFavourite(_toSelection),
-                              onToggleFromFavourite: () =>
-                                  unawaited(_toggleFavourite(_fromSelection)),
-                              onToggleToFavourite: () =>
-                                  unawaited(_toggleFavourite(_toSelection)),
-                              routeFieldLink: _routeFieldLink,
-                              fromLoading: _isReverseGeocodeLoading(
-                                RouteFieldKind.from,
-                              ),
-                              toLoading: _isReverseGeocodeLoading(
-                                RouteFieldKind.to,
-                              ),
-                              onSearch: _search,
-                              timeSelectionLayerLink: _timeSelectionLayerLink,
-                              onTimeSelectionTap: _handleTimeSelectionTap,
-                              onTimeSelectionTapDown:
-                                  _handleTimeSelectionTapDown,
-                              onTimeSelectionTapCancel:
-                                  _handleTimeSelectionTapCancel,
-                              timeSelection: _timeSelection,
-                              recentTrips: _recentTrips,
-                              onRecentTripTap: _onRecentTripTap,
-                            ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+    return _SheetLayout(
+      drag: SheetDrag(
+        onTap: () => _toggleSheet(expandedTop, collapsedTop),
+        onStart: _onSheetDragStart,
+        onUpdate: (dy) => _onSheetDragUpdate(dy, expandedTop, collapsedTop),
+        onEnd: (velocity) =>
+            _onSheetDragEnd(velocity, expandedTop, collapsedTop),
       ),
+      bottomBarHeight: bottomBarHeight,
+      progress: progress,
+    );
+  }
+
+  /// Tells the shell where the sheet is, so the nav bar can follow it.
+  void _reportSheetPosition({
+    required bool collapsed,
+    required double progress,
+  }) {
+    if (collapsed != _isSheetCollapsed) {
+      _isSheetCollapsed = collapsed;
+      widget.onCollapseChanged?.call(collapsed);
+    }
+    widget.onCollapseProgressChanged?.call(progress);
+  }
+
+  /// The only map on the search screen, and the only one the app builds
+  /// without being asked to: tiles, stops and vehicles are all fetched from
+  /// its callbacks, so not building it is what keeps them off the network.
+  Widget _buildMap() {
+    return MapLibreMap(
+      onMapCreated: _onMapCreated,
+      onStyleLoadedCallback: _onStyleLoaded,
+      styleString: context.watch<ThemeProvider>().mapStyleUrl,
+      myLocationEnabled: _hasLocationPermission,
+      myLocationRenderMode: _hasLocationPermission
+          ? MyLocationRenderMode.compass
+          : MyLocationRenderMode.normal,
+      myLocationTrackingMode: MyLocationTrackingMode.none,
+      trackCameraPosition: true,
+      rotateGesturesEnabled: true,
+      tiltGesturesEnabled: false,
+      initialCameraPosition: _startCam,
+      compassEnabled: false,
+      onCameraMove: _onCameraMove,
+      onCameraIdle: _onCameraIdle,
+      onMapClick: _onMapTap,
+      onMapLongClick: _onMapLongClick,
+      annotationConsumeTapEvents: const [AnnotationType.symbol],
+    );
+  }
+
+  /// Locate and settings, fading in as the sheet goes down and there is map
+  /// to act on.
+  Widget _buildControlPills(double sheetProgress) {
+    const double revealStart = 0.7;
+    final visibility = Curves.easeOutCubic.transform(
+      ((sheetProgress - revealStart) / (1 - revealStart)).clamp(0.0, 1.0),
+    );
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: math.max(0.0, _sheetTop! - 46),
+      child: IgnorePointer(
+        ignoring: visibility < 0.05,
+        child: Opacity(
+          opacity: visibility,
+          child: Transform.translate(
+            offset: Offset(0, (1 - visibility) * 32),
+            child: _MapControlPills(
+              quickButton: _quickButtonConfig(context),
+              onLocate: _centerOnUser2D,
+              onSettings: _openQuickSettings,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// What a press on the map opens: a point, or a stop.
+  List<Widget> _buildMapOverlays() {
+    final point = _longPressLatLng;
+    final stop = _selectedStop;
+    return [
+      if (point != null)
+        Positioned.fill(
+          child: LongPressSelectionModal(
+            key: ValueKey(point),
+            latLng: point,
+            isClosing: _isLongPressClosing,
+            onSelectFrom: () => _onLongPressChoice(RouteFieldKind.from),
+            onSelectTo: () => _onLongPressChoice(RouteFieldKind.to),
+            onDismissRequested: _dismissLongPressOverlay,
+            onClosed: _handleLongPressOverlayClosed,
+          ),
+        ),
+      if (stop != null)
+        Positioned.fill(
+          child: StopSelectionModal(
+            key: ValueKey(stop.id),
+            stop: stop,
+            stopTimes: _stopTimesPreview,
+            isLoading: _isStopTimesLoading,
+            errorMessage: _stopTimesError,
+            isClosing: _isStopOverlayClosing,
+            onSelectFrom: () => _onStopChoice(RouteFieldKind.from, stop),
+            onSelectTo: () => _onStopChoice(RouteFieldKind.to, stop),
+            onStopTimeTap: _onStopTimeSelected,
+            onViewTimetable: () => _openStopTimetable(stop),
+            onDismissRequested: _dismissStopOverlay,
+            onClosed: _handleStopOverlayClosed,
+          ),
+        ),
+    ];
+  }
+
+  /// The sheet over the map: a vehicle's trip, the map's own settings, or
+  /// the search.
+  Widget _buildSheet(_SheetLayout sheet) {
+    if (_isTripFocus) {
+      return _TripFocusBottomCard(
+        drag: sheet.drag,
+        onBack: _exitTripFocus,
+        itinerary: _focusedItinerary,
+        isLoading: _isTripFocusLoading,
+        errorMessage: _tripFocusError,
+        bottomSpacer: sheet.bottomBarHeight,
+        onStopTap: _openStopDeparturesSheet,
+        onRefresh: _refreshTripFocus,
+        lastUpdated: _tripFocusLastUpdated,
+      );
+    }
+    if (_isQuickSettings) {
+      return _QuickSettingsBottomCard(
+        drag: sheet.drag,
+        onBack: _closeQuickSettings,
+        bottomSpacer: sheet.bottomBarHeight,
+        quickButtonAction: _quickButtonAction,
+        quickButtonOptions: _quickButtonOptions(),
+        showVehicles: _showVehicles,
+        hideNonRealtime: _hideNonRealtimeVehicles,
+        showStops: _showStops,
+        vehicleModeVisibility: _vehicleModeVisibility,
+        onQuickButtonChanged: _setQuickButtonAction,
+        onShowVehiclesChanged: _setShowVehicles,
+        onHideNonRealtimeChanged: _setHideNonRealtimeVehicles,
+        onVehicleModeChanged: _setVehicleModeVisibility,
+        onShowStopsChanged: _setShowStops,
+        onOpenAllSettings: _openAllSettings,
+      );
+    }
+    return _buildRouteCard(drag: sheet.drag);
+  }
+
+  /// The search, in both layouts. [drag] is how it moves over the map, and
+  /// is left out where there is none.
+  Widget _buildRouteCard({SheetDrag? drag}) {
+    return BottomCard(
+      drag: drag,
+      isCollapsed: _isSheetCollapsed,
+      fromCtrl: _fromCtrl,
+      toCtrl: _toCtrl,
+      showMyLocationDefault: _hasLocationPermission,
+      onUnfocus: _unfocusInputs,
+      onSwapRequested: _handleSwapRequested,
+      options: _options,
+      storedOptions: _storedOptions,
+      capabilities: _capabilities,
+      onOptionsChanged: _onOptionsChanged,
+      onResetOptions: _resetOptions,
+      onSaveOptionsAsDefault: () => unawaited(_saveOptionsAsDefault()),
+      onAddViaStop: _openViaStopPicker,
+      onFromPressed: () => unawaited(_openLocationSearch(RouteFieldKind.from)),
+      onToPressed: () => unawaited(_openLocationSearch(RouteFieldKind.to)),
+      isFromFavourite: _isFavourite(_fromSelection),
+      isToFavourite: _isFavourite(_toSelection),
+      onToggleFromFavourite: () => unawaited(_toggleFavourite(_fromSelection)),
+      onToggleToFavourite: () => unawaited(_toggleFavourite(_toSelection)),
+      routeFieldLink: _routeFieldLink,
+      fromLoading: _isReverseGeocodeLoading(RouteFieldKind.from),
+      toLoading: _isReverseGeocodeLoading(RouteFieldKind.to),
+      onSearch: _search,
+      timeSelectionLayerLink: _timeSelectionLayerLink,
+      onTimeSelectionTap: _handleTimeSelectionTap,
+      onTimeSelectionTapDown: _handleTimeSelectionTapDown,
+      onTimeSelectionTapCancel: _handleTimeSelectionTapCancel,
+      timeSelection: _timeSelection,
+      recentTrips: _recentTrips,
+      onRecentTripTap: _onRecentTripTap,
     );
   }
 
@@ -4060,4 +4075,21 @@ class _MapScreenState extends State<MapScreen>
       ),
     );
   }
+}
+
+/// Where the sheet sits for one layout pass, and how it is moved.
+class _SheetLayout {
+  const _SheetLayout({
+    required this.drag,
+    required this.bottomBarHeight,
+    required this.progress,
+  });
+
+  final SheetDrag drag;
+
+  /// How much of the sheet still shows when it is down.
+  final double bottomBarHeight;
+
+  /// 0 raised, 1 down over the map.
+  final double progress;
 }
