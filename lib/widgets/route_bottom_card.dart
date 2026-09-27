@@ -5,17 +5,18 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/routing_options.dart';
 import '../models/time_selection.dart';
 import '../models/transitous/server_config.dart';
+import '../models/my_location.dart';
 import '../models/trip_history_item.dart';
 import '../services/favorites_service.dart';
 import '../services/transitous_geocode_service.dart';
 import '../widgets/route_field_box.dart';
 import '../theme/app_colors.dart';
-import 'buttons/pill_button.dart';
 import 'map/bottom_sheet_chrome.dart';
 import 'floating_nav_bar.dart';
 import 'buttons/primary_button.dart';
 import 'search/journey_spine.dart';
 import 'search/save_default_row.dart';
+import 'search/editable_value.dart';
 import 'skeletons/skeleton_shimmer.dart';
 import '../theme/app_text.dart';
 
@@ -329,6 +330,8 @@ class _BottomCardState extends State<BottomCard> {
                               fromLoading: widget.fromLoading,
                               toLoading: widget.toLoading,
                               middle: _buildSpine(),
+                              timeLine: _buildTimeLine(),
+                              footer: _buildSearchButton(),
                               onFromPressed: widget.onFromPressed,
                               onToPressed: widget.onToPressed,
                               isFromFavourite: widget.isFromFavourite,
@@ -358,140 +361,20 @@ class _BottomCardState extends State<BottomCard> {
                         ),
                     ],
                     below: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: widget.onUnfocus,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Recent trips', style: AppText.heading),
-                              const SizedBox(height: 12),
-                              ...widget.recentTrips.map(
-                                (trip) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 16),
-                                  child: _RecentTripTile(
-                                    trip: trip,
-                                    onTap: () => widget.onRecentTripTap(trip),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                      GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: widget.onUnfocus,
+                        child: _RecentSections(
+                          trips: widget.recentTrips,
+                          onTap: widget.onRecentTripTap,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      // Clears the floating nav bar, which is a sibling
+                      // painted over this card rather than beside it.
+                      const SizedBox(height: FloatingNavBar.reservedHeight),
                     ],
                   ),
                 ),
-
-                if (!widget.isCollapsed)
-                  Padding(
-                    // Clears the floating nav bar, which is a sibling
-                    // painted over this card rather than beside it.
-                    padding: const EdgeInsets.fromLTRB(
-                      12,
-                      0,
-                      12,
-                      FloatingNavBar.reservedHeight + 12,
-                    ),
-                    child: Builder(
-                      builder: (context) {
-                        const double start = 0.5;
-                        final double raw =
-                            (widget.collapseProgress - start) / (1 - start);
-                        final double t = raw.clamp(0.0, 1.0);
-                        final double dy = 16.0 * t;
-                        return GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: widget.onUnfocus,
-                          child: Transform.translate(
-                            offset: Offset(0, dy),
-                            child: Row(
-                              children: [
-                                GestureDetector(
-                                  onTap: () {},
-                                  behavior: HitTestBehavior.opaque,
-                                  child: CompositedTransformTarget(
-                                    link: widget.timeSelectionLayerLink,
-                                    child: PillButton(
-                                      onTap: widget.onTimeSelectionTap,
-                                      onTapDown: widget.onTimeSelectionTapDown,
-                                      onTapCancel:
-                                          widget.onTimeSelectionTapCancel,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            LucideIcons.clock,
-                                            size: 16,
-                                            color: AppColors.black,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            widget.timeSelection
-                                                .toDisplayString(),
-                                            style: TextStyle(
-                                              color: AppColors.black,
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                // The card covers most of the map, and its
-                                // handle is not an obvious way to say "let
-                                // me see it".
-                                GestureDetector(
-                                  onTap: () {},
-                                  behavior: HitTestBehavior.opaque,
-                                  child: PillButton(
-                                    onTap: widget.onShowMap,
-                                    child: Semantics(
-                                      button: true,
-                                      label: 'Show the map',
-                                      child: Icon(
-                                        LucideIcons.map,
-                                        size: 16,
-                                        color: AppColors.black,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const Spacer(),
-                                GestureDetector(
-                                  onTap: () {},
-                                  behavior: HitTestBehavior.opaque,
-                                  child: PrimaryButton(
-                                    onTap: () =>
-                                        widget.onSearch(widget.timeSelection),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: const [
-                                        Text(
-                                          'Search',
-                                          style: TextStyle(
-                                            color: AppColors.solidWhite,
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
               ],
             ),
           ),
@@ -499,13 +382,108 @@ class _BottomCardState extends State<BottomCard> {
       ),
     );
   }
+
+  Widget _buildTimeLine() {
+    final time = widget.timeSelection;
+    return CompositedTransformTarget(
+      link: widget.timeSelectionLayerLink,
+      child: EditableValue.secondary(
+        icon: time.isArriveBy ? LucideIcons.flag : LucideIcons.clock,
+        label: time.isNow
+            ? 'Leave now'
+            : '${time.isArriveBy ? 'Arrive' : 'Leave'} '
+                  '${time.toDisplayString().replaceFirst('Today ', '')}',
+        semanticsLabel: 'Change departure or arrival time',
+        onTap: widget.onTimeSelectionTap,
+        onTapDown: widget.onTimeSelectionTapDown,
+        onTapCancel: widget.onTimeSelectionTapCancel,
+      ),
+    );
+  }
+
+  Widget _buildSearchButton() {
+    return PrimaryButton(
+      onTap: () => widget.onSearch(widget.timeSelection),
+      child: const Center(
+        child: Text(
+          'Search',
+          style: TextStyle(
+            color: AppColors.solidWhite,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Recent searches, split by where they started.
+///
+/// Most searches start from where the rider is standing, and for those the
+/// origin says nothing — so they are listed by destination alone, first.
+/// Trips that started somewhere chosen keep both ends below them.
+class _RecentSections extends StatelessWidget {
+  const _RecentSections({required this.trips, required this.onTap});
+
+  final List<TripHistoryItem> trips;
+  final ValueChanged<TripHistoryItem> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final destinations = <TripHistoryItem>[];
+    final seen = <String>{};
+    final elsewhere = <TripHistoryItem>[];
+    for (final trip in trips) {
+      if (trip.fromName != myLocationName) {
+        elsewhere.add(trip);
+        continue;
+      }
+      if (seen.add(trip.toName)) destinations.add(trip);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (destinations.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('Recent destinations', style: AppText.heading),
+          const SizedBox(height: 12),
+          for (final trip in destinations)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: _RecentTripTile.destination(
+                trip: trip,
+                onTap: () => onTap(trip),
+              ),
+            ),
+        ],
+        if (elsewhere.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('Recent trips', style: AppText.heading),
+          const SizedBox(height: 12),
+          for (final trip in elsewhere)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _RecentTripTile(trip: trip, onTap: () => onTap(trip)),
+            ),
+        ],
+      ],
+    );
+  }
 }
 
 class _RecentTripTile extends StatefulWidget {
-  const _RecentTripTile({required this.trip, required this.onTap});
+  const _RecentTripTile({required this.trip, required this.onTap})
+    : destinationOnly = false;
+
+  /// A trip from My Location, named by where it went.
+  const _RecentTripTile.destination({required this.trip, required this.onTap})
+    : destinationOnly = true;
 
   final TripHistoryItem trip;
   final VoidCallback onTap;
+  final bool destinationOnly;
 
   @override
   State<_RecentTripTile> createState() => _RecentTripTileState();
@@ -527,19 +505,45 @@ class _RecentTripTileState extends State<_RecentTripTile> {
 
   @override
   Widget build(BuildContext context) {
-    final content = Row(
-      children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: AppColors.black.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.black.withValues(alpha: 0.07)),
-          ),
-          alignment: Alignment.center,
-          child: Icon(LucideIcons.route, size: 18, color: AppColors.black),
+    final content = widget.destinationOnly ? _buildDestination() : _buildTrip();
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _handleTap,
+      child: _isLoading ? SkeletonShimmer(child: content) : content,
+    );
+  }
+
+  Widget _tileIcon(IconData icon) => Container(
+    width: 36,
+    height: 36,
+    decoration: BoxDecoration(
+      color: AppColors.black.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: AppColors.black.withValues(alpha: 0.07)),
+    ),
+    alignment: Alignment.center,
+    child: Icon(icon, size: 18, color: AppColors.black),
+  );
+
+  Widget _buildDestination() => Row(
+    children: [
+      _tileIcon(LucideIcons.mapPin),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Text(
+          widget.trip.toName,
+          style: AppText.listTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
+      ),
+    ],
+  );
+
+  Widget _buildTrip() {
+    return Row(
+      children: [
+        _tileIcon(LucideIcons.route),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -582,12 +586,6 @@ class _RecentTripTileState extends State<_RecentTripTile> {
           ),
         ),
       ],
-    );
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _handleTap,
-      child: _isLoading ? SkeletonShimmer(child: content) : content,
     );
   }
 }
