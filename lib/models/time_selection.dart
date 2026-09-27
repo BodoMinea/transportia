@@ -27,10 +27,10 @@ class TimeSelection {
     return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}:${dateTime.second.toString().padLeft(2, '0')}';
   }
 
-  String toDisplayString() {
+  String toDisplayString({DateTime? now}) {
     if (isNow) return 'Now';
 
-    final now = DateTime.now();
+    now ??= DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final selectedDay = DateTime(dateTime.year, dateTime.month, dateTime.day);
 
@@ -47,6 +47,19 @@ class TimeSelection {
         '${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
     return '$dateStr $timeStr';
   }
+
+  /// The search card's line under the origin: what the rider will do, and
+  /// when. Today goes without saying, so only another day is named.
+  String toSearchLabel({DateTime? now}) {
+    if (isNow) return 'Leave now';
+    final when = toDisplayString(now: now);
+    final time = when.startsWith(_todayPrefix)
+        ? when.substring(_todayPrefix.length)
+        : when;
+    return '${isArriveBy ? 'Arrive' : 'Leave'} $time';
+  }
+
+  static const String _todayPrefix = 'Today ';
 
   Map<String, dynamic> toJson() => {
     'dateTime': dateTime.toIso8601String(),

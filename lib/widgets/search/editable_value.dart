@@ -19,7 +19,7 @@ class EditableValue extends StatefulWidget {
   }) : placeholder = null,
        onTapDown = null,
        onTapCancel = null,
-       _fontSize = 16,
+       _fontSize = 17,
        _muted = false;
 
   /// When it leaves or arrives: under the origin, a step quieter.
@@ -31,7 +31,7 @@ class EditableValue extends StatefulWidget {
     this.onTapCancel,
     this.semanticsLabel,
   }) : placeholder = null,
-       _fontSize = 14,
+       _fontSize = 15,
        _muted = true;
 
   /// Where it goes: the one value every search has to be given, so a size up,
@@ -118,10 +118,13 @@ class _EditableValueState extends State<EditableValue> {
                   ),
                 ),
                 SizedBox(width: isEmpty ? 8 : 4),
+                // The chevron says "change this", in the accent like every
+                // other control; the search glyph belongs to the placeholder
+                // it follows, so it takes the placeholder's colour.
                 Icon(
                   isEmpty ? LucideIcons.search : LucideIcons.chevronDown,
                   size: widget._fontSize,
-                  color: accent,
+                  color: isEmpty ? colour : accent,
                 ),
               ],
             ),

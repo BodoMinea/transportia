@@ -22,7 +22,8 @@ import '../models/my_location.dart';
 import '../models/saved_place.dart';
 import '../models/stop_time.dart';
 import '../models/time_selection.dart';
-import '../models/trip_history_item.dart';
+import '../models/saved_trip.dart';
+import '../screens/itinerary_detail_screen.dart';
 import '../screens/itinerary_list_screen.dart';
 import '../screens/location_settings_screen.dart';
 import '../screens/timetables_screen.dart';
@@ -161,7 +162,7 @@ class _MapScreenState extends State<MapScreen>
   bool _optionsTouched = false;
   ServerConfig _capabilities = ServerCapabilitiesService.capabilities.value;
   int _tripsRefreshKey = 0;
-  List<TripHistoryItem> _recentTrips = [];
+  List<SavedTrip> _recentTrips = [];
   List<FavoritePlace> _favorites = [];
   bool _isSearching = false;
   bool _isMapReady = false;
@@ -1896,7 +1897,6 @@ class _MapScreenState extends State<MapScreen>
                             )
                           : BottomCard(
                               isCollapsed: _isSheetCollapsed,
-                              collapseProgress: progress,
                               onHandleTap: () =>
                                   _toggleSheet(expandedTop, collapsedTop),
                               onDragStart: _onSheetDragStart,
@@ -1925,7 +1925,6 @@ class _MapScreenState extends State<MapScreen>
                               onSaveOptionsAsDefault: () =>
                                   unawaited(_saveOptionsAsDefault()),
                               onAddViaStop: _openViaStopPicker,
-                              onShowMap: _collapseSheetToMap,
                               onFromPressed: () => unawaited(
                                 _openLocationSearch(RouteFieldKind.from),
                               ),
@@ -2067,27 +2066,6 @@ class _MapScreenState extends State<MapScreen>
           });
           unawaited(_loadRecentTrips());
         });
-
-    try {
-      double resolvedFromLat;
-      double resolvedFromLon;
-      if (positionFuture != null) {
-        final position = await positionFuture;
-        resolvedFromLat = position.latitude;
-        resolvedFromLon = position.longitude;
-      } else {
-        resolvedFromLat = fromLatHistory!;
-        resolvedFromLon = fromLonHistory!;
-      }
-
-      final trip = TripHistoryItem.fromSelections(
-        from: resolvedFrom,
-        to: resolvedTo,
-        userLat: resolvedFromLat,
-        userLon: resolvedFromLon,
-      );
-      await RecentTripsService.saveTrip(trip);
-    } catch (_) {}
   }
 
   Future<TransitousLocationSuggestion?> _resolveSelectionFromQuery(
@@ -2336,14 +2314,6 @@ class _MapScreenState extends State<MapScreen>
     return null;
   }
 
-  /// Drops the card to its search-bar height, which is the map made visible.
-  void _collapseSheetToMap() {
-    _unfocusInputs();
-    final collapsedTop = _lastComputedCollapsedTop;
-    if (collapsedTop == null) return;
-    _animateTo(collapsedTop, collapsedTop);
-  }
-
   bool _isFavourite(TransitousLocationSuggestion? selection) =>
       selection != null &&
       FavoritesService.findAt(selection.lat, selection.lon) != null;
@@ -2495,7 +2465,7 @@ class _MapScreenState extends State<MapScreen>
     _expandSheetToCard();
   }
 
-  /// Raises the route card, the counterpart of [_collapseSheetToMap].
+  /// Raises the route card, so fields filled from elsewhere are seen.
   void _expandSheetToCard() {
     final expandedTop = _lastComputedExpandedTop;
     final collapsedTop = _lastComputedCollapsedTop;
@@ -4142,35 +4112,19 @@ class _MapScreenState extends State<MapScreen>
     });
   }
 
-  void _onRecentTripTap(TripHistoryItem trip) {
+  /// Reopens the connection itself, not a new search between its two ends:
+  /// the detail screen re-checks it, and says so when it has already run.
+  void _onRecentTripTap(SavedTrip trip) {
     Haptics.lightTick();
-
-    if (trip.fromName != myLocationName) {
-      final fromSuggestion = TransitousLocationSuggestion(
-        id: 'history-from-${trip.fromLat}-${trip.fromLon}',
-        name: trip.fromName,
-        lat: trip.fromLat,
-        lon: trip.fromLon,
-        type: 'PLACE',
-      );
-      _setControllerText(RouteFieldKind.from, trip.fromName);
-      _setSelection(RouteFieldKind.from, fromSuggestion, notify: true);
-    } else {
-      _setControllerText(RouteFieldKind.from, '');
-      _setSelection(RouteFieldKind.from, null, notify: true);
-    }
-
-    final toSuggestion = TransitousLocationSuggestion(
-      id: 'history-to-${trip.toLat}-${trip.toLon}',
-      name: trip.toName,
-      lat: trip.toLat,
-      lon: trip.toLon,
-      type: 'PLACE',
+    _unfocusInputs();
+    Navigator.of(context).push(
+      CustomPageRoute(
+        child: ItineraryDetailScreen(
+          itinerary: trip.itinerary,
+          savedTrip: trip,
+        ),
+      ),
     );
-    _setControllerText(RouteFieldKind.to, trip.toName);
-    _setSelection(RouteFieldKind.to, toSuggestion, notify: true);
-
-    _search(TimeSelection.now());
   }
 
   void _onFavoriteTap(FavoritePlace favorite) {
