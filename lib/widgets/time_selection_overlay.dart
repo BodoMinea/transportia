@@ -12,7 +12,7 @@ const Duration _kTimeOverlayFadeDuration = Duration(milliseconds: 180);
 /// barrier colour here would dim it twice.
 const Color _kTimeOverlayBarrierColor = Color(0x00000000);
 
-/// How many days past today the date strip and the calendar reach.
+/// How many days past today the calendar reaches.
 const int _kSelectableDaysAhead = 365;
 
 /// Any Monday, to name the calendar's weekday columns from.
@@ -31,14 +31,10 @@ const double _kWheelItemExtent = 44;
 /// Rows of the wheel visible at once: the selected one and two either side.
 const int _kWheelVisibleRows = 5;
 
-/// Day chip width and spacing; the strip scrolls by their sum to reveal one.
-const double _kDayChipWidth = 76;
-const double _kDayChipGap = 8;
+/// Days offered as one-tap tiles, starting today; the calendar reaches the rest.
+const int _kQuickDayCount = 4;
 
-/// Height of the day strip; the calendar button beside it squares to match.
-const double _kDayStripHeight = 58;
-
-/// How long a wheel or the date strip takes to travel to a value set by a
+/// How long a wheel takes to travel to a value set by a
 /// shortcut rather than by the finger.
 const Duration _kJumpDuration = Duration(milliseconds: 280);
 
@@ -257,22 +253,17 @@ class _TimeSelectionOverlayState extends State<TimeSelectionOverlay> {
           ),
           const SizedBox(height: 12),
         ],
-        Row(
-          children: [
-            Expanded(
-              child: _DayStrip(
-                days: calendarDays(_firstSelectableDay, _lastSelectableDay),
-                today: today,
-                selectedDate: _selectedDate,
-                onChanged: _selectDate,
-              ),
-            ),
-            const SizedBox(width: _kDayChipGap),
-            _CalendarButton(
-              isOpen: _isCalendarOpen,
-              onTap: () => setState(() => _isCalendarOpen = !_isCalendarOpen),
-            ),
-          ],
+        _DayRow(
+          quickDays: calendarDays(
+            today,
+            DateTime(today.year, today.month, today.day + _kQuickDayCount - 1),
+          ),
+          today: today,
+          selectedDate: _selectedDate,
+          isCalendarOpen: _isCalendarOpen,
+          onChanged: _selectDate,
+          onCalendarTap: () =>
+              setState(() => _isCalendarOpen = !_isCalendarOpen),
         ),
         const SizedBox(height: 12),
         AnimatedSize(
@@ -402,101 +393,111 @@ class _ToggleSegment extends StatelessWidget {
   }
 }
 
-/// A sideways-scrolling row of days, one tap to pick any of them.
-class _DayStrip extends StatefulWidget {
-  const _DayStrip({
-    required this.days,
+/// The next few days as equal tiles, then a calendar tile for any other day.
+class _DayRow extends StatelessWidget {
+  const _DayRow({
+    required this.quickDays,
     required this.today,
     required this.selectedDate,
+    required this.isCalendarOpen,
     required this.onChanged,
+    required this.onCalendarTap,
   });
 
-  final List<DateTime> days;
+  final List<DateTime> quickDays;
   final DateTime today;
   final DateTime selectedDate;
+  final bool isCalendarOpen;
   final ValueChanged<DateTime> onChanged;
-
-  @override
-  State<_DayStrip> createState() => _DayStripState();
-}
-
-class _DayStripState extends State<_DayStrip> {
-  final ScrollController _controller = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _revealSelected(animate: false);
-    });
-  }
-
-  @override
-  void didUpdateWidget(covariant _DayStrip oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedDate != widget.selectedDate) {
-      _revealSelected(animate: true);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  /// Scrolls the selected day into view with the day before it still showing,
-  /// so it is plain there is more to the left.
-  void _revealSelected({required bool animate}) {
-    if (!_controller.hasClients) return;
-    final index = widget.days.indexOf(widget.selectedDate);
-    if (index < 0) return;
-    final position = _controller.position;
-    final target = ((index - 1) * (_kDayChipWidth + _kDayChipGap)).clamp(
-      position.minScrollExtent,
-      position.maxScrollExtent,
-    );
-    if (animate) {
-      _controller.animateTo(
-        target,
-        duration: _kJumpDuration,
-        curve: Curves.easeOutCubic,
-      );
-    } else {
-      _controller.jumpTo(target);
-    }
-  }
+  final VoidCallback onCalendarTap;
 
   @override
   Widget build(BuildContext context) {
+    final isSelectionQuick = quickDays.contains(selectedDate);
+    final tiles = <Widget>[
+      for (final day in quickDays)
+        _DayTile(
+          day: day,
+          today: today,
+          isSelected: day == selectedDate,
+          onTap: () => onChanged(day),
+        ),
+      _CalendarTile(
+        isOpen: isCalendarOpen,
+        otherDay: isSelectionQuick ? null : selectedDate,
+        onTap: onCalendarTap,
+      ),
+    ];
     return SizedBox(
-      height: _kDayStripHeight,
-      // A fixed extent makes the scroll range exact rather than estimated
-      // from the chips built so far, so a far-off day can be scrolled to.
-      child: ListView.builder(
-        controller: _controller,
-        scrollDirection: Axis.horizontal,
-        itemExtent: _kDayChipWidth + _kDayChipGap,
-        itemCount: widget.days.length,
-        itemBuilder: (context, index) {
-          final day = widget.days[index];
-          return Padding(
-            padding: const EdgeInsets.only(right: _kDayChipGap),
-            child: _DayChip(
-              day: day,
-              today: widget.today,
-              isSelected: day == widget.selectedDate,
-              onTap: () => widget.onChanged(day),
-            ),
-          );
-        },
+      height: 58,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < tiles.length; i++) ...[
+            if (i > 0) const SizedBox(width: 6),
+            Expanded(child: tiles[i]),
+          ],
+        ],
       ),
     );
   }
 }
 
-class _DayChip extends StatelessWidget {
-  const _DayChip({
+/// The shape every tile in the day row shares: a rounded box, filled with the
+/// accent when chosen, holding a label over a smaller line.
+class _DayRowTileFrame extends StatelessWidget {
+  const _DayRowTileFrame({
+    required this.isHighlighted,
+    required this.onTap,
+    required this.top,
+    this.bottom,
+  });
+
+  final bool isHighlighted;
+  final VoidCallback onTap;
+  final Widget Function(Color foreground) top;
+  final String? bottom;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = isHighlighted ? AppColors.solidWhite : AppColors.black;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          color: isHighlighted ? AppColors.accentOf(context) : _controlFill(),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        // Five tiles share a phone's width, so a long label such as
+        // 'Tomorrow' shrinks to fit rather than wrapping or clipping.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              top(foreground),
+              if (bottom != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  bottom!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: foreground.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DayTile extends StatelessWidget {
+  const _DayTile({
     required this.day,
     required this.today,
     required this.isSelected,
@@ -518,46 +519,34 @@ class _DayChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = isSelected ? AppColors.solidWhite : AppColors.black;
-    return GestureDetector(
+    return _DayRowTileFrame(
+      isHighlighted: isSelected,
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: _kDayChipWidth,
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.accentOf(context) : _controlFill(),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              _dayName,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: foreground,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              formatDayMonth(day),
-              style: TextStyle(
-                fontSize: 12,
-                color: foreground.withValues(alpha: 0.7),
-              ),
-            ),
-          ],
+      top: (foreground) => Text(
+        _dayName,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: foreground,
         ),
       ),
+      bottom: formatDayMonth(day),
     );
   }
 }
 
-class _CalendarButton extends StatelessWidget {
-  const _CalendarButton({required this.isOpen, required this.onTap});
+class _CalendarTile extends StatelessWidget {
+  const _CalendarTile({
+    required this.isOpen,
+    required this.otherDay,
+    required this.onTap,
+  });
 
   final bool isOpen;
+
+  /// The selected day when none of the day tiles holds it; the calendar tile
+  /// then stands for it, so the selection is always visible in the row.
+  final DateTime? otherDay;
   final VoidCallback onTap;
 
   @override
@@ -565,28 +554,21 @@ class _CalendarButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: isOpen ? 'Close calendar' : 'Open calendar',
-      child: GestureDetector(
+      child: _DayRowTileFrame(
+        isHighlighted: isOpen || otherDay != null,
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          width: _kDayStripHeight,
-          height: _kDayStripHeight,
-          decoration: BoxDecoration(
-            color: isOpen ? AppColors.accentOf(context) : _controlFill(),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            isOpen ? LucideIcons.clock : LucideIcons.calendarDays,
-            size: 22,
-            color: isOpen ? AppColors.solidWhite : AppColors.black,
-          ),
+        top: (foreground) => Icon(
+          isOpen ? LucideIcons.clock : LucideIcons.calendarDays,
+          size: 20,
+          color: foreground,
         ),
+        bottom: otherDay == null ? null : formatDayMonth(otherDay!),
       ),
     );
   }
 }
 
-/// A month at a time, for reaching days too far off to tap along the strip.
+/// A month at a time, for reaching days beyond the day tiles.
 class _MonthCalendar extends StatefulWidget {
   const _MonthCalendar({
     required this.firstDay,
