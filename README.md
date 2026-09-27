@@ -25,16 +25,6 @@
 
 Add the F-Droid repo: **https://blauertee.github.io/fdroid/**
 
-<p align="center">
-<a href="https://peerpush.net/p/transportia"
-  target="_blank"
-  rel="noopener"
-  style="width: 230px;"
->
-
-</a>
-</p>
-
 ## What Transportia offers
 
 - **Plan routes with confidence**
