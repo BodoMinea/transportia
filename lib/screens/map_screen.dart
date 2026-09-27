@@ -122,8 +122,6 @@ class _MapScreenState extends State<MapScreen>
   static const List<String> _mapStyleCycle = ['default', 'light', 'dark'];
   final _fromCtrl = TextEditingController();
   final _toCtrl = TextEditingController();
-  final FocusNode _fromFocus = FocusNode();
-  final FocusNode _toFocus = FocusNode();
   late final AnimationController _snapCtrl;
   Animation<double>? _snapAnim;
   double? _snapTarget;
@@ -131,7 +129,6 @@ class _MapScreenState extends State<MapScreen>
   bool _hasCustomVibration = false;
   Timer? _dragVibeTimer;
   Timer? _dragVibeDeadline;
-  Timer? _unfocusDebounceTimer;
   bool _didInitLocation = false;
   VoidCallback? _activateListener;
   TransitousLocationSuggestion? _fromSelection;
@@ -141,7 +138,6 @@ class _MapScreenState extends State<MapScreen>
   bool _suppressToListener = false;
   final LayerLink _routeFieldLink = LayerLink();
   final LayerLink _timeSelectionLayerLink = LayerLink();
-  bool _focusEvaluationScheduled = false;
   Symbol? _fromSymbol;
   Symbol? _toSymbol;
   int _markerRefreshToken = 0;
@@ -161,9 +157,7 @@ class _MapScreenState extends State<MapScreen>
   RoutingOptions _storedOptions = RoutingOptions.defaults;
   bool _optionsTouched = false;
   ServerConfig _capabilities = ServerCapabilitiesService.capabilities.value;
-  int _tripsRefreshKey = 0;
   List<SavedTrip> _recentTrips = [];
-  List<FavoritePlace> _favorites = [];
   bool _isSearching = false;
   bool _isMapReady = false;
   Timer? _tripRefreshTimer;
@@ -265,7 +259,6 @@ class _MapScreenState extends State<MapScreen>
     // same frame the request is made, so the listener can miss it.
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyPlanRequest());
     FavoritesService.favoritesListenable.addListener(_onFavoritesChanged);
-    _favorites = FavoritesService.favoritesListenable.value;
     ServerCapabilitiesService.capabilities.addListener(_onCapabilitiesChanged);
     _snapCtrl = AnimationController(
       vsync: this,
@@ -320,8 +313,6 @@ class _MapScreenState extends State<MapScreen>
       }
     });
     _initHapticCaps();
-    _fromFocus.addListener(_onAnyFieldFocus);
-    _toFocus.addListener(_onAnyFieldFocus);
     _fromCtrl.addListener(_handleFromTextChanged);
     _toCtrl.addListener(_handleToTextChanged);
     unawaited(_loadRecentTrips());
@@ -418,10 +409,7 @@ class _MapScreenState extends State<MapScreen>
     _toCtrl.removeListener(_handleToTextChanged);
     _fromCtrl.dispose();
     _toCtrl.dispose();
-    _fromFocus.dispose();
-    _toFocus.dispose();
     _stopDragRumble();
-    _unfocusDebounceTimer?.cancel();
     _activateListener?.call();
     _activateListener = null;
     _tripRefreshTimer?.cancel();
@@ -439,11 +427,10 @@ class _MapScreenState extends State<MapScreen>
     _snapCtrl.dispose();
   }
 
+  /// The hearts on the route card read the favourites directly, so a change
+  /// made elsewhere only needs a rebuild to show.
   void _onFavoritesChanged() {
-    if (!mounted) return;
-    setState(() {
-      _favorites = FavoritesService.favoritesListenable.value;
-    });
+    if (mounted) setState(() {});
   }
 
   void _maybeAttachActivateListener() {
@@ -1666,8 +1653,6 @@ class _MapScreenState extends State<MapScreen>
       canPop:
           !_isTripFocus &&
           !_isQuickSettings &&
-          !_fromFocus.hasFocus &&
-          !_toFocus.hasFocus &&
           !_isSheetCollapsed &&
           !_showTimeSelectionOverlay &&
           _selectedStop == null &&
@@ -1684,8 +1669,6 @@ class _MapScreenState extends State<MapScreen>
             _dismissLongPressOverlay();
           } else if (_showTimeSelectionOverlay) {
             _closeTimeSelectionOverlay();
-          } else if (_fromFocus.hasFocus || _toFocus.hasFocus) {
-            _unfocusInputs();
           } else {
             final expTop = _lastComputedExpandedTop;
             final colTop = _lastComputedCollapsedTop;
@@ -1912,8 +1895,6 @@ class _MapScreenState extends State<MapScreen>
                               ),
                               fromCtrl: _fromCtrl,
                               toCtrl: _toCtrl,
-                              fromFocusNode: _fromFocus,
-                              toFocusNode: _toFocus,
                               showMyLocationDefault: _hasLocationPermission,
                               onUnfocus: _unfocusInputs,
                               onSwapRequested: _handleSwapRequested,
@@ -1944,8 +1925,6 @@ class _MapScreenState extends State<MapScreen>
                               toLoading: _isReverseGeocodeLoading(
                                 RouteFieldKind.to,
                               ),
-                              fromSelection: _fromSelection,
-                              toSelection: _toSelection,
                               onSearch: _search,
                               timeSelectionLayerLink: _timeSelectionLayerLink,
                               onTimeSelectionTap: _handleTimeSelectionTap,
@@ -1956,10 +1935,6 @@ class _MapScreenState extends State<MapScreen>
                               timeSelection: _timeSelection,
                               recentTrips: _recentTrips,
                               onRecentTripTap: _onRecentTripTap,
-                              tripsRefreshKey: _tripsRefreshKey,
-                              favorites: _favorites,
-                              onFavoriteTap: _onFavoriteTap,
-                              hasLocationPermission: _hasLocationPermission,
                             ),
                     ],
                   ),
@@ -2060,10 +2035,7 @@ class _MapScreenState extends State<MapScreen>
         )
         .then((_) {
           _unfocusInputs();
-          setState(() {
-            _tripsRefreshKey++;
-            _isSearching = false;
-          });
+          setState(() => _isSearching = false);
           unawaited(_loadRecentTrips());
         });
   }
@@ -4036,45 +4008,7 @@ class _MapScreenState extends State<MapScreen>
     Haptics.snap(useCustomAmplitude: _hasCustomVibration);
   }
 
-  void _onAnyFieldFocus() {
-    if (_focusEvaluationScheduled) return;
-    _focusEvaluationScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusEvaluationScheduled = false;
-      _applyFocusState();
-    });
-  }
-
-  void _applyFocusState() {
-    if (!mounted) return;
-    final hasFrom = _fromFocus.hasFocus;
-    final hasTo = _toFocus.hasFocus;
-
-    if (!hasFrom && !hasTo) {
-      _unfocusDebounceTimer?.cancel();
-      _unfocusDebounceTimer = Timer(const Duration(milliseconds: 100), () {
-        if (!mounted) return;
-        if (!_fromFocus.hasFocus && !_toFocus.hasFocus) {}
-      });
-      return;
-    }
-
-    _unfocusDebounceTimer?.cancel();
-    _unfocusDebounceTimer = null;
-
-    if (_isSheetCollapsed) {
-      final expTop = _lastComputedExpandedTop;
-      final colTop = _lastComputedCollapsedTop;
-      if (expTop != null && colTop != null) {
-        _animateTo(expTop, colTop);
-        _stopDragRumble();
-      }
-    }
-  }
-
   void _unfocusInputs() {
-    _unfocusDebounceTimer?.cancel();
-    _unfocusDebounceTimer = null;
     FocusScope.of(context).unfocus(disposition: UnfocusDisposition.scope);
     _dismissStopOverlay();
     _dismissLongPressOverlay();
@@ -4125,32 +4059,5 @@ class _MapScreenState extends State<MapScreen>
         ),
       ),
     );
-  }
-
-  void _onFavoriteTap(FavoritePlace favorite) {
-    if (!_hasLocationPermission) {
-      showValidationToast(
-        context,
-        "Location permission required to use favourites",
-      );
-      return;
-    }
-
-    Haptics.lightTick();
-
-    _setControllerText(RouteFieldKind.from, '');
-    _setSelection(RouteFieldKind.from, null, notify: true);
-
-    final toSuggestion = TransitousLocationSuggestion(
-      id: 'favorite-${favorite.lat}-${favorite.lon}',
-      name: favorite.name,
-      lat: favorite.lat,
-      lon: favorite.lon,
-      type: 'PLACE',
-    );
-    _setControllerText(RouteFieldKind.to, favorite.name);
-    _setSelection(RouteFieldKind.to, toSuggestion, notify: true);
-
-    _search(TimeSelection.now());
   }
 }
