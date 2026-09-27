@@ -88,3 +88,11 @@ jobs:
             --notes "Dev build from branch '${{ github.ref_name }}' at commit ${{ github.sha }}." \
             --target "${{ github.sha }}" \
             --latest
+
+      # Runs after the release exists, so fdroid's Publish can download it.
+      - name: Update F-Droid repo
+        env:
+          FDROID_DEPLOY_KEY: ${{ secrets.FDROID_DEPLOY_KEY }}
+        run: |
+          .github/scripts/update-fdroid-source.sh "$RELEASE_TAG" "${{ github.sha }}" \
+            transportia-arm64-v8a.apk transportia-armeabi-v7a.apk
