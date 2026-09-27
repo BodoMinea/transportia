@@ -21,8 +21,9 @@ String _resolveEndpointName({
   return _coordinateLabel(lat, lon);
 }
 
-/// A connection the user deliberately kept, as opposed to the
-/// origin/destination pairs `RecentTripsService` records automatically.
+/// A connection kept for later: one the user chose to save, or one
+/// `RecentTripsService` kept because it was opened recently. The two are
+/// stored apart, so only the first kind is listed as saved.
 ///
 /// It holds two things, and needs both:
 ///
