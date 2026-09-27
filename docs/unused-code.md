@@ -128,40 +128,20 @@ is not on the roadmap. Favourites currently sort by insertion, and a
 hand-ordered list is a very ordinary thing to want. If it stays, the pointless
 `try`/`catch` should go.
 
-### `RecentTripsService.clearHistory` — `lib/services/recent_trips_service.dart:46`
+### `RecentTripsService.clearHistory` — `lib/services/recent_trips_service.dart:85`
 
 Wipes the recent-trips key.
 
 **Judgement:** keep, and wire it up. There is no way for a user to clear their
-recent trips anywhere in Settings, which for a list of places someone has
-searched for is closer to a gap than to a missing feature. The method is the
+recent trips anywhere in Settings, which for a list of journeys someone has
+looked up is closer to a gap than to a missing feature. The method is the
 easy half of that.
-
-
-### The no-op unfocus debounce — `lib/screens/map_screen.dart:4084`
-
-Not an unused declaration but dead work. When neither route field has focus,
-`_applyFocusState` starts a 100ms timer whose callback is:
-
-```dart
-if (!mounted) return;
-if (!_fromFocus.hasFocus && !_toFocus.hasFocus) {}
-```
-
-An empty `if` body. The timer is created, stored, cancelled in three places
-and disposed of, and does nothing at any point. The surrounding early `return`
-is what actually matters.
-
-**Judgement:** delete the timer and keep the `return`. The empty body reads
-like something was removed and its scaffolding left behind; there is no future
-in which an if-statement with no body is what was wanted. Worth a moment
-first to check the branch is meant to be a no-op at all, since the alternative
-reading is that a behaviour went missing here.
-
----
 
 ## Resolved since the last sweep
 
+- The no-op unfocus debounce in `lib/screens/map_screen.dart`. Gone with
+  the route card's text fields: nothing on the card takes focus any more, so
+  the focus listeners, the timer and its empty callback all went together.
 - `parseHexColorOr` — `lib/utils/color_utils.dart:22`. Was listed for
   deletion as the unused middle rung between `parseHexColor` and
   `parseHexColorOrAccent`. It now has four callers: every route badge wanted

@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/saved_place.dart';
 import '../models/saved_trip.dart';
-import '../models/trip_history_item.dart';
 import '../services/favorites_service.dart';
 import '../services/recent_trips_service.dart';
 import '../services/saved_places_service.dart';
@@ -75,7 +74,7 @@ class _DeveloperInfoScreenState extends State<DeveloperInfoScreen> {
   List<SavedPlace> _savedSearchPlaces = [];
   List<SavedPlace> _savedTimetablePlaces = [];
   List<FavoritePlace> _favorites = [];
-  List<TripHistoryItem> _recentTrips = [];
+  List<SavedTrip> _recentTrips = [];
   List<SavedTrip> _savedTrips = [];
   Map<String, Object?> _storedPreferences = {};
   Map<String, Object?> _cachedPreferences = {};
@@ -411,7 +410,7 @@ class _DeveloperInfoScreenState extends State<DeveloperInfoScreen> {
     );
   }
 
-  Widget _recentTripsList(List<TripHistoryItem> trips) {
+  Widget _recentTripsList(List<SavedTrip> trips) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -423,7 +422,7 @@ class _DeveloperInfoScreenState extends State<DeveloperInfoScreen> {
     );
   }
 
-  Widget _recentTripRow(TripHistoryItem trip) {
+  Widget _recentTripRow(SavedTrip trip) {
     final from =
         '${trip.fromName} (${trip.fromLat.toStringAsFixed(4)}, ${trip.fromLon.toStringAsFixed(4)})';
     final to =
@@ -439,7 +438,11 @@ class _DeveloperInfoScreenState extends State<DeveloperInfoScreen> {
             color: AppColors.black,
           ),
         ),
-        Text(trip.timestamp.toIso8601String(), style: _metaLine),
+        Text(
+          'opened ${trip.savedAt.toIso8601String()} · '
+          'departs ${trip.departureTime.toIso8601String()}',
+          style: _metaLine,
+        ),
       ],
     );
   }

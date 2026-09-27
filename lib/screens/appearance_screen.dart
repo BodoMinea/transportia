@@ -56,12 +56,18 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     await themeProvider.setVibrationsEnabled(enabled);
   }
 
+  Future<void> _saveSearchMapEnabled(bool enabled) async {
+    final themeProvider = context.read<ThemeProvider>();
+    await themeProvider.setSearchMapEnabled(enabled);
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final selectedAccentColor = themeProvider.accentColor;
     final selectedAppThemeMode = themeProvider.appThemeMode;
     final vibrationsEnabled = themeProvider.vibrationsEnabled;
+    final searchMapEnabled = themeProvider.searchMapEnabled;
 
     return AppPageScaffold(
       title: 'Appearance',
@@ -259,6 +265,19 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+              // Under the styles, since it decides whether there is a map on
+              // the search screen to style at all.
+              _ToggleCard(
+                icon: searchMapEnabled ? LucideIcons.map : LucideIcons.mapMinus,
+                title: 'Map on the search screen',
+                subtitle: searchMapEnabled
+                    ? 'Shown above the search, with live vehicles'
+                    : 'Hidden, so no map data is downloaded until you '
+                          'open a map yourself',
+                value: searchMapEnabled,
+                onChanged: _saveSearchMapEnabled,
+              ),
               const SizedBox(height: 32),
               const SectionTitle(text: 'Interaction'),
               const SizedBox(height: 8),
@@ -267,28 +286,16 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                 style: AppText.bodyFaint,
               ),
               const SizedBox(height: 16),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.black.withValues(alpha: 0.02),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: AppColors.black.withValues(alpha: 0.04),
-                  ),
-                ),
-                child: SettingsTile(
-                  icon: vibrationsEnabled
-                      ? LucideIcons.vibrate
-                      : LucideIcons.vibrateOff,
-                  title: 'App vibrations',
-                  subtitle: vibrationsEnabled
-                      ? 'Haptic feedback is enabled throughout the app'
-                      : 'Haptic feedback is disabled throughout the app',
-                  trailingIcon: null,
-                  trailing: AppToggleSwitch(
-                    value: vibrationsEnabled,
-                    onChanged: _saveVibrationsEnabled,
-                  ),
-                ),
+              _ToggleCard(
+                icon: vibrationsEnabled
+                    ? LucideIcons.vibrate
+                    : LucideIcons.vibrateOff,
+                title: 'App vibrations',
+                subtitle: vibrationsEnabled
+                    ? 'Haptic feedback is enabled throughout the app'
+                    : 'Haptic feedback is disabled throughout the app',
+                value: vibrationsEnabled,
+                onChanged: _saveVibrationsEnabled,
               ),
               const SizedBox(height: 32),
             ],
@@ -454,6 +461,41 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A setting that is simply on or off, on the page's faint card.
+class _ToggleCard extends StatelessWidget {
+  const _ToggleCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.black.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.black.withValues(alpha: 0.04)),
+      ),
+      child: SettingsTile(
+        icon: icon,
+        title: title,
+        subtitle: subtitle,
+        trailingIcon: null,
+        trailing: AppToggleSwitch(value: value, onChanged: onChanged),
       ),
     );
   }

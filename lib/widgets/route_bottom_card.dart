@@ -5,33 +5,25 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/routing_options.dart';
 import '../models/time_selection.dart';
 import '../models/transitous/server_config.dart';
-import '../models/trip_history_item.dart';
-import '../services/favorites_service.dart';
-import '../services/transitous_geocode_service.dart';
+import '../models/saved_trip.dart';
+import '../utils/time_utils.dart';
 import '../widgets/route_field_box.dart';
 import '../theme/app_colors.dart';
-import 'buttons/pill_button.dart';
 import 'map/bottom_sheet_chrome.dart';
 import 'floating_nav_bar.dart';
 import 'buttons/primary_button.dart';
 import 'search/journey_spine.dart';
 import 'search/save_default_row.dart';
-import 'skeletons/skeleton_shimmer.dart';
+import 'search/editable_value.dart';
 import '../theme/app_text.dart';
 
 class BottomCard extends StatefulWidget {
   const BottomCard({
     super.key,
     required this.isCollapsed,
-    required this.collapseProgress,
-    required this.onHandleTap,
-    required this.onDragStart,
-    required this.onDragUpdate,
-    required this.onDragEnd,
+    this.drag,
     required this.fromCtrl,
     required this.toCtrl,
-    required this.fromFocusNode,
-    required this.toFocusNode,
     required this.showMyLocationDefault,
     required this.onUnfocus,
     required this.onSwapRequested,
@@ -42,7 +34,6 @@ class BottomCard extends StatefulWidget {
     required this.onResetOptions,
     required this.onSaveOptionsAsDefault,
     required this.onAddViaStop,
-    required this.onShowMap,
     required this.onFromPressed,
     required this.onToPressed,
     required this.isFromFavourite,
@@ -52,8 +43,6 @@ class BottomCard extends StatefulWidget {
     required this.routeFieldLink,
     required this.fromLoading,
     required this.toLoading,
-    required this.fromSelection,
-    required this.toSelection,
     required this.onSearch,
     required this.timeSelectionLayerLink,
     required this.onTimeSelectionTap,
@@ -62,22 +51,15 @@ class BottomCard extends StatefulWidget {
     required this.timeSelection,
     required this.recentTrips,
     required this.onRecentTripTap,
-    required this.favorites,
-    required this.onFavoriteTap,
-    required this.hasLocationPermission,
-    this.tripsRefreshKey = 0,
   });
 
   final bool isCollapsed;
-  final double collapseProgress;
-  final VoidCallback onHandleTap;
-  final VoidCallback onDragStart;
-  final ValueChanged<double> onDragUpdate;
-  final ValueChanged<double> onDragEnd;
+
+  /// How the card moves as a sheet over the map. Null when there is no map
+  /// and the card is the whole page: nothing to drag it off.
+  final SheetDrag? drag;
   final TextEditingController fromCtrl;
   final TextEditingController toCtrl;
-  final FocusNode fromFocusNode;
-  final FocusNode toFocusNode;
   final bool showMyLocationDefault;
   final VoidCallback onUnfocus;
   final bool Function() onSwapRequested;
@@ -96,9 +78,6 @@ class BottomCard extends StatefulWidget {
   final VoidCallback onSaveOptionsAsDefault;
   final VoidCallback onAddViaStop;
 
-  /// Collapses the card so the map is visible.
-  final VoidCallback onShowMap;
-
   /// Opens the place picker for one end or the other.
   final VoidCallback onFromPressed;
   final VoidCallback onToPressed;
@@ -111,20 +90,14 @@ class BottomCard extends StatefulWidget {
   final LayerLink routeFieldLink;
   final bool fromLoading;
   final bool toLoading;
-  final TransitousLocationSuggestion? fromSelection;
-  final TransitousLocationSuggestion? toSelection;
   final ValueChanged<TimeSelection> onSearch;
   final LayerLink timeSelectionLayerLink;
   final VoidCallback onTimeSelectionTap;
   final VoidCallback? onTimeSelectionTapDown;
   final VoidCallback? onTimeSelectionTapCancel;
   final TimeSelection timeSelection;
-  final List<TripHistoryItem> recentTrips;
-  final ValueChanged<TripHistoryItem> onRecentTripTap;
-  final List<FavoritePlace> favorites;
-  final ValueChanged<FavoritePlace> onFavoriteTap;
-  final bool hasLocationPermission;
-  final int tripsRefreshKey;
+  final List<SavedTrip> recentTrips;
+  final ValueChanged<SavedTrip> onRecentTripTap;
 
   @override
   State<BottomCard> createState() => _BottomCardState();
@@ -137,25 +110,8 @@ class _BottomCardState extends State<BottomCard> {
   Timer? _savedTimer;
 
   @override
-  void initState() {
-    super.initState();
-    // Focus decides whether the stages or the suggestions get the room, so
-    // it has to reach build rather than only the tap handlers.
-    widget.fromFocusNode.addListener(_onFocusChanged);
-    widget.toFocusNode.addListener(_onFocusChanged);
-  }
-
-  @override
   void didUpdateWidget(covariant BottomCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.fromFocusNode != widget.fromFocusNode) {
-      oldWidget.fromFocusNode.removeListener(_onFocusChanged);
-      widget.fromFocusNode.addListener(_onFocusChanged);
-    }
-    if (oldWidget.toFocusNode != widget.toFocusNode) {
-      oldWidget.toFocusNode.removeListener(_onFocusChanged);
-      widget.toFocusNode.addListener(_onFocusChanged);
-    }
     // A further edit is a new difference from the stored defaults, so the
     // confirmation stops applying to it.
     if (oldWidget.options != widget.options) {
@@ -168,13 +124,7 @@ class _BottomCardState extends State<BottomCard> {
   void dispose() {
     _scroll.dispose();
     _savedTimer?.cancel();
-    widget.fromFocusNode.removeListener(_onFocusChanged);
-    widget.toFocusNode.removeListener(_onFocusChanged);
     super.dispose();
-  }
-
-  void _onFocusChanged() {
-    if (mounted) setState(() {});
   }
 
   /// How long the row confirms the save for, before going back to reporting
@@ -238,262 +188,132 @@ class _BottomCardState extends State<BottomCard> {
 
   @override
   Widget build(BuildContext context) {
-    return BottomSheetSurface(
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () {
-          if (widget.fromFocusNode.hasFocus || widget.toFocusNode.hasFocus) {
-            return;
-          }
-          widget.onUnfocus();
-        },
-        child: Listener(
-          onPointerDown: (_) {
-            if (widget.fromFocusNode.hasFocus || widget.toFocusNode.hasFocus) {
-              return;
-            }
-            widget.onUnfocus();
-          },
-          child: SizedBox.expand(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                BottomSheetHandle(
-                  onTap: widget.onHandleTap,
-                  onDragStart: widget.onDragStart,
-                  onDragUpdate: widget.onDragUpdate,
-                  onDragEnd: widget.onDragEnd,
-                  bottomGap: 18,
-                ),
+    final content = _buildContent(context);
+    if (widget.drag == null) {
+      return ColoredBox(
+        color: AppColors.white,
+        child: SafeArea(child: content),
+      );
+    }
+    return BottomSheetSurface(child: content);
+  }
 
-                Expanded(
-                  child: _buildScrollableBody(
-                    context,
-                    above: [
-                      Builder(
-                        builder: (context) {
-                          final fadeStart = 0.5;
-                          final t =
-                              ((widget.collapseProgress - fadeStart) /
-                                      (1 - fadeStart))
-                                  .clamp(0.0, 1.0);
-                          final opacity = 1.0 - Curves.easeOut.transform(t);
-                          return GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onTap: widget.onUnfocus,
-                            child: ClipRect(
-                              child: Align(
-                                alignment: Alignment.topCenter,
-                                heightFactor: opacity,
-                                child: Opacity(
-                                  opacity: opacity,
-                                  child: Padding(
-                                    padding: EdgeInsets.fromLTRB(12, 0, 12, 8),
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                        'Where to?',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.black,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+  Widget _buildContent(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: widget.onUnfocus,
+      child: Listener(
+        onPointerDown: (_) => widget.onUnfocus(),
+        child: SizedBox.expand(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildTop(),
 
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                        child: Listener(
-                          onPointerDown: (_) {},
-                          behavior: HitTestBehavior.opaque,
-                          child: GestureDetector(
-                            onTap: () {},
-                            behavior: HitTestBehavior.opaque,
-                            child: RouteFieldBox(
-                              fromController: widget.fromCtrl,
-                              toController: widget.toCtrl,
-                              fromFocusNode: widget.fromFocusNode,
-                              toFocusNode: widget.toFocusNode,
-                              showMyLocationDefault:
-                                  widget.showMyLocationDefault,
-                              accentColor: AppColors.accentOf(context),
-                              onSwapRequested: widget.onSwapRequested,
-                              layerLink: widget.routeFieldLink,
-                              fromLoading: widget.fromLoading,
-                              toLoading: widget.toLoading,
-                              middle: _buildSpine(),
-                              onFromPressed: widget.onFromPressed,
-                              onToPressed: widget.onToPressed,
-                              isFromFavourite: widget.isFromFavourite,
-                              isToFavourite: widget.isToFavourite,
-                              onToggleFromFavourite:
-                                  widget.onToggleFromFavourite,
-                              onToggleToFavourite: widget.onToggleToFavourite,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // Always offered, not only once something differs:
-                      // the row is where the routing options are managed
-                      // from, and hunting for a button that appears and
-                      // disappears is worse than one that is simply there.
-                      if (!widget.isCollapsed)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                          child: SaveDefaultRow(
-                            saved: _savedAsDefault,
-                            differsFromStored:
-                                widget.options != widget.storedOptions,
-                            onReset: widget.onResetOptions,
-                            onSaveAsDefault: _saveOptionsAsDefault,
-                          ),
-                        ),
-                    ],
-                    below: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
+              Expanded(
+                child: _buildScrollableBody(
+                  context,
+                  above: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      child: Listener(
+                        onPointerDown: (_) {},
+                        behavior: HitTestBehavior.opaque,
                         child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: widget.onUnfocus,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Recent trips', style: AppText.heading),
-                              const SizedBox(height: 12),
-                              ...widget.recentTrips.map(
-                                (trip) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 16),
-                                  child: _RecentTripTile(
-                                    trip: trip,
-                                    onTap: () => widget.onRecentTripTap(trip),
-                                  ),
-                                ),
-                              ),
-                            ],
+                          onTap: () {},
+                          behavior: HitTestBehavior.opaque,
+                          child: RouteFieldBox(
+                            fromController: widget.fromCtrl,
+                            toController: widget.toCtrl,
+                            showMyLocationDefault: widget.showMyLocationDefault,
+                            accentColor: AppColors.accentOf(context),
+                            onSwapRequested: widget.onSwapRequested,
+                            layerLink: widget.routeFieldLink,
+                            fromLoading: widget.fromLoading,
+                            toLoading: widget.toLoading,
+                            middle: _buildSpine(),
+                            timeLine: _buildTimeLine(),
+                            footer: _buildSearchButton(),
+                            onFromPressed: widget.onFromPressed,
+                            onToPressed: widget.onToPressed,
+                            isFromFavourite: widget.isFromFavourite,
+                            isToFavourite: widget.isToFavourite,
+                            onToggleFromFavourite: widget.onToggleFromFavourite,
+                            onToggleToFavourite: widget.onToggleToFavourite,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                    ],
-                  ),
-                ),
+                    ),
 
-                if (!widget.isCollapsed)
-                  Padding(
+                    // Always offered, not only once something differs:
+                    // the row is where the routing options are managed
+                    // from, and hunting for a button that appears and
+                    // disappears is worse than one that is simply there.
+                    if (!widget.isCollapsed)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                        child: SaveDefaultRow(
+                          saved: _savedAsDefault,
+                          differsFromStored:
+                              widget.options != widget.storedOptions,
+                          onReset: widget.onResetOptions,
+                          onSaveAsDefault: _saveOptionsAsDefault,
+                        ),
+                      ),
+                  ],
+                  below: [
+                    GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: widget.onUnfocus,
+                      child: _RecentTrips(
+                        trips: widget.recentTrips,
+                        onTap: widget.onRecentTripTap,
+                      ),
+                    ),
                     // Clears the floating nav bar, which is a sibling
                     // painted over this card rather than beside it.
-                    padding: const EdgeInsets.fromLTRB(
-                      12,
-                      0,
-                      12,
-                      FloatingNavBar.reservedHeight + 12,
-                    ),
-                    child: Builder(
-                      builder: (context) {
-                        const double start = 0.5;
-                        final double raw =
-                            (widget.collapseProgress - start) / (1 - start);
-                        final double t = raw.clamp(0.0, 1.0);
-                        final double dy = 16.0 * t;
-                        return GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: widget.onUnfocus,
-                          child: Transform.translate(
-                            offset: Offset(0, dy),
-                            child: Row(
-                              children: [
-                                GestureDetector(
-                                  onTap: () {},
-                                  behavior: HitTestBehavior.opaque,
-                                  child: CompositedTransformTarget(
-                                    link: widget.timeSelectionLayerLink,
-                                    child: PillButton(
-                                      onTap: widget.onTimeSelectionTap,
-                                      onTapDown: widget.onTimeSelectionTapDown,
-                                      onTapCancel:
-                                          widget.onTimeSelectionTapCancel,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            LucideIcons.clock,
-                                            size: 16,
-                                            color: AppColors.black,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            widget.timeSelection
-                                                .toDisplayString(),
-                                            style: TextStyle(
-                                              color: AppColors.black,
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                // The card covers most of the map, and its
-                                // handle is not an obvious way to say "let
-                                // me see it".
-                                GestureDetector(
-                                  onTap: () {},
-                                  behavior: HitTestBehavior.opaque,
-                                  child: PillButton(
-                                    onTap: widget.onShowMap,
-                                    child: Semantics(
-                                      button: true,
-                                      label: 'Show the map',
-                                      child: Icon(
-                                        LucideIcons.map,
-                                        size: 16,
-                                        color: AppColors.black,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const Spacer(),
-                                GestureDetector(
-                                  onTap: () {},
-                                  behavior: HitTestBehavior.opaque,
-                                  child: PrimaryButton(
-                                    onTap: () =>
-                                        widget.onSearch(widget.timeSelection),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: const [
-                                        Text(
-                                          'Search',
-                                          style: TextStyle(
-                                            color: AppColors.solidWhite,
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-              ],
-            ),
+                    const SizedBox(height: FloatingNavBar.reservedHeight),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The grab bar over the map; on its own page the card just starts.
+  Widget _buildTop() {
+    final drag = widget.drag;
+    if (drag == null) return const SizedBox(height: 16);
+    return BottomSheetHandle(drag: drag, bottomGap: 18);
+  }
+
+  Widget _buildTimeLine() {
+    final time = widget.timeSelection;
+    return CompositedTransformTarget(
+      link: widget.timeSelectionLayerLink,
+      child: EditableValue.time(
+        label: time.toSearchLabel(),
+        semanticsLabel: 'Change departure or arrival time',
+        onTap: widget.onTimeSelectionTap,
+        onTapDown: widget.onTimeSelectionTapDown,
+        onTapCancel: widget.onTimeSelectionTapCancel,
+      ),
+    );
+  }
+
+  Widget _buildSearchButton() {
+    return PrimaryButton(
+      onTap: () => widget.onSearch(widget.timeSelection),
+      child: const Center(
+        child: Text(
+          'Search',
+          style: TextStyle(
+            color: AppColors.solidWhite,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
@@ -501,93 +321,111 @@ class _BottomCardState extends State<BottomCard> {
   }
 }
 
-class _RecentTripTile extends StatefulWidget {
-  const _RecentTripTile({required this.trip, required this.onTap});
+/// The connections most recently opened, each reopened as itself.
+class _RecentTrips extends StatelessWidget {
+  const _RecentTrips({required this.trips, required this.onTap});
 
-  final TripHistoryItem trip;
-  final VoidCallback onTap;
-
-  @override
-  State<_RecentTripTile> createState() => _RecentTripTileState();
-}
-
-class _RecentTripTileState extends State<_RecentTripTile> {
-  bool _isLoading = false;
-
-  void _handleTap() async {
-    if (_isLoading) return;
-
-    setState(() => _isLoading = true);
-    widget.onTap();
-    await Future.delayed(const Duration(milliseconds: 1500));
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
-  }
+  final List<SavedTrip> trips;
+  final ValueChanged<SavedTrip> onTap;
 
   @override
   Widget build(BuildContext context) {
-    final content = Row(
+    if (trips.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: AppColors.black.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.black.withValues(alpha: 0.07)),
+        const SizedBox(height: 16),
+        Text('Recent trips', style: AppText.heading),
+        const SizedBox(height: 12),
+        for (final trip in trips)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: _RecentTripTile(trip: trip, onTap: () => onTap(trip)),
           ),
-          alignment: Alignment.center,
-          child: Icon(LucideIcons.route, size: 18, color: AppColors.black),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.trip.fromName,
-                style: TextStyle(
-                  color: AppColors.black,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+      ],
+    );
+  }
+}
+
+class _RecentTripTile extends StatelessWidget {
+  const _RecentTripTile({required this.trip, required this.onTap});
+
+  final SavedTrip trip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = AppColors.black.withValues(alpha: 0.6);
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.black.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.black.withValues(alpha: 0.07),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 2),
-              Row(
+              alignment: Alignment.center,
+              child: Icon(LucideIcons.route, size: 18, color: AppColors.black),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    LucideIcons.chevronRight,
-                    size: 14,
-                    color: AppColors.black.withValues(alpha: 0.6),
+                  Text(
+                    trip.fromName,
+                    style: AppText.listTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      widget.trip.toName,
-                      style: TextStyle(
-                        color: AppColors.black.withValues(alpha: 0.6),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(LucideIcons.chevronRight, size: 14, color: muted),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          trip.toName,
+                          style: TextStyle(
+                            color: muted,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 12),
+            // Which departure it was: the same two places can be in the list
+            // more than once, and a trip is that one journey.
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(formatTime(trip.departureTime), style: AppText.bodyStrong),
+                const SizedBox(height: 2),
+                Text(
+                  formatRelativeDay(trip.departureTime),
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
         ),
-      ],
-    );
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _handleTap,
-      child: _isLoading ? SkeletonShimmer(child: content) : content,
+      ),
     );
   }
 }
