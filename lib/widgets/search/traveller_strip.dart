@@ -116,7 +116,9 @@ class _StepFreeChip extends StatelessWidget {
             color: enabled
                 ? accent.withValues(alpha: 0.14)
                 : const Color(0x00000000),
-            borderRadius: BorderRadius.circular(999),
+            // The pace button beside it, and the spine's other controls, are
+            // all 10: a pill here made the two neighbours look unrelated.
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: enabled ? accent : AppColors.black.withValues(alpha: 0.12),
             ),
