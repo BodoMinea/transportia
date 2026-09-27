@@ -84,6 +84,20 @@
 - `docs/unused-code.md`: public declarations nothing references, each with a keep/delete judgement.
 - Both are stamped with the commit swept against; delete resolved rows; update the stamp when sweeping.
 
+## Branches & Releases
+- `master` is what gets proposed upstream; `dev-build` is `master` plus this
+  fork's release setup (dev-build workflow, F-Droid push, app ID, README,
+  store listing).
+- Start every in-app feature or fix from `master`, and target PRs at
+  `master`. Branching from `dev-build` drags the release setup into the
+  upstream PR.
+- Only release and public-facing work starts from, and targets, `dev-build`.
+- Never merge `dev-build` into `master`. `master` flows into `dev-build`,
+  never the other way.
+- Every push to `dev-build` publishes a release to friends' phones. Never
+  push or merge to `dev-build` yourself; open a PR and leave merging to the
+  owner.
+
 ## Commit & Pull Request Guidelines
 - Commits: concise, imperative subject (e.g., “Improve welcome transition”).
 - Group related changes; keep diffs focused. Reference issues if applicable.
