@@ -470,10 +470,7 @@ class _DayRowTileFrame extends StatelessWidget {
           color: isHighlighted ? AppColors.accentOf(context) : _controlFill(),
           borderRadius: BorderRadius.circular(12),
         ),
-        // Five tiles share a phone's width, so a long label such as
-        // 'Tomorrow' shrinks to fit rather than wrapping or clipping.
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
+        child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -509,11 +506,14 @@ class _DayTile extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
+  bool get _isTomorrow =>
+      day == DateTime(today.year, today.month, today.day + 1);
+
+  /// Short enough that all five tiles fit a narrow phone at one font size;
+  /// 'Tomorrow' spelt out would not.
   String get _dayName {
     if (day == today) return 'Today';
-    if (day == DateTime(today.year, today.month, today.day + 1)) {
-      return 'Tomorrow';
-    }
+    if (_isTomorrow) return 'Tmrw';
     return formatWeekday(day);
   }
 
@@ -524,6 +524,7 @@ class _DayTile extends StatelessWidget {
       onTap: onTap,
       top: (foreground) => Text(
         _dayName,
+        semanticsLabel: _isTomorrow ? 'Tomorrow' : null,
         style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,

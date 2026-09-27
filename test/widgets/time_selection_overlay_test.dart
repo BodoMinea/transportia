@@ -70,13 +70,15 @@ void main() {
   ) async {
     await _pumpOverlay(tester, selection: TimeSelection.now());
 
-    for (final label in ['Today', 'Tomorrow', 'Sat', 'Sun']) {
+    for (final label in ['Today', 'Tmrw', 'Sat', 'Sun']) {
       expect(find.text(label), findsOneWidget);
     }
     expect(find.bySemanticsLabel('Open calendar'), findsOneWidget);
+    // Abbreviated to fit the tile, but read out in full.
+    expect(tester.widget<Text>(find.text('Tmrw')).semanticsLabel, 'Tomorrow');
     // The four days sit side by side with the calendar, none scrolled away.
     final widths = [
-      for (final label in ['Today', 'Tomorrow', 'Sat', 'Sun'])
+      for (final label in ['Today', 'Tmrw', 'Sat', 'Sun'])
         tester
             .getSize(
               find.ancestor(
@@ -106,7 +108,7 @@ void main() {
       ),
     );
 
-    await _tap(tester, 'Tomorrow');
+    await _tap(tester, 'Tmrw');
     await _tap(tester, 'Confirm');
 
     expect(confirmed.single.dateTime, DateTime(2026, 9, 25, 9, 15));
