@@ -1,16 +1,26 @@
-# Transportia
+# Transportia+
 
 <p align="center">
   <img src="assets/branding/logo_rounded.png" width="120" alt="Transportia app icon" />
 </p>
 
 <p align="center">
-  <b>Transportia</b> is a modern travel companion designed to make public transportation easier and more accessible.
+  <b>Transportia+</b> is a fork of
+  <a href="https://github.com/Wafler1/transportia">Wafler1/transportia</a>,
+  a modern travel companion for public transportation.
 </p>
 
 ---
 
+## What this fork adds
 
+Its own app ID, so it installs side by side with the original app, and every
+build on `dev-build` is published automatically to a self-hosted F-Droid
+repo — early builds, no Play Store account needed.
+
+## Install
+
+Add the F-Droid repo: **https://blauertee.github.io/fdroid/**
 
 <p align="center">
 <a href="https://peerpush.net/p/transportia"
@@ -42,7 +52,10 @@
 - **Stay focused**
   - intentionally simple UI for quick navigation
 
-## Download
+## The original app
+
+The upstream app (not this fork) is also available on Google Play and
+IzzyOnDroid:
 
 <p align="left">
   <a href="https://play.google.com/store/apps/details?id=one.wafler.transportia">
@@ -54,7 +67,11 @@
 
 ## Suggestions, issues, or bugs
 
-Please open a GitHub issue (click-through):
+For this fork, open an issue here:
+
+- https://github.com/blauertee/transportia/issues/new/choose
+
+For the upstream app, use Wafler1's tracker instead:
 
 - https://github.com/Wafler1/transportia/issues/new/choose
 
@@ -71,4 +88,3 @@ When reporting a bug, include:
 <a href="https://maplibre.org/">MapLibre GL</a> - Interactive vector tile maps in the browser.
 
 <a href="https://lucide.dev/">Lucide</a> - Beautiful & consistent icon toolkit made by the community.
-
