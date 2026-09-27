@@ -66,10 +66,10 @@ the code meanwhile.
    draft is wrong, not the design.
 5. Send the before/after pairs to the user.
 
-Draft files are working files: keep them out of commits unless the user asks
-for them. `flutter test` with no arguments only runs `test/`, so a stray one
-does not run in CI — but `flutter analyze` does read it, so it must still be
-clean. `--out` defaults to `build/drafts`, which git ignores.
+Draft files are working files: git ignores everything in this directory
+except the tooling and `examples/`, so drafts stay out of commits. `flutter
+test` with no arguments only runs `test/`, so a draft never runs in CI — but
+`flutter analyze` does read it, so it must still be clean. `--out` defaults to `build/drafts`, which git ignores.
 
 ## Rendering the states that matter
 
