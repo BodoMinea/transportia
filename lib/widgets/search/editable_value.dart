@@ -3,49 +3,59 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../theme/app_colors.dart';
 
-/// A value the search starts from — where, or when — written out as what it
-/// currently is, and changed by tapping it.
+/// A value a search is built from — where from, when, where to — written out
+/// as what it currently is and changed by tapping it.
 ///
 /// Plain text rather than a button: the defaults are what most searches keep,
-/// so they should read as a statement ("My Location, now"), with the chevron
-/// and a pressed tint the only hint that either can be changed.
+/// so the card should read as a statement ("My Location, leave now"), with
+/// the accent chevron after each value the one sign that it can be changed.
 class EditableValue extends StatefulWidget {
-  /// The origin: the line the eye lands on first.
-  const EditableValue.primary({
+  /// Where the trip starts.
+  const EditableValue.origin({
     super.key,
-    required this.icon,
     required this.label,
     required this.onTap,
-    this.onTapDown,
-    this.onTapCancel,
-    this.emphasised = false,
     this.semanticsLabel,
-  }) : _fontSize = 16,
+  }) : placeholder = null,
+       onTapDown = null,
+       onTapCancel = null,
+       _fontSize = 16,
        _muted = false;
 
-  /// The time: under the origin, a step quieter.
-  const EditableValue.secondary({
+  /// When it leaves or arrives: under the origin, a step quieter.
+  const EditableValue.time({
     super.key,
-    required this.icon,
     required this.label,
     required this.onTap,
     this.onTapDown,
     this.onTapCancel,
     this.semanticsLabel,
-  }) : emphasised = false,
+  }) : placeholder = null,
        _fontSize = 14,
        _muted = true;
 
-  final IconData icon;
+  /// Where it goes: the one value every search has to be given, so a size up,
+  /// and asking for it with [placeholder] until it has been.
+  const EditableValue.destination({
+    super.key,
+    required this.label,
+    required String this.placeholder,
+    required this.onTap,
+    this.semanticsLabel,
+  }) : onTapDown = null,
+       onTapCancel = null,
+       _fontSize = 18,
+       _muted = false;
+
   final String label;
+
+  /// Shown, with a search glyph in place of the chevron, while [label] is
+  /// empty: there is nothing yet to change, only something to look for.
+  final String? placeholder;
+
   final VoidCallback onTap;
   final VoidCallback? onTapDown;
   final VoidCallback? onTapCancel;
-
-  /// Accent text, for a value the app filled in rather than one the rider
-  /// chose — My Location.
-  final bool emphasised;
-
   final String? semanticsLabel;
   final double _fontSize;
   final bool _muted;
@@ -64,12 +74,16 @@ class _EditableValueState extends State<EditableValue> {
   @override
   Widget build(BuildContext context) {
     final accent = AppColors.accentOf(context);
-    final colour = widget.emphasised
-        ? accent
-        : AppColors.black.withValues(alpha: widget._muted ? 0.6 : 1);
+    final placeholder = widget.placeholder;
+    final isEmpty = widget.label.isEmpty && placeholder != null;
+    final colour = AppColors.black.withValues(
+      alpha: isEmpty ? 0.45 : (widget._muted ? 0.6 : 1),
+    );
     return Semantics(
       button: true,
       label: widget.semanticsLabel,
+      // The whole row answers, not only the glyphs of the text: the value is
+      // the target, however short it happens to be.
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
@@ -88,29 +102,26 @@ class _EditableValueState extends State<EditableValue> {
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(widget.icon, size: widget._fontSize, color: colour),
-                const SizedBox(width: 6),
                 Flexible(
                   child: Text(
-                    widget.label,
+                    isEmpty ? placeholder : widget.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: colour,
                       fontSize: widget._fontSize,
-                      fontWeight: widget._muted
+                      fontWeight: widget._muted || isEmpty
                           ? FontWeight.w500
                           : FontWeight.w600,
                     ),
                   ),
                 ),
-                const SizedBox(width: 2),
+                SizedBox(width: isEmpty ? 8 : 4),
                 Icon(
-                  LucideIcons.chevronDown,
-                  size: widget._fontSize - 1,
-                  color: AppColors.black.withValues(alpha: 0.4),
+                  isEmpty ? LucideIcons.search : LucideIcons.chevronDown,
+                  size: widget._fontSize,
+                  color: accent,
                 ),
               ],
             ),

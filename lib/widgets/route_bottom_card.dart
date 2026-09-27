@@ -271,44 +271,6 @@ class _BottomCardState extends State<BottomCard> {
                   child: _buildScrollableBody(
                     context,
                     above: [
-                      Builder(
-                        builder: (context) {
-                          final fadeStart = 0.5;
-                          final t =
-                              ((widget.collapseProgress - fadeStart) /
-                                      (1 - fadeStart))
-                                  .clamp(0.0, 1.0);
-                          final opacity = 1.0 - Curves.easeOut.transform(t);
-                          return GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onTap: widget.onUnfocus,
-                            child: ClipRect(
-                              child: Align(
-                                alignment: Alignment.topCenter,
-                                heightFactor: opacity,
-                                child: Opacity(
-                                  opacity: opacity,
-                                  child: Padding(
-                                    padding: EdgeInsets.fromLTRB(12, 0, 12, 8),
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                        'Where to?',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.black,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                         child: Listener(
@@ -387,8 +349,7 @@ class _BottomCardState extends State<BottomCard> {
     final time = widget.timeSelection;
     return CompositedTransformTarget(
       link: widget.timeSelectionLayerLink,
-      child: EditableValue.secondary(
-        icon: time.isArriveBy ? LucideIcons.flag : LucideIcons.clock,
+      child: EditableValue.time(
         label: time.isNow
             ? 'Leave now'
             : '${time.isArriveBy ? 'Arrive' : 'Leave'} '

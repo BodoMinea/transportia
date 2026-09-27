@@ -82,6 +82,7 @@ class _RouteFieldBoxState extends State<RouteFieldBox> {
   void initState() {
     super.initState();
     widget.fromController.addListener(_onChanged);
+    widget.toController.addListener(_onChanged);
     widget.fromFocusNode?.addListener(_onChanged);
   }
 
@@ -92,6 +93,10 @@ class _RouteFieldBoxState extends State<RouteFieldBox> {
       oldWidget.fromController.removeListener(_onChanged);
       widget.fromController.addListener(_onChanged);
     }
+    if (oldWidget.toController != widget.toController) {
+      oldWidget.toController.removeListener(_onChanged);
+      widget.toController.addListener(_onChanged);
+    }
     if (oldWidget.fromFocusNode != widget.fromFocusNode) {
       oldWidget.fromFocusNode?.removeListener(_onChanged);
       widget.fromFocusNode?.addListener(_onChanged);
@@ -101,6 +106,7 @@ class _RouteFieldBoxState extends State<RouteFieldBox> {
   @override
   void dispose() {
     widget.fromController.removeListener(_onChanged);
+    widget.toController.removeListener(_onChanged);
     widget.fromFocusNode?.removeListener(_onChanged);
     super.dispose();
   }
@@ -191,12 +197,20 @@ class _RouteFieldBoxState extends State<RouteFieldBox> {
                 label: 'destination',
                 onPressed: widget.onToggleToFavourite,
               ),
-              child: _InlineField(
-                controller: widget.toController,
-                focusNode: widget.toFocusNode,
-                hintText: 'Search destination',
-                showLoading: widget.toLoading,
-                onPressed: widget.onToPressed,
+              child: SizedBox(
+                height: _EndpointRow.prominentMarkerCenter * 2,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _shimmerWhile(
+                    widget.toLoading,
+                    EditableValue.destination(
+                      label: widget.toController.text,
+                      placeholder: 'Search destination',
+                      semanticsLabel: 'Change destination',
+                      onTap: widget.onToPressed,
+                    ),
+                  ),
+                ),
               ),
             ),
             if (widget.footer case final footer?) ...[
@@ -217,20 +231,24 @@ class _RouteFieldBoxState extends State<RouteFieldBox> {
 
   Widget _buildOrigin() {
     final text = widget.fromController.text;
-    final isMyLocation = _originIsMyLocation;
-    final chip = EditableValue.primary(
-      icon: isMyLocation ? LucideIcons.mousePointer2 : LucideIcons.mapPin,
-      label: isMyLocation ? myLocationName : (text.isEmpty ? 'From' : text),
-      emphasised: isMyLocation,
+    final origin = EditableValue.origin(
+      label: _originIsMyLocation
+          ? myLocationName
+          : (text.isEmpty ? 'From' : text),
       semanticsLabel: 'Change origin',
       onTap: widget.onFromPressed,
     );
-    if (!widget.fromLoading) return chip;
+    return _shimmerWhile(widget.fromLoading, origin);
+  }
+
+  /// Holds the value's place while a tapped map point is being named.
+  Widget _shimmerWhile(bool loading, Widget child) {
+    if (!loading) return child;
     return SkeletonShimmer(
       baseColor: const Color(0xFFE2E7EC),
       highlightColor: const Color(0xFFF7F9FC),
       period: const Duration(milliseconds: 1100),
-      child: chip,
+      child: child,
     );
   }
 
@@ -399,103 +417,6 @@ class _EndpointDot extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: color, width: 2),
       ),
-    );
-  }
-}
-
-/// The destination: the one field every search has to fill, so it is set a
-/// size up from the rest of the card.
-class _InlineField extends StatelessWidget {
-  const _InlineField({
-    required this.controller,
-    required this.hintText,
-    required this.onPressed,
-    this.focusNode,
-    this.showLoading = false,
-  });
-
-  final TextEditingController controller;
-  final String hintText;
-  final FocusNode? focusNode;
-  final bool showLoading;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.centerLeft,
-      children: [
-        CupertinoTextField(
-          controller: controller,
-          focusNode: focusNode,
-          placeholder: hintText,
-          placeholderStyle: TextStyle(
-            color: AppColors.black.withValues(alpha: 0.45),
-            fontSize: 18,
-            fontWeight: FontWeight.w500,
-          ),
-          style: TextStyle(
-            color: AppColors.black,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-          cursorColor: AppColors.accentOf(context),
-          // A well rather than a bare line: an empty destination is the one
-          // thing a rider standing somewhere has to tap, so it should look
-          // like a place to type even though tapping opens the picker.
-          decoration: BoxDecoration(
-            color: AppColors.black.withValues(alpha: 0.045),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          prefix: Padding(
-            padding: const EdgeInsets.only(left: 12),
-            child: Icon(
-              LucideIcons.search,
-              size: 18,
-              color: AppColors.black.withValues(alpha: 0.45),
-            ),
-          ),
-          padding: const EdgeInsets.fromLTRB(10, 12, 12, 12),
-          maxLines: 1,
-          textInputAction: TextInputAction.next,
-          keyboardType: TextInputType.text,
-          // Held for its text, not for typing: tapping opens the picker,
-          // which has room for favourites and recents this row does not.
-          readOnly: true,
-          showCursor: false,
-          onTap: onPressed,
-        ),
-        Positioned.fill(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            child: !showLoading
-                ? const SizedBox.shrink()
-                : IgnorePointer(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: SkeletonShimmer(
-                        baseColor: const Color(0xFFE2E7EC),
-                        highlightColor: const Color(0xFFF7F9FC),
-                        period: const Duration(milliseconds: 1100),
-                        child: Container(
-                          constraints: const BoxConstraints(
-                            maxWidth: 160,
-                            minWidth: 96,
-                          ),
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE2E7EC),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-          ),
-        ),
-      ],
     );
   }
 }
