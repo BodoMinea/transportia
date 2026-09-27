@@ -21,6 +21,8 @@
   - `lib/providers/`, `lib/theme/`, `lib/constants/`, `lib/animations/`:
     app state, colours, preference keys, shared curves.
 - `docs/`: audit trackers (`doc-contradictions.md`, `unused-code.md`).
+- `linux/drafting/`: renders app screens to PNGs for design review; see its
+  README. Unrelated to the Linux desktop runner beside it.
 - `assets/`: images and static assets (declared in `pubspec.yaml`).
 - `test/`: Dart tests (`*_test.dart`).
 - Platform runners: `android/`, `ios/`, `web/`, `linux/`, `macos/`, `windows/`.
@@ -84,12 +86,19 @@
 - `docs/unused-code.md`: public declarations nothing references, each with a keep/delete judgement.
 - Both are stamped with the commit swept against; delete resolved rows; update the stamp when sweeping.
 
+## UI Changes & Screenshots
+- Any change the user can see gets screenshots, sent to the user: render them
+  with `linux/drafting/` (see its README), before and after, and look at each
+  one yourself first.
+- For a redesign, send drafts before writing tests or wiring it up; the
+  design usually moves once the user sees it.
+
 ## Commit & Pull Request Guidelines
 - Commits: concise, imperative subject (e.g., “Improve welcome transition”).
 - Group related changes; keep diffs focused. Reference issues if applicable.
 - PRs must include:
   - Clear description and rationale.
-  - Screenshots/GIFs for UI changes (Map/Welcome flows).
+  - Screenshots for UI changes, rendered with `linux/drafting/`.
   - Test plan (commands run, devices/simulators tested).
   - Confirmation that `flutter analyze` passes and code is formatted.
 - Run `flutter analyze`, `flutter test` and `dart format .` before each commit, not once at the end; analyze must be clean, not merely no-worse.
