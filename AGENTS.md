@@ -81,16 +81,10 @@
 - Old key names live in the migration as literals, not in `PrefsKeys`.
 - Bump `pubspec.yaml` and the migration pair together; `AppVersion` reads the package.
 
-## Docs & Trackers
-- `docs/doc-contradictions.md`: where a document and the code disagree; record, do not resolve unilaterally.
-- `docs/unused-code.md`: public declarations nothing references, each with a keep/delete judgement.
-- Both are stamped with the commit swept against; delete resolved rows; update the stamp when sweeping.
-
 ## UI Changes & Screenshots
-- Any change the user can see gets screenshots, sent to the user: render them
-  with `linux/drafting/` (see its README), before and after, and look at each
-  one yourself first.
-- For a redesign, send drafts before writing tests or wiring it up; the
+- Any change the user can see gets screenshots of your work sent to the user: render them
+  with `linux/drafting/`
+- For bigger redesignd, send drafts before writing tests or wiring it up; the
   design usually moves once the user sees it.
 
 ## Commit & Pull Request Guidelines
