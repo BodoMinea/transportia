@@ -21,6 +21,21 @@
   itinerary, with tappable stops and pull-to-refresh.
 - **Side-by-side install** — its own app ID, so it runs next to the original.
 
+## Screenshots
+
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="45%" alt="Search screen" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" width="45%" alt="Search with first-mile options" />
+</p>
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" width="45%" alt="Shared vehicles and other ways to travel" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.png" width="45%" alt="Saved trips" />
+</p>
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5.png" width="45%" alt="Itinerary details" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6.png" width="45%" alt="Itinerary with all stops shown" />
+</p>
+
 ## Install
 
 Add the F-Droid repo: **https://blauertee.github.io/fdroid/**
