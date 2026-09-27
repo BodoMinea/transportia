@@ -7,6 +7,7 @@ import 'package:transportia/models/itinerary.dart';
 import 'package:transportia/models/my_location.dart';
 import 'package:transportia/models/saved_trip.dart';
 import 'package:transportia/models/time_selection.dart';
+import 'package:transportia/widgets/map/bottom_sheet_chrome.dart';
 import 'package:transportia/widgets/search/editable_value.dart';
 
 import '../support/bottom_card_host.dart';
@@ -176,6 +177,24 @@ void main() {
       await tester.tap(find.text('Stadium'));
 
       expect(tapped, same(second));
+    });
+  });
+
+  group('without the map', () {
+    testWidgets('the card is the page: no handle to drag it by', (
+      tester,
+    ) async {
+      await _pump(tester, const BottomCardHost(asPage: true));
+
+      expect(find.byType(BottomSheetHandle), findsNothing);
+      expect(find.text('Search destination'), findsOneWidget);
+      expect(find.text('Search'), findsOneWidget);
+    });
+
+    testWidgets('over the map it keeps its handle', (tester) async {
+      await _pump(tester, const BottomCardHost());
+
+      expect(find.byType(BottomSheetHandle), findsOneWidget);
     });
   });
 }

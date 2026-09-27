@@ -6,10 +6,7 @@ const double _kTripFocusBottomSpacer = 100;
 
 class _TripFocusBottomCard extends StatelessWidget {
   const _TripFocusBottomCard({
-    required this.onHandleTap,
-    required this.onDragStart,
-    required this.onDragUpdate,
-    required this.onDragEnd,
+    required this.drag,
     required this.onBack,
     required this.itinerary,
     required this.isLoading,
@@ -20,10 +17,7 @@ class _TripFocusBottomCard extends StatelessWidget {
     required this.lastUpdated,
   });
 
-  final VoidCallback onHandleTap;
-  final VoidCallback onDragStart;
-  final ValueChanged<double> onDragUpdate;
-  final ValueChanged<double> onDragEnd;
+  final SheetDrag drag;
   final VoidCallback onBack;
   final Itinerary? itinerary;
   final bool isLoading;
@@ -39,12 +33,7 @@ class _TripFocusBottomCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          BottomSheetHandle(
-            onTap: onHandleTap,
-            onDragStart: onDragStart,
-            onDragUpdate: onDragUpdate,
-            onDragEnd: onDragEnd,
-          ),
+          BottomSheetHandle(drag: drag),
           Stack(
             alignment: Alignment.centerRight,
             children: [

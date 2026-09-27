@@ -5,6 +5,7 @@ import 'package:transportia/models/saved_trip.dart';
 import 'package:transportia/models/time_selection.dart';
 import 'package:transportia/models/transitous/server_config.dart';
 import 'package:transportia/providers/theme_provider.dart';
+import 'package:transportia/widgets/map/bottom_sheet_chrome.dart';
 import 'package:transportia/widgets/route_bottom_card.dart';
 
 /// A [BottomCard] with every callback stubbed, for tests that care about one
@@ -23,7 +24,11 @@ class BottomCardHost extends StatefulWidget {
     this.onToPressed,
     this.onTimeSelectionTap,
     this.onSearch,
+    this.asPage = false,
   });
+
+  /// The card as the whole page, the way it shows with the map turned off.
+  final bool asPage;
 
   final String from;
   final String to;
@@ -62,10 +67,14 @@ class BottomCardHostState extends State<BottomCardHost> {
           data: const MediaQueryData(size: Size(400, 900)),
           child: BottomCard(
             isCollapsed: false,
-            onHandleTap: () {},
-            onDragStart: widget.onDragStart ?? () {},
-            onDragUpdate: (_) {},
-            onDragEnd: (_) => widget.onDragEnd?.call(),
+            drag: widget.asPage
+                ? null
+                : SheetDrag(
+                    onTap: () {},
+                    onStart: widget.onDragStart ?? () {},
+                    onUpdate: (_) {},
+                    onEnd: (_) => widget.onDragEnd?.call(),
+                  ),
             fromCtrl: fromCtrl,
             toCtrl: toCtrl,
             showMyLocationDefault: true,
