@@ -44,15 +44,11 @@ class BottomCardHost extends StatefulWidget {
 class BottomCardHostState extends State<BottomCardHost> {
   late final fromCtrl = TextEditingController(text: widget.from);
   late final toCtrl = TextEditingController(text: widget.to);
-  final _fromFocus = FocusNode();
-  final _toFocus = FocusNode();
 
   @override
   void dispose() {
     fromCtrl.dispose();
     toCtrl.dispose();
-    _fromFocus.dispose();
-    _toFocus.dispose();
     super.dispose();
   }
 
@@ -72,8 +68,6 @@ class BottomCardHostState extends State<BottomCardHost> {
             onDragEnd: (_) => widget.onDragEnd?.call(),
             fromCtrl: fromCtrl,
             toCtrl: toCtrl,
-            fromFocusNode: _fromFocus,
-            toFocusNode: _toFocus,
             showMyLocationDefault: true,
             onUnfocus: () {},
             onSwapRequested: () => true,
@@ -93,17 +87,12 @@ class BottomCardHostState extends State<BottomCardHost> {
             routeFieldLink: LayerLink(),
             fromLoading: false,
             toLoading: false,
-            fromSelection: null,
-            toSelection: null,
             onSearch: widget.onSearch ?? (_) {},
             timeSelectionLayerLink: LayerLink(),
             onTimeSelectionTap: widget.onTimeSelectionTap ?? () {},
             timeSelection: widget.timeSelection ?? TimeSelection.now(),
             recentTrips: widget.recentTrips,
             onRecentTripTap: widget.onRecentTripTap ?? (_) {},
-            favorites: const [],
-            onFavoriteTap: (_) {},
-            hasLocationPermission: true,
           ),
         ),
       ),

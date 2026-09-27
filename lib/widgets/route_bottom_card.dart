@@ -7,8 +7,6 @@ import '../models/time_selection.dart';
 import '../models/transitous/server_config.dart';
 import '../models/saved_trip.dart';
 import '../utils/time_utils.dart';
-import '../services/favorites_service.dart';
-import '../services/transitous_geocode_service.dart';
 import '../widgets/route_field_box.dart';
 import '../theme/app_colors.dart';
 import 'map/bottom_sheet_chrome.dart';
@@ -29,8 +27,6 @@ class BottomCard extends StatefulWidget {
     required this.onDragEnd,
     required this.fromCtrl,
     required this.toCtrl,
-    required this.fromFocusNode,
-    required this.toFocusNode,
     required this.showMyLocationDefault,
     required this.onUnfocus,
     required this.onSwapRequested,
@@ -50,8 +46,6 @@ class BottomCard extends StatefulWidget {
     required this.routeFieldLink,
     required this.fromLoading,
     required this.toLoading,
-    required this.fromSelection,
-    required this.toSelection,
     required this.onSearch,
     required this.timeSelectionLayerLink,
     required this.onTimeSelectionTap,
@@ -60,10 +54,6 @@ class BottomCard extends StatefulWidget {
     required this.timeSelection,
     required this.recentTrips,
     required this.onRecentTripTap,
-    required this.favorites,
-    required this.onFavoriteTap,
-    required this.hasLocationPermission,
-    this.tripsRefreshKey = 0,
   });
 
   final bool isCollapsed;
@@ -73,8 +63,6 @@ class BottomCard extends StatefulWidget {
   final ValueChanged<double> onDragEnd;
   final TextEditingController fromCtrl;
   final TextEditingController toCtrl;
-  final FocusNode fromFocusNode;
-  final FocusNode toFocusNode;
   final bool showMyLocationDefault;
   final VoidCallback onUnfocus;
   final bool Function() onSwapRequested;
@@ -105,8 +93,6 @@ class BottomCard extends StatefulWidget {
   final LayerLink routeFieldLink;
   final bool fromLoading;
   final bool toLoading;
-  final TransitousLocationSuggestion? fromSelection;
-  final TransitousLocationSuggestion? toSelection;
   final ValueChanged<TimeSelection> onSearch;
   final LayerLink timeSelectionLayerLink;
   final VoidCallback onTimeSelectionTap;
@@ -115,10 +101,6 @@ class BottomCard extends StatefulWidget {
   final TimeSelection timeSelection;
   final List<SavedTrip> recentTrips;
   final ValueChanged<SavedTrip> onRecentTripTap;
-  final List<FavoritePlace> favorites;
-  final ValueChanged<FavoritePlace> onFavoriteTap;
-  final bool hasLocationPermission;
-  final int tripsRefreshKey;
 
   @override
   State<BottomCard> createState() => _BottomCardState();
@@ -131,25 +113,8 @@ class _BottomCardState extends State<BottomCard> {
   Timer? _savedTimer;
 
   @override
-  void initState() {
-    super.initState();
-    // Focus decides whether the stages or the suggestions get the room, so
-    // it has to reach build rather than only the tap handlers.
-    widget.fromFocusNode.addListener(_onFocusChanged);
-    widget.toFocusNode.addListener(_onFocusChanged);
-  }
-
-  @override
   void didUpdateWidget(covariant BottomCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.fromFocusNode != widget.fromFocusNode) {
-      oldWidget.fromFocusNode.removeListener(_onFocusChanged);
-      widget.fromFocusNode.addListener(_onFocusChanged);
-    }
-    if (oldWidget.toFocusNode != widget.toFocusNode) {
-      oldWidget.toFocusNode.removeListener(_onFocusChanged);
-      widget.toFocusNode.addListener(_onFocusChanged);
-    }
     // A further edit is a new difference from the stored defaults, so the
     // confirmation stops applying to it.
     if (oldWidget.options != widget.options) {
@@ -162,13 +127,7 @@ class _BottomCardState extends State<BottomCard> {
   void dispose() {
     _scroll.dispose();
     _savedTimer?.cancel();
-    widget.fromFocusNode.removeListener(_onFocusChanged);
-    widget.toFocusNode.removeListener(_onFocusChanged);
     super.dispose();
-  }
-
-  void _onFocusChanged() {
-    if (mounted) setState(() {});
   }
 
   /// How long the row confirms the save for, before going back to reporting
@@ -235,19 +194,9 @@ class _BottomCardState extends State<BottomCard> {
     return BottomSheetSurface(
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: () {
-          if (widget.fromFocusNode.hasFocus || widget.toFocusNode.hasFocus) {
-            return;
-          }
-          widget.onUnfocus();
-        },
+        onTap: widget.onUnfocus,
         child: Listener(
-          onPointerDown: (_) {
-            if (widget.fromFocusNode.hasFocus || widget.toFocusNode.hasFocus) {
-              return;
-            }
-            widget.onUnfocus();
-          },
+          onPointerDown: (_) => widget.onUnfocus(),
           child: SizedBox.expand(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

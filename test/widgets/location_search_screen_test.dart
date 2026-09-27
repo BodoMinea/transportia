@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:transportia/models/my_location.dart';
@@ -124,6 +125,33 @@ void main() {
   testWidgets('the map is offered as a way to answer', (tester) async {
     // Some places are easier to point at than to name.
     await _pump(tester);
+    expect(find.bySemanticsLabel('Pick a point on the map'), findsOne);
+  });
+
+  testWidgets('the map sits in the search field, as its one icon', (
+    tester,
+  ) async {
+    // It used to be a boxed button beside the field; the search screen's own
+    // map button went, so this is the one way left to point at a place.
+    await _pump(tester);
+
+    final field = find.byType(CupertinoTextField);
+    expect(
+      find.descendant(of: field, matching: find.byIcon(LucideIcons.mapPlus)),
+      findsOne,
+    );
+    expect(find.byIcon(LucideIcons.mapPlus), findsOne);
+  });
+
+  testWidgets('clearing the query sits beside the map, not instead of it', (
+    tester,
+  ) async {
+    await _pump(tester);
+
+    await tester.enterText(find.byType(CupertinoTextField), 'Al');
+    await tester.pump();
+
+    expect(find.byIcon(LucideIcons.x), findsOne);
     expect(find.bySemanticsLabel('Pick a point on the map'), findsOne);
   });
 
