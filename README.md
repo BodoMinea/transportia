@@ -14,6 +14,12 @@
 
 ## What this fork adds
 
+- **Saved trips** — keep an itinerary for later, with live times refreshed.
+- **A richer search** — pick exact transport modes, via stops, transfers,
+  walking/cycling speed and step-free routes right from the search screen.
+- **A redesigned journey view** — one continuous timeline from search to
+  itinerary, with tappable stops and pull-to-refresh.
+- **Side-by-side install** — its own app ID, so it runs next to the original.
 
 ## Install
 
