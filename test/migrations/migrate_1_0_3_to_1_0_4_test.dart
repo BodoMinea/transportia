@@ -18,6 +18,13 @@ const String _oldWelcomeSeen = 'welcome_seen_v1';
 const String _oldSavedPlacesSearch = 'saved_places_search_v1';
 const String _oldSavedPlacesTimetable = 'saved_places_timetable_v1';
 const String _ignoredUpdateVersion = 'ignored_update_version';
+const String _recentTrips = 'recent_trips';
+
+/// One recent search as 1.0.3 wrote it: two places and a timestamp.
+const String _recentPairsIn103 =
+    '[{"fromName":"My Location","fromLat":52.5,"fromLon":13.4,'
+    '"toName":"Alexanderplatz","toLat":52.52,"toLon":13.41,'
+    '"timestamp":1767225600000}]';
 
 /// Every mode the 1.0.3 Transit options screen offered, which is what it wrote
 /// when the user had deselected nothing.
@@ -168,6 +175,28 @@ void main() {
       await StorageMigrations.run();
 
       expect(await prefs.containsKey(_ignoredUpdateVersion), isFalse);
+    });
+
+    test(
+      'recent searches, which have no connection to keep, are dropped',
+      () async {
+        _seed({..._usedIn103(), _recentTrips: _recentPairsIn103});
+        final prefs = SharedPreferencesAsync();
+
+        await StorageMigrations.run();
+
+        expect(await prefs.containsKey(_recentTrips), isFalse);
+      },
+    );
+
+    test('a recent list that already holds connections is kept', () async {
+      const snapshots = '[{"id":"a","itinerary":{}}]';
+      _seed({..._usedIn103(), _recentTrips: snapshots});
+      final prefs = SharedPreferencesAsync();
+
+      await StorageMigrations.run();
+
+      expect(await prefs.getString(_recentTrips), snapshots);
     });
 
     test('storage is stamped with the running version', () async {

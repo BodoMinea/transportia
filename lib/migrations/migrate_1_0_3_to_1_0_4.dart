@@ -60,7 +60,35 @@ class MigrateV103ToV104 {
       PrefsKeys.savedPlacesTimetable,
     );
     await _foldRoutingScalarsIntoBlob(prefs);
+    await _dropRecentSearchPairs(prefs);
     await prefs.remove(_ignoredUpdateVersion);
+  }
+
+  /// 1.0.3 kept each recent search as a bare origin/destination pair; 1.0.4
+  /// keeps the connection that was opened, as a saved trip. A pair has no
+  /// connection to become one, and the places in it are already among the
+  /// picker's recents, so the list starts again empty.
+  ///
+  /// Only a list still holding pairs is removed, so a rerun cannot touch
+  /// anything 1.0.4 has since written under the same key.
+  static Future<void> _dropRecentSearchPairs(
+    SharedPreferencesAsync prefs,
+  ) async {
+    final encoded = await prefs.getString(PrefsKeys.recentTrips);
+    if (encoded == null) return;
+
+    Object? decoded;
+    try {
+      decoded = jsonDecode(encoded);
+    } on FormatException {
+      decoded = null;
+    }
+    final holdsPairs =
+        decoded is! List ||
+        decoded.any(
+          (entry) => entry is! Map || !entry.containsKey('itinerary'),
+        );
+    if (holdsPairs) await prefs.remove(PrefsKeys.recentTrips);
   }
 
   static Future<void> _renameBool(

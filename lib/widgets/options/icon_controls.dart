@@ -186,7 +186,22 @@ class IconPick extends StatefulWidget {
     required this.tooltips,
     this.subdued = false,
     this.size = 17,
-  });
+  }) : _height = 40;
+
+  /// For the traveller strip, which sits right under the origin and time and
+  /// should not outweigh them.
+  const IconPick.compact({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+    required this.tooltips,
+    this.subdued = false,
+    this.size = 15,
+  }) : _height = 34;
+
+  final double _height;
 
   final IconData icon;
 
@@ -242,7 +257,7 @@ class _IconPickState extends State<IconPick> {
         onLongPressCancel: widget.tooltips.hide,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
-          height: 40,
+          height: widget._height,
           decoration: BoxDecoration(
             color: widget.selected
                 ? AppColors.accentWash(accent)

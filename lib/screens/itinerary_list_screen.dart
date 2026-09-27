@@ -12,6 +12,7 @@ import '../widgets/empty_state.dart';
 import '../models/itinerary.dart';
 import '../models/routing_options.dart';
 import '../providers/theme_provider.dart';
+import '../services/recent_trips_service.dart';
 import '../services/routing_options_service.dart';
 import '../services/routing_service.dart';
 import '../theme/app_colors.dart';
@@ -252,6 +253,15 @@ class _ItineraryListScreenState extends State<ItineraryListScreen> {
   Widget _buildItineraryTile(Itinerary itinerary) {
     return GestureDetector(
       onTap: () {
+        // Named as the save button names it, so the recent entry and a
+        // saved copy of the same connection share an id.
+        unawaited(
+          RecentTripsService.record(
+            itinerary,
+            fromName: widget.fromSelection?.name,
+            toName: widget.toSelection?.name,
+          ),
+        );
         Navigator.of(context).push(
           CustomPageRoute(
             child: ItineraryDetailScreen(
