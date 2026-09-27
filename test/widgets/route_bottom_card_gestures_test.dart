@@ -1,15 +1,13 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
-import 'package:transportia/models/routing_options.dart';
-import 'package:transportia/models/time_selection.dart';
-import 'package:transportia/models/transitous/server_config.dart';
-import 'package:transportia/providers/theme_provider.dart';
 import 'package:transportia/widgets/floating_nav_bar.dart';
 import 'package:transportia/widgets/route_bottom_card.dart';
+import 'package:transportia/widgets/search/editable_value.dart';
 import 'package:transportia/widgets/search/traveller_strip.dart';
+
+import '../support/bottom_card_host.dart';
 
 /// Counts the drag callbacks the card reports.
 ///
@@ -25,88 +23,7 @@ class _DragLog {
   String toString() => 'starts=$starts ends=$ends';
 }
 
-class _Host extends StatefulWidget {
-  const _Host({required this.log});
-
-  final _DragLog log;
-
-  @override
-  State<_Host> createState() => _HostState();
-}
-
-class _HostState extends State<_Host> {
-  final _fromCtrl = TextEditingController();
-  final _toCtrl = TextEditingController();
-  final _fromFocus = FocusNode();
-  final _toFocus = FocusNode();
-
-  @override
-  void dispose() {
-    _fromCtrl.dispose();
-    _toCtrl.dispose();
-    _fromFocus.dispose();
-    _toFocus.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider<ThemeProvider>(
-      create: (_) => ThemeProvider(),
-      child: Directionality(
-        textDirection: TextDirection.ltr,
-        child: MediaQuery(
-          data: const MediaQueryData(size: Size(400, 900)),
-          child: BottomCard(
-            isCollapsed: false,
-            collapseProgress: 0,
-            onHandleTap: () {},
-            onDragStart: () => widget.log.starts++,
-            onDragUpdate: (_) {},
-            onDragEnd: (_) => widget.log.ends++,
-            fromCtrl: _fromCtrl,
-            toCtrl: _toCtrl,
-            fromFocusNode: _fromFocus,
-            toFocusNode: _toFocus,
-            showMyLocationDefault: false,
-            onUnfocus: () {},
-            onSwapRequested: () => true,
-            options: RoutingOptions.defaults,
-            storedOptions: RoutingOptions.defaults,
-            capabilities: ServerConfig.fallback,
-            onOptionsChanged: (_) {},
-            onResetOptions: () {},
-            onSaveOptionsAsDefault: () {},
-            onAddViaStop: () {},
-            onShowMap: () {},
-            onFromPressed: () {},
-            onToPressed: () {},
-            isFromFavourite: false,
-            isToFavourite: false,
-            onToggleFromFavourite: () {},
-            onToggleToFavourite: () {},
-            routeFieldLink: LayerLink(),
-            fromLoading: false,
-            toLoading: false,
-            fromSelection: null,
-            toSelection: null,
-            onSearch: (_) {},
-            timeSelectionLayerLink: LayerLink(),
-            onTimeSelectionTap: () {},
-            timeSelection: TimeSelection.now(),
-            recentTrips: const [],
-            onRecentTripTap: (_) {},
-            favorites: const [],
-            onFavoriteTap: (_) {},
-            hasLocationPermission: true,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-Future<_HostState> _pump(
+Future<void> _pump(
   WidgetTester tester,
   _DragLog log, {
   // Short by default so the body actually overflows and has somewhere to
@@ -119,9 +36,13 @@ Future<_HostState> _pump(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  await tester.pumpWidget(_Host(log: log));
+  await tester.pumpWidget(
+    BottomCardHost(
+      onDragStart: () => log.starts++,
+      onDragEnd: () => log.ends++,
+    ),
+  );
   await tester.pump();
-  return tester.state<_HostState>(find.byType(_Host));
 }
 
 void main() {
@@ -215,7 +136,7 @@ void main() {
     // Tall enough that the spine below the fields is laid out.
     await _pump(tester, _DragLog(), viewSize: const Size(400, 900));
 
-    final field = tester.getRect(find.byType(EditableText).first);
+    final field = tester.getRect(find.byType(EditableValue).first);
     final strip = tester.getRect(find.byType(TravellerStrip));
     expect(field.left, closeTo(strip.left, 0.5));
   });

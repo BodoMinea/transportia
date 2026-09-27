@@ -20,8 +20,6 @@ class RouteFieldBox extends StatefulWidget {
     super.key,
     required this.fromController,
     required this.toController,
-    this.fromFocusNode,
-    this.toFocusNode,
     this.showMyLocationDefault = false,
     required this.accentColor,
     required this.onSwapRequested,
@@ -41,8 +39,6 @@ class RouteFieldBox extends StatefulWidget {
 
   final TextEditingController fromController;
   final TextEditingController toController;
-  final FocusNode? fromFocusNode;
-  final FocusNode? toFocusNode;
   final bool showMyLocationDefault;
   final Color accentColor;
   final bool Function() onSwapRequested;
@@ -83,7 +79,6 @@ class _RouteFieldBoxState extends State<RouteFieldBox> {
     super.initState();
     widget.fromController.addListener(_onChanged);
     widget.toController.addListener(_onChanged);
-    widget.fromFocusNode?.addListener(_onChanged);
   }
 
   @override
@@ -97,17 +92,12 @@ class _RouteFieldBoxState extends State<RouteFieldBox> {
       oldWidget.toController.removeListener(_onChanged);
       widget.toController.addListener(_onChanged);
     }
-    if (oldWidget.fromFocusNode != widget.fromFocusNode) {
-      oldWidget.fromFocusNode?.removeListener(_onChanged);
-      widget.fromFocusNode?.addListener(_onChanged);
-    }
   }
 
   @override
   void dispose() {
     widget.fromController.removeListener(_onChanged);
     widget.toController.removeListener(_onChanged);
-    widget.fromFocusNode?.removeListener(_onChanged);
     super.dispose();
   }
 
@@ -346,7 +336,7 @@ class _EndpointRow extends StatelessWidget {
 
   /// The origin's row is two lines, place over time; the marker belongs to
   /// the place.
-  static const double originMarkerCenter = 16;
+  static const double originMarkerCenter = 17;
 
   @override
   Widget build(BuildContext context) {

@@ -128,13 +128,13 @@ is not on the roadmap. Favourites currently sort by insertion, and a
 hand-ordered list is a very ordinary thing to want. If it stays, the pointless
 `try`/`catch` should go.
 
-### `RecentTripsService.clearHistory` — `lib/services/recent_trips_service.dart:46`
+### `RecentTripsService.clearHistory` — `lib/services/recent_trips_service.dart:85`
 
 Wipes the recent-trips key.
 
 **Judgement:** keep, and wire it up. There is no way for a user to clear their
-recent trips anywhere in Settings, which for a list of places someone has
-searched for is closer to a gap than to a missing feature. The method is the
+recent trips anywhere in Settings, which for a list of journeys someone has
+looked up is closer to a gap than to a missing feature. The method is the
 easy half of that.
 
 

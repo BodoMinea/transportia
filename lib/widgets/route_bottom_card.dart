@@ -5,8 +5,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/routing_options.dart';
 import '../models/time_selection.dart';
 import '../models/transitous/server_config.dart';
-import '../models/my_location.dart';
-import '../models/trip_history_item.dart';
+import '../models/saved_trip.dart';
+import '../utils/time_utils.dart';
 import '../services/favorites_service.dart';
 import '../services/transitous_geocode_service.dart';
 import '../widgets/route_field_box.dart';
@@ -17,14 +17,12 @@ import 'buttons/primary_button.dart';
 import 'search/journey_spine.dart';
 import 'search/save_default_row.dart';
 import 'search/editable_value.dart';
-import 'skeletons/skeleton_shimmer.dart';
 import '../theme/app_text.dart';
 
 class BottomCard extends StatefulWidget {
   const BottomCard({
     super.key,
     required this.isCollapsed,
-    required this.collapseProgress,
     required this.onHandleTap,
     required this.onDragStart,
     required this.onDragUpdate,
@@ -43,7 +41,6 @@ class BottomCard extends StatefulWidget {
     required this.onResetOptions,
     required this.onSaveOptionsAsDefault,
     required this.onAddViaStop,
-    required this.onShowMap,
     required this.onFromPressed,
     required this.onToPressed,
     required this.isFromFavourite,
@@ -70,7 +67,6 @@ class BottomCard extends StatefulWidget {
   });
 
   final bool isCollapsed;
-  final double collapseProgress;
   final VoidCallback onHandleTap;
   final VoidCallback onDragStart;
   final ValueChanged<double> onDragUpdate;
@@ -97,9 +93,6 @@ class BottomCard extends StatefulWidget {
   final VoidCallback onSaveOptionsAsDefault;
   final VoidCallback onAddViaStop;
 
-  /// Collapses the card so the map is visible.
-  final VoidCallback onShowMap;
-
   /// Opens the place picker for one end or the other.
   final VoidCallback onFromPressed;
   final VoidCallback onToPressed;
@@ -120,8 +113,8 @@ class BottomCard extends StatefulWidget {
   final VoidCallback? onTimeSelectionTapDown;
   final VoidCallback? onTimeSelectionTapCancel;
   final TimeSelection timeSelection;
-  final List<TripHistoryItem> recentTrips;
-  final ValueChanged<TripHistoryItem> onRecentTripTap;
+  final List<SavedTrip> recentTrips;
+  final ValueChanged<SavedTrip> onRecentTripTap;
   final List<FavoritePlace> favorites;
   final ValueChanged<FavoritePlace> onFavoriteTap;
   final bool hasLocationPermission;
@@ -282,8 +275,6 @@ class _BottomCardState extends State<BottomCard> {
                             child: RouteFieldBox(
                               fromController: widget.fromCtrl,
                               toController: widget.toCtrl,
-                              fromFocusNode: widget.fromFocusNode,
-                              toFocusNode: widget.toFocusNode,
                               showMyLocationDefault:
                                   widget.showMyLocationDefault,
                               accentColor: AppColors.accentOf(context),
@@ -326,7 +317,7 @@ class _BottomCardState extends State<BottomCard> {
                       GestureDetector(
                         behavior: HitTestBehavior.translucent,
                         onTap: widget.onUnfocus,
-                        child: _RecentSections(
+                        child: _RecentTrips(
                           trips: widget.recentTrips,
                           onTap: widget.onRecentTripTap,
                         ),
@@ -350,10 +341,7 @@ class _BottomCardState extends State<BottomCard> {
     return CompositedTransformTarget(
       link: widget.timeSelectionLayerLink,
       child: EditableValue.time(
-        label: time.isNow
-            ? 'Leave now'
-            : '${time.isArriveBy ? 'Arrive' : 'Leave'} '
-                  '${time.toDisplayString().replaceFirst('Today ', '')}',
+        label: time.toSearchLabel(),
         semanticsLabel: 'Change departure or arrival time',
         onTap: widget.onTimeSelectionTap,
         onTapDown: widget.onTimeSelectionTapDown,
@@ -379,174 +367,111 @@ class _BottomCardState extends State<BottomCard> {
   }
 }
 
-/// Recent searches, split by where they started.
-///
-/// Most searches start from where the rider is standing, and for those the
-/// origin says nothing — so they are listed by destination alone, first.
-/// Trips that started somewhere chosen keep both ends below them.
-class _RecentSections extends StatelessWidget {
-  const _RecentSections({required this.trips, required this.onTap});
+/// The connections most recently opened, each reopened as itself.
+class _RecentTrips extends StatelessWidget {
+  const _RecentTrips({required this.trips, required this.onTap});
 
-  final List<TripHistoryItem> trips;
-  final ValueChanged<TripHistoryItem> onTap;
+  final List<SavedTrip> trips;
+  final ValueChanged<SavedTrip> onTap;
 
   @override
   Widget build(BuildContext context) {
-    final destinations = <TripHistoryItem>[];
-    final seen = <String>{};
-    final elsewhere = <TripHistoryItem>[];
-    for (final trip in trips) {
-      if (trip.fromName != myLocationName) {
-        elsewhere.add(trip);
-        continue;
-      }
-      if (seen.add(trip.toName)) destinations.add(trip);
-    }
-
+    if (trips.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (destinations.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Text('Recent destinations', style: AppText.heading),
-          const SizedBox(height: 12),
-          for (final trip in destinations)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: _RecentTripTile.destination(
-                trip: trip,
-                onTap: () => onTap(trip),
-              ),
-            ),
-        ],
-        if (elsewhere.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Text('Recent trips', style: AppText.heading),
-          const SizedBox(height: 12),
-          for (final trip in elsewhere)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: _RecentTripTile(trip: trip, onTap: () => onTap(trip)),
-            ),
-        ],
+        const SizedBox(height: 16),
+        Text('Recent trips', style: AppText.heading),
+        const SizedBox(height: 12),
+        for (final trip in trips)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: _RecentTripTile(trip: trip, onTap: () => onTap(trip)),
+          ),
       ],
     );
   }
 }
 
-class _RecentTripTile extends StatefulWidget {
-  const _RecentTripTile({required this.trip, required this.onTap})
-    : destinationOnly = false;
+class _RecentTripTile extends StatelessWidget {
+  const _RecentTripTile({required this.trip, required this.onTap});
 
-  /// A trip from My Location, named by where it went.
-  const _RecentTripTile.destination({required this.trip, required this.onTap})
-    : destinationOnly = true;
-
-  final TripHistoryItem trip;
+  final SavedTrip trip;
   final VoidCallback onTap;
-  final bool destinationOnly;
-
-  @override
-  State<_RecentTripTile> createState() => _RecentTripTileState();
-}
-
-class _RecentTripTileState extends State<_RecentTripTile> {
-  bool _isLoading = false;
-
-  void _handleTap() async {
-    if (_isLoading) return;
-
-    setState(() => _isLoading = true);
-    widget.onTap();
-    await Future.delayed(const Duration(milliseconds: 1500));
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    final content = widget.destinationOnly ? _buildDestination() : _buildTrip();
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _handleTap,
-      child: _isLoading ? SkeletonShimmer(child: content) : content,
-    );
-  }
-
-  Widget _tileIcon(IconData icon) => Container(
-    width: 36,
-    height: 36,
-    decoration: BoxDecoration(
-      color: AppColors.black.withValues(alpha: 0.06),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: AppColors.black.withValues(alpha: 0.07)),
-    ),
-    alignment: Alignment.center,
-    child: Icon(icon, size: 18, color: AppColors.black),
-  );
-
-  Widget _buildDestination() => Row(
-    children: [
-      _tileIcon(LucideIcons.mapPin),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Text(
-          widget.trip.toName,
-          style: AppText.listTitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    ],
-  );
-
-  Widget _buildTrip() {
-    return Row(
-      children: [
-        _tileIcon(LucideIcons.route),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.trip.fromName,
-                style: TextStyle(
-                  color: AppColors.black,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+    final muted = AppColors.black.withValues(alpha: 0.6);
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.black.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.black.withValues(alpha: 0.07),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 2),
-              Row(
+              alignment: Alignment.center,
+              child: Icon(LucideIcons.route, size: 18, color: AppColors.black),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    LucideIcons.chevronRight,
-                    size: 14,
-                    color: AppColors.black.withValues(alpha: 0.6),
+                  Text(
+                    trip.fromName,
+                    style: AppText.listTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      widget.trip.toName,
-                      style: TextStyle(
-                        color: AppColors.black.withValues(alpha: 0.6),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(LucideIcons.chevronRight, size: 14, color: muted),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          trip.toName,
+                          style: TextStyle(
+                            color: muted,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 12),
+            // Which departure it was: the same two places can be in the list
+            // more than once, and a trip is that one journey.
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(formatTime(trip.departureTime), style: AppText.bodyStrong),
+                const SizedBox(height: 2),
+                Text(
+                  formatRelativeDay(trip.departureTime),
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

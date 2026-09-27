@@ -51,8 +51,8 @@ class TravellerStrip extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             SizedBox(
-              width: 42,
-              child: IconPick(
+              width: 36,
+              child: IconPick.compact(
                 icon: LucideIcons.gauge,
                 label: 'Pace',
                 selected: paceOpen,
@@ -110,8 +110,9 @@ class _StepFreeChip extends StatelessWidget {
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
-          height: 40,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          // Matches the compact pace button beside it.
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 11),
           decoration: BoxDecoration(
             color: enabled
                 ? accent.withValues(alpha: 0.14)
@@ -128,14 +129,14 @@ class _StepFreeChip extends StatelessWidget {
             children: [
               Icon(
                 LucideIcons.accessibility,
-                size: 14,
+                size: 13,
                 color: enabled ? accent : AppColors.black,
               ),
-              const SizedBox(width: 7),
+              const SizedBox(width: 6),
               Text(
                 'Step-free',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 12.5,
                   color: enabled ? accent : AppColors.black,
                 ),
               ),
