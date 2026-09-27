@@ -42,22 +42,27 @@ class BottomSheetSurface extends StatelessWidget {
   }
 }
 
-/// The bar at the top of a bottom sheet, which both drags the sheet and
-/// toggles it on a tap.
-class BottomSheetHandle extends StatelessWidget {
-  const BottomSheetHandle({
-    super.key,
+/// What a sheet does with its handle: toggle on a tap, follow a drag.
+class SheetDrag {
+  const SheetDrag({
     required this.onTap,
-    required this.onDragStart,
-    required this.onDragUpdate,
-    required this.onDragEnd,
-    this.bottomGap = 12,
+    required this.onStart,
+    required this.onUpdate,
+    required this.onEnd,
   });
 
   final VoidCallback onTap;
-  final VoidCallback onDragStart;
-  final ValueChanged<double> onDragUpdate;
-  final ValueChanged<double> onDragEnd;
+  final VoidCallback onStart;
+  final ValueChanged<double> onUpdate;
+  final ValueChanged<double> onEnd;
+}
+
+/// The bar at the top of a bottom sheet, which both drags the sheet and
+/// toggles it on a tap.
+class BottomSheetHandle extends StatelessWidget {
+  const BottomSheetHandle({super.key, required this.drag, this.bottomGap = 12});
+
+  final SheetDrag drag;
 
   /// Space below the bar, before the sheet's own content.
   final double bottomGap;
@@ -66,13 +71,13 @@ class BottomSheetHandle extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      onVerticalDragStart: (_) => onDragStart(),
-      onVerticalDragUpdate: (d) => onDragUpdate(d.delta.dy),
-      onVerticalDragEnd: (d) => onDragEnd(d.velocity.pixelsPerSecond.dy),
+      onTap: drag.onTap,
+      onVerticalDragStart: (_) => drag.onStart(),
+      onVerticalDragUpdate: (d) => drag.onUpdate(d.delta.dy),
+      onVerticalDragEnd: (d) => drag.onEnd(d.velocity.pixelsPerSecond.dy),
       // A drag that loses the arena after starting reports no end, and the
       // drag rumble only stops on one.
-      onVerticalDragCancel: () => onDragEnd(0),
+      onVerticalDragCancel: () => drag.onEnd(0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

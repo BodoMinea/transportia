@@ -9,11 +9,13 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const String _mapStyleKey = PrefsKeys.mapStyle;
   static const String _appThemeKey = PrefsKeys.appTheme;
   static const String _vibrationsEnabledKey = PrefsKeys.vibrationsEnabled;
+  static const String _searchMapEnabledKey = PrefsKeys.searchMapEnabled;
 
   static const Color defaultAccentColor = Color.fromARGB(255, 0, 113, 133);
   static const String defaultMapStyle = 'default';
   static const AppThemeMode defaultAppThemeMode = AppThemeMode.light;
   static const bool defaultVibrationsEnabled = true;
+  static const bool defaultSearchMapEnabled = true;
 
   static const Color lightBackground = Color(0xFFFFFFFF);
   static const Color darkBackground = Color(0xFF161616);
@@ -33,6 +35,7 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   String _mapStyle = defaultMapStyle;
   AppThemeMode _appThemeMode = defaultAppThemeMode;
   bool _vibrationsEnabled = defaultVibrationsEnabled;
+  bool _searchMapEnabled = defaultSearchMapEnabled;
   bool _isInitialized = false;
 
   static ThemeProvider? get instance => _instance;
@@ -43,6 +46,17 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
       mapStyleUrls[_mapStyle] ?? mapStyleUrls[defaultMapStyle]!;
   AppThemeMode get appThemeMode => _appThemeMode;
   bool get vibrationsEnabled => _vibrationsEnabled;
+
+  /// The rider's choice, as the appearance toggle shows it.
+  bool get searchMapEnabled => _searchMapEnabled;
+
+  /// Whether the search screen may build its map right now.
+  ///
+  /// False until the stored choice has been read, not just when it is off:
+  /// the map starts fetching tiles the moment it is built, so a rider who
+  /// turned it off to save data would otherwise pay for one map on every
+  /// launch before the setting arrived.
+  bool get showsSearchMap => _isInitialized && _searchMapEnabled;
   bool get isInitialized => _isInitialized;
 
   AppThemeMode get _effectiveAppThemeMode {
@@ -88,6 +102,9 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     _vibrationsEnabled =
         await prefs.getBool(_vibrationsEnabledKey) ?? defaultVibrationsEnabled;
+
+    _searchMapEnabled =
+        await prefs.getBool(_searchMapEnabledKey) ?? defaultSearchMapEnabled;
 
     _isInitialized = true;
     notifyListeners();
@@ -142,6 +159,16 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     final prefs = SharedPreferencesAsync();
     await prefs.setBool(_vibrationsEnabledKey, enabled);
+  }
+
+  Future<void> setSearchMapEnabled(bool enabled) async {
+    if (_searchMapEnabled == enabled) return;
+
+    _searchMapEnabled = enabled;
+    notifyListeners();
+
+    final prefs = SharedPreferencesAsync();
+    await prefs.setBool(_searchMapEnabledKey, enabled);
   }
 
   @override

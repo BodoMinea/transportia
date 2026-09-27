@@ -21,10 +21,7 @@ class BottomCard extends StatefulWidget {
   const BottomCard({
     super.key,
     required this.isCollapsed,
-    required this.onHandleTap,
-    required this.onDragStart,
-    required this.onDragUpdate,
-    required this.onDragEnd,
+    this.drag,
     required this.fromCtrl,
     required this.toCtrl,
     required this.showMyLocationDefault,
@@ -57,10 +54,10 @@ class BottomCard extends StatefulWidget {
   });
 
   final bool isCollapsed;
-  final VoidCallback onHandleTap;
-  final VoidCallback onDragStart;
-  final ValueChanged<double> onDragUpdate;
-  final ValueChanged<double> onDragEnd;
+
+  /// How the card moves as a sheet over the map. Null when there is no map
+  /// and the card is the whole page: nothing to drag it off.
+  final SheetDrag? drag;
   final TextEditingController fromCtrl;
   final TextEditingController toCtrl;
   final bool showMyLocationDefault;
@@ -191,98 +188,106 @@ class _BottomCardState extends State<BottomCard> {
 
   @override
   Widget build(BuildContext context) {
-    return BottomSheetSurface(
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: widget.onUnfocus,
-        child: Listener(
-          onPointerDown: (_) => widget.onUnfocus(),
-          child: SizedBox.expand(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                BottomSheetHandle(
-                  onTap: widget.onHandleTap,
-                  onDragStart: widget.onDragStart,
-                  onDragUpdate: widget.onDragUpdate,
-                  onDragEnd: widget.onDragEnd,
-                  bottomGap: 18,
-                ),
+    final content = _buildContent(context);
+    if (widget.drag == null) {
+      return ColoredBox(
+        color: AppColors.white,
+        child: SafeArea(child: content),
+      );
+    }
+    return BottomSheetSurface(child: content);
+  }
 
-                Expanded(
-                  child: _buildScrollableBody(
-                    context,
-                    above: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                        child: Listener(
-                          onPointerDown: (_) {},
+  Widget _buildContent(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: widget.onUnfocus,
+      child: Listener(
+        onPointerDown: (_) => widget.onUnfocus(),
+        child: SizedBox.expand(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildTop(),
+
+              Expanded(
+                child: _buildScrollableBody(
+                  context,
+                  above: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      child: Listener(
+                        onPointerDown: (_) {},
+                        behavior: HitTestBehavior.opaque,
+                        child: GestureDetector(
+                          onTap: () {},
                           behavior: HitTestBehavior.opaque,
-                          child: GestureDetector(
-                            onTap: () {},
-                            behavior: HitTestBehavior.opaque,
-                            child: RouteFieldBox(
-                              fromController: widget.fromCtrl,
-                              toController: widget.toCtrl,
-                              showMyLocationDefault:
-                                  widget.showMyLocationDefault,
-                              accentColor: AppColors.accentOf(context),
-                              onSwapRequested: widget.onSwapRequested,
-                              layerLink: widget.routeFieldLink,
-                              fromLoading: widget.fromLoading,
-                              toLoading: widget.toLoading,
-                              middle: _buildSpine(),
-                              timeLine: _buildTimeLine(),
-                              footer: _buildSearchButton(),
-                              onFromPressed: widget.onFromPressed,
-                              onToPressed: widget.onToPressed,
-                              isFromFavourite: widget.isFromFavourite,
-                              isToFavourite: widget.isToFavourite,
-                              onToggleFromFavourite:
-                                  widget.onToggleFromFavourite,
-                              onToggleToFavourite: widget.onToggleToFavourite,
-                            ),
+                          child: RouteFieldBox(
+                            fromController: widget.fromCtrl,
+                            toController: widget.toCtrl,
+                            showMyLocationDefault: widget.showMyLocationDefault,
+                            accentColor: AppColors.accentOf(context),
+                            onSwapRequested: widget.onSwapRequested,
+                            layerLink: widget.routeFieldLink,
+                            fromLoading: widget.fromLoading,
+                            toLoading: widget.toLoading,
+                            middle: _buildSpine(),
+                            timeLine: _buildTimeLine(),
+                            footer: _buildSearchButton(),
+                            onFromPressed: widget.onFromPressed,
+                            onToPressed: widget.onToPressed,
+                            isFromFavourite: widget.isFromFavourite,
+                            isToFavourite: widget.isToFavourite,
+                            onToggleFromFavourite: widget.onToggleFromFavourite,
+                            onToggleToFavourite: widget.onToggleToFavourite,
                           ),
                         ),
                       ),
+                    ),
 
-                      // Always offered, not only once something differs:
-                      // the row is where the routing options are managed
-                      // from, and hunting for a button that appears and
-                      // disappears is worse than one that is simply there.
-                      if (!widget.isCollapsed)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                          child: SaveDefaultRow(
-                            saved: _savedAsDefault,
-                            differsFromStored:
-                                widget.options != widget.storedOptions,
-                            onReset: widget.onResetOptions,
-                            onSaveAsDefault: _saveOptionsAsDefault,
-                          ),
-                        ),
-                    ],
-                    below: [
-                      GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onTap: widget.onUnfocus,
-                        child: _RecentTrips(
-                          trips: widget.recentTrips,
-                          onTap: widget.onRecentTripTap,
+                    // Always offered, not only once something differs:
+                    // the row is where the routing options are managed
+                    // from, and hunting for a button that appears and
+                    // disappears is worse than one that is simply there.
+                    if (!widget.isCollapsed)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                        child: SaveDefaultRow(
+                          saved: _savedAsDefault,
+                          differsFromStored:
+                              widget.options != widget.storedOptions,
+                          onReset: widget.onResetOptions,
+                          onSaveAsDefault: _saveOptionsAsDefault,
                         ),
                       ),
-                      // Clears the floating nav bar, which is a sibling
-                      // painted over this card rather than beside it.
-                      const SizedBox(height: FloatingNavBar.reservedHeight),
-                    ],
-                  ),
+                  ],
+                  below: [
+                    GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: widget.onUnfocus,
+                      child: _RecentTrips(
+                        trips: widget.recentTrips,
+                        onTap: widget.onRecentTripTap,
+                      ),
+                    ),
+                    // Clears the floating nav bar, which is a sibling
+                    // painted over this card rather than beside it.
+                    const SizedBox(height: FloatingNavBar.reservedHeight),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  /// The grab bar over the map; on its own page the card just starts.
+  Widget _buildTop() {
+    final drag = widget.drag;
+    if (drag == null) return const SizedBox(height: 16);
+    return BottomSheetHandle(drag: drag, bottomGap: 18);
   }
 
   Widget _buildTimeLine() {
