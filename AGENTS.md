@@ -91,7 +91,6 @@
 - Group related changes; keep diffs focused. Reference issues if applicable.
 - PRs must include:
   - Clear description and rationale.
-  - Screenshots for UI changes, rendered with `linux/drafting/`.
   - Test plan (commands run, devices/simulators tested).
   - Confirmation that `flutter analyze` passes and code is formatted.
 - Run `flutter analyze`, `flutter test` and `dart format .` before each commit, not once at the end; analyze must be clean, not merely no-worse.
