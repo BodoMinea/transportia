@@ -17,18 +17,35 @@ import '../theme/app_text.dart';
 /// Points at a place on the map.
 ///
 /// Used both to keep a favourite and to answer a location search, because
-/// some places are easier to point at than to name. [saveAsFavourite] picks
-/// which: it either stores the place, or hands it back to the caller.
-class AddFavouriteMapScreen extends StatefulWidget {
-  const AddFavouriteMapScreen({super.key, this.saveAsFavourite = true});
+/// some places are easier to point at than to name. The two say different
+/// things about the same gesture, so each is its own constructor.
+class MapPlacePickerScreen extends StatefulWidget {
+  /// Keeps the place as a favourite, then closes with `true`.
+  const MapPlacePickerScreen.favourite({super.key})
+    : title = 'Add Favourite',
+      confirmLabel = 'Save',
+      _savesFavourite = true;
 
-  final bool saveAsFavourite;
+  /// Hands the place back to the caller, which names what it is for: a
+  /// route's origin is not saved anywhere, so "Save" would be a false promise.
+  const MapPlacePickerScreen.pick({
+    super.key,
+    required this.title,
+    required this.confirmLabel,
+  }) : _savesFavourite = false;
+
+  final String title;
+
+  /// The button that takes the place pointed at.
+  final String confirmLabel;
+
+  final bool _savesFavourite;
 
   @override
-  State<AddFavouriteMapScreen> createState() => _AddFavouriteMapScreenState();
+  State<MapPlacePickerScreen> createState() => _MapPlacePickerScreenState();
 }
 
-class _AddFavouriteMapScreenState extends State<AddFavouriteMapScreen> {
+class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   LatLng? _selectedLocation;
   String? _selectedLocationName;
   bool _isLoadingName = false;
@@ -47,7 +64,7 @@ class _AddFavouriteMapScreenState extends State<AddFavouriteMapScreen> {
             Column(
               children: [
                 CustomAppBar(
-                  title: 'Add Favourite',
+                  title: widget.title,
                   onBackButtonPressed: () => Navigator.of(context).pop(),
                 ),
                 Expanded(
@@ -191,7 +208,7 @@ class _AddFavouriteMapScreenState extends State<AddFavouriteMapScreen> {
     }
   }
 
-  Future<void> _saveFavourite() async {
+  Future<void> _confirm() async {
     if (_selectedLocation == null) return;
 
     final name =
@@ -206,7 +223,7 @@ class _AddFavouriteMapScreenState extends State<AddFavouriteMapScreen> {
       addedAt: DateTime.now(),
     );
 
-    if (!widget.saveAsFavourite) {
+    if (!widget._savesFavourite) {
       Navigator.of(context).pop(favorite);
       return;
     }
@@ -325,7 +342,7 @@ class _AddFavouriteMapScreenState extends State<AddFavouriteMapScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: GestureDetector(
-                  onTap: _isLoadingName ? null : _saveFavourite,
+                  onTap: _isLoadingName ? null : _confirm,
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
@@ -334,10 +351,12 @@ class _AddFavouriteMapScreenState extends State<AddFavouriteMapScreen> {
                           : AppColors.accentOf(context),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Text(
-                        'Save',
-                        style: TextStyle(
+                        widget.confirmLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           color: AppColors.solidWhite,

@@ -89,7 +89,10 @@ test` with no arguments only runs `test/`, so a draft never runs in CI — but
 
 ## What it cannot show
 
-- The map itself, and anything else that is a platform view.
+- The map itself, and anything else that is a platform view: its area stays
+  blank. A screen with a map in it still renders around it, and a map tap
+  can be simulated by calling the widget's own callback:
+  `tester.widget<MapLibreMap>(find.byType(MapLibreMap)).onMapClick!(...)`.
 - Anything that needs the network: geocoder results, live departures,
   planning. Screens that fetch on open show their loading or error state;
   seed what they would have loaded, or draft the widget that displays it.

@@ -1,5 +1,6 @@
 // Renders app widgets to PNGs for design review, from a headless
 // `flutter test`. See README.md beside this file.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -133,12 +134,32 @@ Future<void> pumpDraft(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
+  _acceptPlatformViews(tester);
   await tester.pumpWidget(
     RepaintBoundary(
       key: _kShotKey,
       child: DraftApp(child: screen),
     ),
   );
+}
+
+/// Lets a screen with a map in it build: the map asks the platform for a
+/// native view, which a test has no plugin to create.
+///
+/// The request is left pending rather than refused or granted. Refused, it
+/// throws; granted, the map goes on to call its own plugin, which is not
+/// there either. Pending, the map's area stays blank and the rest of the
+/// screen draws around it.
+void _acceptPlatformViews(WidgetTester tester) {
+  const channel = SystemChannels.platform_views;
+  final messenger = tester.binding.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(
+    channel,
+    (call) => call.method == 'create'
+        ? Completer<Object?>().future
+        : Future<Object?>.value(),
+  );
+  addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 }
 
 /// Saves what is on screen now as `<tag>_<name>.png`, at twice the logical
