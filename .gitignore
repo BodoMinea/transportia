@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Drafts are working files; only the drafting tooling itself is tracked.
+/linux/drafting/*
+!/linux/drafting/README.md
+!/linux/drafting/draft_kit.dart
+!/linux/drafting/render.sh
+!/linux/drafting/examples/
