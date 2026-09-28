@@ -29,6 +29,10 @@ import '../theme/app_text.dart';
 /// How long typing has to pause before a place lookup is sent.
 const Duration _kSearchDebounce = Duration(milliseconds: 220);
 
+/// The map picker's button when the caller does not say what the place is
+/// for.
+const String _kDefaultConfirmLabel = 'Use this place';
+
 class LocationSearchScreen extends StatelessWidget {
   const LocationSearchScreen({
     super.key,
@@ -39,10 +43,15 @@ class LocationSearchScreen extends StatelessWidget {
     this.type,
     this.showFavourites = true,
     this.showMyLocation = false,
+    this.confirmLabel = _kDefaultConfirmLabel,
   });
 
-  /// Names what is being picked: "Origin", "Destination", "Stop".
+  /// Names what is being picked: "Origin", "Destination", "Stop". The map
+  /// picker opened from here says the same.
   final String title;
+
+  /// What taking a place pointed at on the map means here: "Use as origin".
+  final String confirmLabel;
 
   final SavedPlacesBucket bucket;
   final String initialQuery;
@@ -63,6 +72,8 @@ class LocationSearchScreen extends StatelessWidget {
         type: type,
         showFavourites: showFavourites,
         showMyLocation: showMyLocation,
+        mapPickerTitle: title,
+        mapPickerConfirmLabel: confirmLabel,
         onPicked: (suggestion) => Navigator.of(context).pop(suggestion),
       ),
     );
@@ -85,7 +96,13 @@ class LocationSearchBody extends StatefulWidget {
     this.type,
     this.showFavourites = true,
     this.showMyLocation = false,
+    this.mapPickerTitle = 'Pick on map',
+    this.mapPickerConfirmLabel = _kDefaultConfirmLabel,
   });
+
+  /// Heading and button of the map picker the field's map icon opens.
+  final String mapPickerTitle;
+  final String mapPickerConfirmLabel;
 
   /// What to do with the place that was chosen. The pushed screen pops it;
   /// the timetable tab opens its departures.
@@ -318,7 +335,10 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
   Future<void> _pickOnMap() async {
     final picked = await Navigator.of(context).push<FavoritePlace>(
       CustomPageRoute(
-        child: const AddFavouriteMapScreen(saveAsFavourite: false),
+        child: MapPlacePickerScreen.pick(
+          title: widget.mapPickerTitle,
+          confirmLabel: widget.mapPickerConfirmLabel,
+        ),
       ),
     );
     if (!mounted || picked == null) return;

@@ -1,9 +1,12 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:transportia/providers/theme_provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:transportia/models/my_location.dart';
+import 'package:transportia/screens/favourites_map_screen.dart';
 import 'package:transportia/screens/location_search_screen.dart';
 import 'package:transportia/services/favorites_service.dart';
 import 'package:transportia/models/saved_place.dart';
@@ -41,6 +44,7 @@ Future<void> _pump(
   bool showMyLocation = false,
   String? type,
   SavedPlacesBucket bucket = SavedPlacesBucket.search,
+  String confirmLabel = 'Use as destination',
 }) async {
   tester.view.physicalSize = const Size(420, 1000);
   tester.view.devicePixelRatio = 1;
@@ -51,22 +55,27 @@ Future<void> _pump(
   // outside the Navigator: the screen focuses its field on open, and an
   // EditableText needs an Overlay to put its selection handles in.
   await tester.pumpWidget(
-    WidgetsApp(
-      color: const Color(0xFF000000),
-      // The same delegates app.dart installs; showCupertinoDialog wants
-      // CupertinoLocalizations for its barrier label.
-      localizationsDelegates: const [
-        DefaultWidgetsLocalizations.delegate,
-        DefaultCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [Locale('en', 'US')],
-      onGenerateRoute: (settings) => PageRouteBuilder<void>(
-        settings: settings,
-        pageBuilder: (_, _, _) => LocationSearchScreen(
-          title: 'Destination',
-          bucket: bucket,
-          type: type,
-          showMyLocation: showMyLocation,
+    // The map picker this screen opens reads the map style from it.
+    ChangeNotifierProvider<ThemeProvider>(
+      create: (_) => ThemeProvider(),
+      child: WidgetsApp(
+        color: const Color(0xFF000000),
+        // The same delegates app.dart installs; showCupertinoDialog wants
+        // CupertinoLocalizations for its barrier label.
+        localizationsDelegates: const [
+          DefaultWidgetsLocalizations.delegate,
+          DefaultCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('en', 'US')],
+        onGenerateRoute: (settings) => PageRouteBuilder<void>(
+          settings: settings,
+          pageBuilder: (_, _, _) => LocationSearchScreen(
+            title: 'Destination',
+            bucket: bucket,
+            type: type,
+            showMyLocation: showMyLocation,
+            confirmLabel: confirmLabel,
+          ),
         ),
       ),
     ),
@@ -126,6 +135,24 @@ void main() {
     // Some places are easier to point at than to name.
     await _pump(tester);
     expect(find.bySemanticsLabel('Pick a point on the map'), findsOne);
+  });
+
+  testWidgets('the map picker is headed and confirmed for this search', (
+    tester,
+  ) async {
+    // It used to open as "Add Favourite" with a "Save" button, whatever the
+    // search was for.
+    await _pump(tester);
+
+    await tester.tap(find.bySemanticsLabel('Pick a point on the map'));
+    await tester.pumpAndSettle();
+
+    final picker = tester.widget<MapPlacePickerScreen>(
+      find.byType(MapPlacePickerScreen),
+    );
+    expect(picker.title, 'Destination');
+    expect(picker.confirmLabel, 'Use as destination');
+    expect(find.text('Add Favourite'), findsNothing);
   });
 
   testWidgets('the map sits in the search field, as its one icon', (

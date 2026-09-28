@@ -2341,6 +2341,9 @@ class _MapScreenState extends State<MapScreen>
           CustomPageRoute(
             child: LocationSearchScreen(
               title: field == RouteFieldKind.from ? 'Origin' : 'Destination',
+              confirmLabel: field == RouteFieldKind.from
+                  ? 'Use as origin'
+                  : 'Use as destination',
               bucket: SavedPlacesBucket.search,
               initialQuery: _controllerFor(field).text,
               placeBias: _placeBiasLatLng(),
