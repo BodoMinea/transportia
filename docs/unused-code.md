@@ -83,7 +83,7 @@ predicate for it.
 including ones nobody can take. The moment that is filtered, this is the
 filter.
 
-### `Match.addressLine` — `lib/models/transitous/match.dart:134`
+### `Match.addressLine` — `lib/models/transitous/match.dart:177`
 
 Street and house number joined, guarding both empty cases.
 
@@ -115,6 +115,16 @@ not get one. The developer info screen already enumerates
 
 ---
 
+### `MapPlacePickerScreen.favourite` — `lib/screens/map_place_picker/map_place_picker_screen.dart:38`
+
+Keeps a point pointed at on the map as a favourite. Unused on master before
+the search rework too; the rework moved the file and left this constructor
+as it was. Only its test calls it.
+
+**Judgement:** lean keep, but ask. It is the one way to keep a place that no
+search finds, and its save path is tested; if favourites are only ever kept
+from a result, it can go with its branch in `_confirm`.
+
 ## Probably finished with — candidates for deletion
 
 ### `FavoritesService.reorderFavorites` — `lib/services/favorites_service.dart:152`
@@ -136,6 +146,15 @@ Wipes the recent-trips key.
 recent trips anywhere in Settings, which for a list of journeys someone has
 looked up is closer to a gap than to a missing feature. The method is the
 easy half of that.
+
+### `Match.displayArea` — `lib/models/transitous/match.dart:124`
+
+The area MOTIS marks as distinguishing, else its default one. Search
+captions now choose their own areas — `districtArea`, `cityArea` and
+`regionArea` — to tell same-named results apart; only a fixture test reads
+this.
+
+**Judgement:** can go, with its line in `fixture_parsing_test.dart`.
 
 ## Resolved since the last sweep
 

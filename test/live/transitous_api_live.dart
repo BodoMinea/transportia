@@ -131,7 +131,7 @@ void main() {
       text: 'Alexanderplatz',
       placeLat: 52.52,
       placeLon: 13.405,
-      placeBias: 5,
+      placeBias: 1.5,
     );
     expect(matches, isNotEmpty);
 
