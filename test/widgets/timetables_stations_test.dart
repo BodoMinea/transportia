@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -347,6 +348,78 @@ void main() {
       await tester.pumpAndSettle();
 
       expect((await remembered()).single.modes, contains(TransitMode.subway));
+    });
+  });
+
+  group('reordering favourite stations', () {
+    Future<void> keep(List<FavoritePlace> favourites) async {
+      for (final favourite in favourites) {
+        await FavoritesService.saveFavorite(favourite);
+      }
+      await FavoritesService.reorderFavorites(favourites);
+    }
+
+    List<String> stored() => [
+      for (final f in FavoritesService.favoritesListenable.value) f.id,
+    ];
+
+    Future<void> drag(WidgetTester tester, String text, double dy) async {
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text(text)),
+      );
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      const steps = 8;
+      for (var i = 0; i < steps; i++) {
+        await gesture.moveBy(Offset(0, dy / steps));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a long press drags a station into a new order', (
+      tester,
+    ) async {
+      // An address sits between the two stations. This tab does not show it,
+      // so the drag must not move it.
+      await keep([
+        _favourite(id: 'a', name: 'Alexanderplatz', lon: 13.41),
+        _favourite(id: 'x', name: 'A street', type: 'ADDRESS', lon: 13.5),
+        _favourite(id: 'o', name: 'Ostkreuz', lon: 13.46),
+      ]);
+      await _pump(tester);
+
+      // Rows are 56 high: past Ostkreuz's middle.
+      await drag(tester, 'Alexanderplatz', 70);
+
+      expect(stored(), ['o', 'x', 'a']);
+      expect(
+        tester.getRect(find.text('Alexanderplatz')).top,
+        greaterThan(tester.getRect(find.text('Ostkreuz')).top),
+      );
+      // Still the search: a drag is not a pick.
+      expect(find.byType(LocationSearchBody), findsOne);
+    });
+
+    testWidgets('held still instead, it opens the station\'s menu', (
+      tester,
+    ) async {
+      await keep([
+        _favourite(id: 'a', name: 'Alexanderplatz', lon: 13.41),
+        _favourite(id: 'o', name: 'Ostkreuz', lon: 13.46),
+      ]);
+      await _pump(tester);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('Alexanderplatz')),
+      );
+      await tester.pump(const Duration(milliseconds: 1200));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('Edit Favourite'), findsOne);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(stored(), ['a', 'o']);
     });
   });
 }
