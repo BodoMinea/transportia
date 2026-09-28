@@ -41,7 +41,8 @@ class LocationSearchScreen extends StatelessWidget {
     this.showMyLocation = false,
   });
 
-  /// Names what is being picked: "Origin", "Destination", "Stop".
+  /// Names what is being picked: "Origin", "Destination", "Stop". The map
+  /// picker opened from here asks for the same: "Select Origin".
   final String title;
 
   final SavedPlacesBucket bucket;
@@ -63,6 +64,7 @@ class LocationSearchScreen extends StatelessWidget {
         type: type,
         showFavourites: showFavourites,
         showMyLocation: showMyLocation,
+        mapPickerTitle: 'Select $title',
         onPicked: (suggestion) => Navigator.of(context).pop(suggestion),
       ),
     );
@@ -85,7 +87,13 @@ class LocationSearchBody extends StatefulWidget {
     this.type,
     this.showFavourites = true,
     this.showMyLocation = false,
+    this.mapPickerTitle = 'Select a place',
+    this.mapPickerConfirmLabel = 'Select',
   });
+
+  /// Heading and button of the map picker the field's map icon opens.
+  final String mapPickerTitle;
+  final String mapPickerConfirmLabel;
 
   /// What to do with the place that was chosen. The pushed screen pops it;
   /// the timetable tab opens its departures.
@@ -318,7 +326,10 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
   Future<void> _pickOnMap() async {
     final picked = await Navigator.of(context).push<FavoritePlace>(
       CustomPageRoute(
-        child: const AddFavouriteMapScreen(saveAsFavourite: false),
+        child: MapPlacePickerScreen.pick(
+          title: widget.mapPickerTitle,
+          confirmLabel: widget.mapPickerConfirmLabel,
+        ),
       ),
     );
     if (!mounted || picked == null) return;
