@@ -317,7 +317,6 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
           Row(
             children: [
               Expanded(
-                flex: 2,
                 child: GestureDetector(
                   onTap: () => setState(() => _selectedLocation = null),
                   child: Container(
@@ -341,17 +340,11 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              // The wider share: its label says what the place is for
-              // ("Use as destination"), where Cancel is always one word.
               Expanded(
-                flex: 3,
                 child: GestureDetector(
                   onTap: _isLoadingName ? null : _confirm,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 14,
-                      horizontal: 12,
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
                       color: _isLoadingName
                           ? AppColors.hairline

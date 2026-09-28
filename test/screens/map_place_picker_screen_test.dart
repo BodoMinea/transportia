@@ -57,17 +57,17 @@ void main() {
     await _pump(
       tester,
       const MapPlacePickerScreen.pick(
-        title: 'Origin',
-        confirmLabel: 'Use as origin',
+        title: 'Select Origin',
+        confirmLabel: 'Select',
       ),
     );
 
-    expect(find.text('Origin'), findsOneWidget);
+    expect(find.text('Select Origin'), findsOneWidget);
     expect(find.text('Add Favourite'), findsNothing);
 
     await _pointAt(tester);
 
-    expect(find.text('Use as origin'), findsOneWidget);
+    expect(find.text('Select'), findsOneWidget);
     expect(find.text('Save'), findsNothing);
   });
 

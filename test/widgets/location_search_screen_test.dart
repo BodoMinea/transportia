@@ -44,7 +44,6 @@ Future<void> _pump(
   bool showMyLocation = false,
   String? type,
   SavedPlacesBucket bucket = SavedPlacesBucket.search,
-  String confirmLabel = 'Use as destination',
 }) async {
   tester.view.physicalSize = const Size(420, 1000);
   tester.view.devicePixelRatio = 1;
@@ -74,7 +73,6 @@ Future<void> _pump(
             bucket: bucket,
             type: type,
             showMyLocation: showMyLocation,
-            confirmLabel: confirmLabel,
           ),
         ),
       ),
@@ -150,8 +148,8 @@ void main() {
     final picker = tester.widget<MapPlacePickerScreen>(
       find.byType(MapPlacePickerScreen),
     );
-    expect(picker.title, 'Destination');
-    expect(picker.confirmLabel, 'Use as destination');
+    expect(picker.title, 'Select Destination');
+    expect(picker.confirmLabel, 'Select');
     expect(find.text('Add Favourite'), findsNothing);
   });
 

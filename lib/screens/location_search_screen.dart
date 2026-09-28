@@ -29,10 +29,6 @@ import '../theme/app_text.dart';
 /// How long typing has to pause before a place lookup is sent.
 const Duration _kSearchDebounce = Duration(milliseconds: 220);
 
-/// The map picker's button when the caller does not say what the place is
-/// for.
-const String _kDefaultConfirmLabel = 'Use this place';
-
 class LocationSearchScreen extends StatelessWidget {
   const LocationSearchScreen({
     super.key,
@@ -43,15 +39,11 @@ class LocationSearchScreen extends StatelessWidget {
     this.type,
     this.showFavourites = true,
     this.showMyLocation = false,
-    this.confirmLabel = _kDefaultConfirmLabel,
   });
 
   /// Names what is being picked: "Origin", "Destination", "Stop". The map
-  /// picker opened from here says the same.
+  /// picker opened from here asks for the same: "Select Origin".
   final String title;
-
-  /// What taking a place pointed at on the map means here: "Use as origin".
-  final String confirmLabel;
 
   final SavedPlacesBucket bucket;
   final String initialQuery;
@@ -72,8 +64,7 @@ class LocationSearchScreen extends StatelessWidget {
         type: type,
         showFavourites: showFavourites,
         showMyLocation: showMyLocation,
-        mapPickerTitle: title,
-        mapPickerConfirmLabel: confirmLabel,
+        mapPickerTitle: 'Select $title',
         onPicked: (suggestion) => Navigator.of(context).pop(suggestion),
       ),
     );
@@ -96,8 +87,8 @@ class LocationSearchBody extends StatefulWidget {
     this.type,
     this.showFavourites = true,
     this.showMyLocation = false,
-    this.mapPickerTitle = 'Pick on map',
-    this.mapPickerConfirmLabel = _kDefaultConfirmLabel,
+    this.mapPickerTitle = 'Select a place',
+    this.mapPickerConfirmLabel = 'Select',
   });
 
   /// Heading and button of the map picker the field's map icon opens.
