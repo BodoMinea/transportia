@@ -65,6 +65,40 @@ void main() {
     expect(confirmed.single.isNow, isFalse);
   });
 
+  testWidgets('offers the next four days by name, then the calendar', (
+    tester,
+  ) async {
+    await _pumpOverlay(tester, selection: TimeSelection.now());
+
+    for (final label in ['Today', 'Tmrw', 'Sat', 'Sun']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.bySemanticsLabel('Open calendar'), findsOneWidget);
+    // Abbreviated to fit the tile, but read out in full.
+    expect(tester.widget<Text>(find.text('Tmrw')).semanticsLabel, 'Tomorrow');
+    // The four days sit side by side with the calendar, none scrolled away.
+    final widths = [
+      for (final label in ['Today', 'Tmrw', 'Sat', 'Sun'])
+        tester
+            .getSize(
+              find.ancestor(
+                of: find.text(label),
+                matching: find.byType(AnimatedContainer),
+              ),
+            )
+            .width,
+      tester
+          .getSize(
+            find.descendant(
+              of: find.bySemanticsLabel('Open calendar'),
+              matching: find.byType(AnimatedContainer),
+            ),
+          )
+          .width,
+    ];
+    expect(widths.toSet(), hasLength(1));
+  });
+
   testWidgets('one tap picks another day, keeping the time', (tester) async {
     final confirmed = await _pumpOverlay(
       tester,
@@ -74,7 +108,7 @@ void main() {
       ),
     );
 
-    await _tap(tester, 'Tomorrow');
+    await _tap(tester, 'Tmrw');
     await _tap(tester, 'Confirm');
 
     expect(confirmed.single.dateTime, DateTime(2026, 9, 25, 9, 15));
@@ -265,10 +299,16 @@ void main() {
       expect(find.byKey(const ValueKey('monthCalendar')), findsOneWidget);
     });
 
-    testWidgets('the strip scrolls along to a day picked far off', (
+    testWidgets('a day picked beyond the tiles shows on the calendar tile', (
       tester,
     ) async {
-      await _pumpOverlay(tester, selection: TimeSelection.now());
+      final confirmed = await _pumpOverlay(
+        tester,
+        selection: TimeSelection(
+          dateTime: DateTime(2026, 9, 24, 9, 15),
+          isArriveBy: false,
+        ),
+      );
 
       await tapLabel(tester, 'Open calendar');
       await tapLabel(tester, 'Next month');
@@ -277,6 +317,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('20 Nov'), findsOneWidget);
+      await _tap(tester, 'Confirm');
+      expect(confirmed.single.dateTime, DateTime(2026, 11, 20, 9, 15));
     });
 
     testWidgets('the calendar button closes it again', (tester) async {
