@@ -21,7 +21,7 @@ import '../widgets/app_page_scaffold.dart';
 import '../widgets/buttons/heart_button.dart';
 import '../widgets/buttons/pill_button.dart';
 import '../widgets/edit_favorite_overlay.dart';
-import 'favourites_map_screen.dart';
+import 'map_place_picker/map_place_picker_screen.dart';
 import '../theme/app_text.dart';
 
 /// Picks a place, full screen.
@@ -404,25 +404,33 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
     widget.onPicked(suggestion);
   }
 
+  /// What the map would show: the results listed now, if any.
+  List<TransitousLocationSuggestion> get _mapResults =>
+      _hasTyped && _query.length >= 3 ? _suggestions : const [];
+
+  /// The map offers the results listed, where there are any, and any point
+  /// where a point will do.
+  bool get _canOfferMap => !_stopsOnly || _mapResults.isNotEmpty;
+
   Future<void> _pickOnMap() async {
-    final picked = await Navigator.of(context).push<FavoritePlace>(
-      CustomPageRoute(
-        child: MapPlacePickerScreen.pick(
-          title: widget.mapPickerTitle,
-          confirmLabel: widget.mapPickerConfirmLabel,
-        ),
-      ),
-    );
+    final results = _mapResults;
+    final picked = await Navigator.of(context)
+        .push<TransitousLocationSuggestion>(
+          CustomPageRoute(
+            child: MapPlacePickerScreen.pick(
+              title: results.isEmpty
+                  ? widget.mapPickerTitle
+                  : 'Results for “$_query”',
+              confirmLabel: widget.mapPickerConfirmLabel,
+              results: results,
+              origin: widget.placeBias,
+              // A point is not a stop, so a timetable is not offered one.
+              allowsPoint: !_stopsOnly,
+            ),
+          ),
+        );
     if (!mounted || picked == null) return;
-    _pick(
-      TransitousLocationSuggestion(
-        id: 'map-${picked.lat}-${picked.lon}',
-        name: picked.name,
-        lat: picked.lat,
-        lon: picked.lon,
-        type: 'PLACE',
-      ),
-    );
+    _pick(picked);
   }
 
   /// Keeps the place, or lets it go, without picking it.
@@ -518,8 +526,11 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
           child: _buildSearchField(context),
         ),
         Expanded(child: _buildResults(context)),
-        // A point is not a stop, so a timetable search is not offered one.
-        if (!_stopsOnly) _MapActionBar(onTap: _pickOnMap),
+        if (_canOfferMap)
+          _MapActionBar(
+            showsResults: _mapResults.isNotEmpty,
+            onTap: _pickOnMap,
+          ),
       ],
     );
   }
@@ -1012,12 +1023,17 @@ class _ShowMoreRow extends StatelessWidget {
   }
 }
 
-/// The way to the map, pinned under the list: some places are easier to
-/// point at than to name.
+/// The way to the map, pinned under the list: to see the results where
+/// they are, or to point at a place easier shown than named.
 class _MapActionBar extends StatelessWidget {
-  const _MapActionBar({required this.onTap});
+  const _MapActionBar({required this.showsResults, required this.onTap});
 
+  /// Whether the map opens on the results listed, or to point anywhere.
+  final bool showsResults;
   final VoidCallback onTap;
+
+  String get _label =>
+      showsResults ? 'Show results on map' : 'Pick a point on the map';
 
   @override
   Widget build(BuildContext context) {
@@ -1031,7 +1047,7 @@ class _MapActionBar extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
         child: Semantics(
           button: true,
-          label: 'Pick a point on the map',
+          label: _label,
           excludeSemantics: true,
           child: PillButton(
             onTap: onTap,
@@ -1047,7 +1063,7 @@ class _MapActionBar extends StatelessWidget {
                 const SizedBox(width: 10),
                 Flexible(
                   child: Text(
-                    'Pick a point on the map',
+                    _label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

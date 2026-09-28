@@ -16,7 +16,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 import 'package:transportia/api/transitous_client.dart';
 import 'package:transportia/models/my_location.dart';
 import 'package:transportia/models/transitous/enums.dart';
-import 'package:transportia/screens/favourites_map_screen.dart';
+import 'package:transportia/screens/map_place_picker/map_place_picker_screen.dart';
 import 'package:transportia/screens/location_search_screen.dart';
 import 'package:transportia/services/favorites_service.dart';
 import 'package:transportia/models/saved_place.dart';
@@ -250,6 +250,61 @@ void main() {
 
     expect(find.byIcon(LucideIcons.x), findsOne);
     expect(find.bySemanticsLabel('Pick a point on the map'), findsOne);
+  });
+
+  group('the map with results', () {
+    setUp(() {
+      TransitousClient.instance = TransitousClient(
+        httpClient: MockClient(
+          (_) async => http.Response(
+            File('test/fixtures/transitous/geocode.json').readAsStringSync(),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          ),
+        ),
+      );
+    });
+    tearDown(() => TransitousClient.instance = TransitousClient());
+
+    Future<void> search(WidgetTester tester) async {
+      await tester.enterText(find.byType(EditableText), 'Alexanderplatz');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('once there are results, the map shows them', (tester) async {
+      await _pump(tester, placeBias: const LatLng(52.52, 13.405));
+      await search(tester);
+
+      expect(find.bySemanticsLabel('Pick a point on the map'), findsNothing);
+      await tester.tap(find.bySemanticsLabel('Show results on map'));
+      await tester.pumpAndSettle();
+
+      final picker = tester.widget<MapPlacePickerScreen>(
+        find.byType(MapPlacePickerScreen),
+      );
+      expect(picker.title, 'Results for “Alexanderplatz”');
+      expect(picker.results, isNotEmpty);
+      expect(picker.results.first.name, 'Berlin Alexanderplatz');
+      expect(picker.origin, const LatLng(52.52, 13.405));
+      expect(picker.allowsPoint, isTrue);
+    });
+
+    testWidgets('a timetable gets the map only for its results', (
+      tester,
+    ) async {
+      await _pump(tester, type: 'STOP');
+      expect(find.bySemanticsLabel('Pick a point on the map'), findsNothing);
+
+      await search(tester);
+      await tester.tap(find.bySemanticsLabel('Show results on map'));
+      await tester.pumpAndSettle();
+
+      final picker = tester.widget<MapPlacePickerScreen>(
+        find.byType(MapPlacePickerScreen),
+      );
+      expect(picker.allowsPoint, isFalse);
+    });
   });
 
   group('show more', () {
