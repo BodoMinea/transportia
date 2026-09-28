@@ -19,6 +19,7 @@ import '../utils/list_reorder.dart';
 import '../utils/place_icons.dart';
 import '../widgets/app_page_scaffold.dart';
 import '../widgets/buttons/heart_button.dart';
+import '../widgets/buttons/pill_button.dart';
 import '../widgets/edit_favorite_overlay.dart';
 import 'favourites_map_screen.dart';
 import '../theme/app_text.dart';
@@ -38,6 +39,9 @@ const Duration _kSearchDebounce = Duration(milliseconds: 220);
 /// before its menu opens instead. The lift itself takes a long press; this is
 /// the "even longer" on top, so a rider who meant to drag has started moving.
 const Duration _kHoldPastLiftToEdit = Duration(milliseconds: 500);
+
+/// The most results "Show more" asks for; the public server answers 100.
+const int _kMaxResults = 100;
 
 class LocationSearchScreen extends StatelessWidget {
   const LocationSearchScreen({
@@ -166,6 +170,14 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
   bool _isFetching = false;
   Timer? _debounce;
 
+  /// How many results the current query asks for; grows by a page each time
+  /// the rider asks for more.
+  int _numResults = TransitousGeocodeService.pageSize;
+
+  /// The last answer filled the page it was asked for, so more may exist.
+  bool _mayHaveMore = false;
+  bool _isLoadingMore = false;
+
   /// Guards against an earlier, slower search overwriting a later one.
   int _requestId = 0;
 
@@ -265,6 +277,9 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
       setState(() => _hasTyped = true);
     }
     _debounce?.cancel();
+    _numResults = TransitousGeocodeService.pageSize;
+    _mayHaveMore = false;
+    _isLoadingMore = false;
     final query = _query;
 
     // A pasted coordinate is already an answer; there is nothing to look up.
@@ -293,24 +308,43 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
 
   Future<void> _search(String query) async {
     final requestId = ++_requestId;
+    final numResults = _numResults;
     try {
-      final results = await TransitousGeocodeService.fetchSuggestions(
+      final page = await TransitousGeocodeService.fetchSuggestionPage(
         text: query,
         placeBias: widget.placeBias,
         type: widget.type,
+        numResults: numResults,
       );
       if (!mounted || requestId != _requestId) return;
       setState(() {
-        _suggestions = _prioritiseRecents(results);
+        _suggestions = _prioritiseRecents(page.suggestions);
+        _mayHaveMore = page.isFull && numResults < _kMaxResults;
         _isFetching = false;
+        _isLoadingMore = false;
       });
     } catch (_) {
       if (!mounted || requestId != _requestId) return;
       setState(() {
-        _suggestions = const [];
+        // A failed "more" keeps what is listed: the server may cap results
+        // below what was asked, and the first page is still right.
+        if (!_isLoadingMore) _suggestions = const [];
+        _mayHaveMore = false;
         _isFetching = false;
+        _isLoadingMore = false;
       });
     }
+  }
+
+  /// Asks again for a page more. MOTIS has no offset, but a larger request
+  /// answers the same order with more appended, so the list only grows.
+  void _loadMore() {
+    if (_isLoadingMore || !_mayHaveMore) return;
+    setState(() {
+      _isLoadingMore = true;
+      _numResults += TransitousGeocodeService.pageSize;
+    });
+    unawaited(_search(_query));
   }
 
   /// Hoists places this rider has picked before, most-used first.
@@ -484,6 +518,8 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
           child: _buildSearchField(context),
         ),
         Expanded(child: _buildResults(context)),
+        // A point is not a stop, so a timetable search is not offered one.
+        if (!_stopsOnly) _MapActionBar(onTap: _pickOnMap),
       ],
     );
   }
@@ -522,7 +558,7 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
               behavior: HitTestBehavior.opaque,
               onTap: _controller.clear,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.fromLTRB(8, 10, 14, 10),
                 child: Icon(
                   LucideIcons.x,
                   size: 16,
@@ -530,22 +566,6 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
                 ),
               ),
             ),
-          // Some places are easier to point at than to name — but a point is
-          // not a stop, so a timetable search is not offered one.
-          if (!_stopsOnly)
-            Semantics(
-              button: true,
-              label: 'Pick a point on the map',
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _pickOnMap,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 10, 14, 10),
-                  child: Icon(LucideIcons.mapPlus, size: 20, color: accent),
-                ),
-              ),
-            ),
-          if (_stopsOnly) const SizedBox(width: 4),
         ],
       ),
       textInputAction: TextInputAction.search,
@@ -569,8 +589,11 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
     final homeCountry = View.of(context).platformDispatcher.locale.countryCode;
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-      itemCount: _suggestions.length,
+      itemCount: _suggestions.length + (_mayHaveMore ? 1 : 0),
       itemBuilder: (context, index) {
+        if (index == _suggestions.length) {
+          return _ShowMoreRow(isLoading: _isLoadingMore, onTap: _loadMore);
+        }
         final suggestion = _suggestions[index];
         return _buildPlaceRow(
           suggestion,
@@ -942,6 +965,100 @@ class _ResultRow extends StatelessWidget {
               ),
               ?trailing,
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The last row of a result list that filled its page.
+class _ShowMoreRow extends StatelessWidget {
+  const _ShowMoreRow({required this.isLoading, required this.onTap});
+
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppColors.accentOf(context);
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: isLoading ? null : onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                isLoading ? 'Loading…' : 'Show more results',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: accent,
+                ),
+              ),
+              if (!isLoading) ...[
+                const SizedBox(width: 6),
+                Icon(LucideIcons.chevronDown, size: 18, color: accent),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The way to the map, pinned under the list: some places are easier to
+/// point at than to name.
+class _MapActionBar extends StatelessWidget {
+  const _MapActionBar({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppColors.accentOf(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        border: Border(top: BorderSide(color: AppColors.hairline)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Semantics(
+          button: true,
+          label: 'Pick a point on the map',
+          excludeSemantics: true,
+          child: PillButton(
+            onTap: onTap,
+            restingColor: accent.withValues(alpha: 0.12),
+            pressedColor: accent.withValues(alpha: 0.18),
+            borderColor: const Color(0x00000000),
+            borderRadius: const BorderRadius.all(Radius.circular(14)),
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(LucideIcons.map, size: 20, color: accent),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    'Pick a point on the map',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: accent,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

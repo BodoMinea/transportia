@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
@@ -147,6 +148,12 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
+/// The result list's scroller; the field has one of its own.
+final _resultList = find.descendant(
+  of: find.byType(ListView),
+  matching: find.byType(Scrollable),
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -219,24 +226,23 @@ void main() {
     expect(find.text('Add Favourite'), findsNothing);
   });
 
-  testWidgets('the map sits in the search field, as its one icon', (
+  testWidgets('the map is a button under the list, not an icon in the field', (
     tester,
   ) async {
-    // It used to be a boxed button beside the field; the search screen's own
-    // map button went, so this is the one way left to point at a place.
+    // A small icon in the field was easy to miss; it is the way to answer
+    // with a point, so it gets a whole row.
     await _pump(tester);
 
     final field = find.byType(CupertinoTextField);
     expect(
       find.descendant(of: field, matching: find.byIcon(LucideIcons.mapPlus)),
-      findsOne,
+      findsNothing,
     );
-    expect(find.byIcon(LucideIcons.mapPlus), findsOne);
+    final button = tester.getRect(find.text('Pick a point on the map'));
+    expect(button.top, greaterThan(tester.getRect(field).bottom));
   });
 
-  testWidgets('clearing the query sits beside the map, not instead of it', (
-    tester,
-  ) async {
+  testWidgets('clearing the query leaves the map on offer', (tester) async {
     await _pump(tester);
 
     await tester.enterText(find.byType(CupertinoTextField), 'Al');
@@ -244,6 +250,126 @@ void main() {
 
     expect(find.byIcon(LucideIcons.x), findsOne);
     expect(find.bySemanticsLabel('Pick a point on the map'), findsOne);
+  });
+
+  group('show more', () {
+    late List<Uri> requests;
+
+    /// Answers [available] distinct places, or as many as were asked for.
+    void serve(int available, {bool failAfterFirst = false}) {
+      requests = [];
+      TransitousClient.instance = TransitousClient(
+        httpClient: MockClient((request) async {
+          requests.add(request.url);
+          if (failAfterFirst && requests.length > 1) {
+            return http.Response('{"error":"too many"}', 400);
+          }
+          final asked = int.parse(request.url.queryParameters['numResults']!);
+          final count = asked < available ? asked : available;
+          return http.Response(
+            jsonEncode([
+              for (var i = 0; i < count; i++)
+                {
+                  'type': 'PLACE',
+                  'name': 'Lidl $i',
+                  'id': 'node/[$i]',
+                  'lat': 52.5 + i * 0.01,
+                  'lon': 13.4,
+                  'score': 0,
+                  'areas': const [],
+                  'tokens': const [],
+                },
+            ]),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+    }
+
+    tearDown(() => TransitousClient.instance = TransitousClient());
+
+    Future<void> search(WidgetTester tester) async {
+      await tester.enterText(find.byType(EditableText), 'Lidl');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> tapMore(WidgetTester tester) async {
+      await tester.scrollUntilVisible(
+        find.text('Show more results'),
+        200,
+        scrollable: _resultList,
+      );
+      // A tap on a list still coasting only stops it.
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Show more results'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a full page offers more, and more asks a page more', (
+      tester,
+    ) async {
+      serve(100);
+      await _pump(tester);
+      await search(tester);
+
+      expect(requests.single.queryParameters['numResults'], '20');
+      await tapMore(tester);
+
+      expect(requests.last.queryParameters['numResults'], '40');
+      expect(requests.last.queryParameters['text'], 'Lidl');
+      await tester.scrollUntilVisible(
+        find.text('Lidl 39'),
+        200,
+        scrollable: _resultList,
+      );
+      expect(find.text('Lidl 39'), findsOne);
+    });
+
+    testWidgets('a short page is all there is', (tester) async {
+      serve(12);
+      await _pump(tester);
+      await search(tester);
+
+      expect(find.text('Show more results', skipOffstage: false), findsNothing);
+    });
+
+    testWidgets('stops offering at a hundred', (tester) async {
+      serve(1000);
+      await _pump(tester);
+      await search(tester);
+      for (var i = 0; i < 4; i++) {
+        await tapMore(tester);
+      }
+
+      expect(requests.last.queryParameters['numResults'], '100');
+      expect(find.text('Show more results', skipOffstage: false), findsNothing);
+    });
+
+    testWidgets('a failed "more" keeps what is listed', (tester) async {
+      serve(100, failAfterFirst: true);
+      await _pump(tester);
+      await search(tester);
+      await tapMore(tester);
+
+      // The list is lazy: its last row is the one still built down here.
+      expect(find.text('Lidl 19', skipOffstage: false), findsOne);
+      expect(find.text('Show more results', skipOffstage: false), findsNothing);
+    });
+
+    testWidgets('a new query starts from one page again', (tester) async {
+      serve(100);
+      await _pump(tester);
+      await search(tester);
+      await tapMore(tester);
+
+      await tester.enterText(find.byType(EditableText), 'Aldi');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(requests.last.queryParameters['numResults'], '20');
+    });
   });
 
   testWidgets('a favourite offers its actions from the dots and a long hold', (

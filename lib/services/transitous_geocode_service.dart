@@ -166,10 +166,29 @@ class TransitousGeocodeService {
     LatLng? placeBias,
     String? type,
     int numResults = pageSize,
+  }) async => (await fetchSuggestionPage(
+    text: text,
+    placeBias: placeBias,
+    type: type,
+    numResults: numResults,
+  )).suggestions;
+
+  /// [fetchSuggestions], and whether MOTIS answered all [numResults] it was
+  /// asked for — when it did, asking for more may find more. Counted before
+  /// duplicates are merged, so a page thinned by merging still counts full.
+  static Future<({List<TransitousLocationSuggestion> suggestions, bool isFull})>
+  fetchSuggestionPage({
+    required String text,
+    LatLng? placeBias,
+    String? type,
+    int numResults = pageSize,
   }) async {
     final query = text.trim();
     if (query.length < 3) {
-      return const <TransitousLocationSuggestion>[];
+      return (
+        suggestions: const <TransitousLocationSuggestion>[],
+        isFull: false,
+      );
     }
 
     final List<Match> matches;
@@ -197,7 +216,7 @@ class TransitousGeocodeService {
       if (suggestions.any(suggestion.isSamePlaceAs)) continue;
       suggestions.add(suggestion);
     }
-    return suggestions;
+    return (suggestions: suggestions, isFull: matches.length >= numResults);
   }
 
   static Future<TransitousLocationSuggestion?> reverseGeocode({
