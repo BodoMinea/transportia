@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/semantics.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
@@ -13,7 +15,10 @@ import '../theme/app_colors.dart';
 import '../utils/custom_page_route.dart';
 import '../utils/favorite_icons.dart';
 import '../utils/haptics.dart';
+import '../utils/list_reorder.dart';
+import '../utils/place_icons.dart';
 import '../widgets/app_page_scaffold.dart';
+import '../widgets/buttons/heart_button.dart';
 import '../widgets/edit_favorite_overlay.dart';
 import 'favourites_map_screen.dart';
 import '../theme/app_text.dart';
@@ -28,6 +33,11 @@ import '../theme/app_text.dart';
 /// answer. A screen that is itself a place search renders the body directly.
 /// How long typing has to pause before a place lookup is sent.
 const Duration _kSearchDebounce = Duration(milliseconds: 220);
+
+/// How long a favourite, once lifted to be dragged, has to be held still
+/// before its menu opens instead. The lift itself takes a long press; this is
+/// the "even longer" on top, so a rider who meant to drag has started moving.
+const Duration _kHoldPastLiftToEdit = Duration(milliseconds: 500);
 
 class LocationSearchScreen extends StatelessWidget {
   const LocationSearchScreen({
@@ -143,6 +153,17 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
   /// Guards against an earlier, slower search overwriting a later one.
   int _requestId = 0;
 
+  final GlobalKey<SliverReorderableListState> _favouriteListKey = GlobalKey();
+
+  /// Opens the menu of a favourite held still after it lifted; cancelled once
+  /// the press moves, because then it is a drag.
+  Timer? _holdToEdit;
+
+  /// Where the current press went down, to tell a held favourite from a
+  /// dragged one. Measured above the list: the lifted row is rebuilt in the
+  /// overlay, and what was under the finger is gone.
+  Offset? _pressOrigin;
+
   @override
   void initState() {
     super.initState();
@@ -164,6 +185,7 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _holdToEdit?.cancel();
     FavoritesService.favoritesListenable.removeListener(_onFavouritesChanged);
     _controller.dispose();
     _focus.dispose();
@@ -191,19 +213,32 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
   /// Being a station is not enough — a departure board needs the feed's id for
   /// it, and places kept before the app recorded that have none. Offering one
   /// would fail the moment it was tapped.
-  List<FavoritePlace> get _offerableFavourites => _stopsOnly
-      ? _favourites.where((f) => f.hasTimetable).toList()
-      : _favourites;
+  List<FavoritePlace> get _offerableFavourites =>
+      _favourites.where(_lists).toList();
 
-  List<SavedPlace> get _offerableRecents => _stopsOnly
-      ? _recents
-            .where(
-              (p) =>
-                  p.type.toUpperCase() == 'STOP' &&
-                  (p.stopId?.isNotEmpty ?? false),
-            )
-            .toList()
-      : _recents;
+  /// Whether Favourites here shows [favourite].
+  bool _lists(FavoritePlace favourite) => !_stopsOnly || favourite.hasTimetable;
+
+  /// A kept place is listed once, under Favourites, rather than again among
+  /// the recents — but only when Favourites is actually showing it.
+  List<SavedPlace> get _offerableRecents {
+    final listedFavourites = widget.showFavourites
+        ? {for (final favourite in _offerableFavourites) favourite.id}
+        : const <String>{};
+    return [
+      for (final place in _recents)
+        if (_canOffer(place) &&
+            !listedFavourites.contains(
+              FavoritesService.findAt(place.lat, place.lon)?.id,
+            ))
+          place,
+    ];
+  }
+
+  bool _canOffer(SavedPlace place) =>
+      !_stopsOnly ||
+      (place.type.toUpperCase() == 'STOP' &&
+          (place.stopId?.isNotEmpty ?? false));
 
   String get _query => _controller.text.trim();
 
@@ -303,22 +338,13 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
       widget.onPicked(suggestion);
       return;
     }
-    unawaited(
-      SavedPlacesService.savePlaces(
-        bucket: widget.bucket,
-        places: SavedPlacesService.applySelection(
-          _recents,
-          SavedPlace(
-            name: suggestion.name,
-            type: suggestion.type,
-            lat: suggestion.lat,
-            lon: suggestion.lon,
-            importance: SavedPlacesService.initialImportance,
-            city: suggestion.defaultArea,
-            countryCode: suggestion.country,
-          ),
-        ),
-      ),
+    // The only place a pick is remembered, and with everything the list
+    // needs of it later: the stop id that opens a departure board, and the
+    // modes that draw its icon.
+    _recents = SavedPlacesService.recordSelection(
+      bucket: widget.bucket,
+      places: _recents,
+      suggestion: suggestion,
     );
     widget.onPicked(suggestion);
   }
@@ -342,6 +368,75 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
         type: 'PLACE',
       ),
     );
+  }
+
+  /// Keeps the place, or lets it go, without picking it.
+  ///
+  /// A stop is kept with the icon the lists draw it with, so it looks the
+  /// same above the line as it did below.
+  Future<void> _toggleFavourite(TransitousLocationSuggestion place) async {
+    final existing = FavoritesService.findAt(place.lat, place.lon);
+    // Kept before stop ids were recorded, so the timetable cannot list it and
+    // its heart reads empty here. Keeping it again fills the id in, which
+    // lists it, rather than letting go of a place kept elsewhere.
+    if (existing != null &&
+        !_lists(existing) &&
+        (place.stopId?.isNotEmpty ?? false)) {
+      await FavoritesService.updateFavorite(
+        existing.copyWith(type: place.type, stopId: place.stopId),
+      );
+      return;
+    }
+    final isStop = place.type.toUpperCase() == 'STOP';
+    await FavoritesService.toggleAt(
+      name: place.name,
+      lat: place.lat,
+      lon: place.lon,
+      type: place.type,
+      stopId: place.stopId,
+      iconName: isStop ? favoriteIconNameForStop(place.modes) : null,
+    );
+  }
+
+  /// Full only when the place is among the favourites this search lists, so
+  /// a filled heart always has a row under Favourites to answer to.
+  Widget _heartFor(TransitousLocationSuggestion place) {
+    final favourite = FavoritesService.findAt(place.lat, place.lon);
+    return HeartButton(
+      kept: favourite != null && _lists(favourite),
+      placeName: place.name,
+      onPressed: () => unawaited(_toggleFavourite(place)),
+    );
+  }
+
+  /// The row reports the slot before the moved one is taken out.
+  void _reorderFavourites(List<FavoritePlace> shown, int from, int slot) {
+    final to = slot > from ? slot - 1 : slot;
+    final reordered = reorderWithin(_favourites, shown, from, to);
+    setState(() => _favourites = reordered);
+    unawaited(FavoritesService.reorderFavorites(reordered));
+  }
+
+  void _onFavouriteLifted(FavoritePlace favourite) {
+    Haptics.lightTick();
+    _holdToEdit?.cancel();
+    _holdToEdit = Timer(_kHoldPastLiftToEdit, () {
+      _holdToEdit = null;
+      // Held, not dragged: it goes back down and its menu opens instead.
+      _favouriteListKey.currentState?.cancelReorder();
+      unawaited(_editFavourite(favourite));
+    });
+  }
+
+  void _endHold() {
+    _holdToEdit?.cancel();
+    _holdToEdit = null;
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    final origin = _pressOrigin;
+    if (origin == null || _holdToEdit == null) return;
+    if ((event.position - origin).distance > kTouchSlop) _endHold();
   }
 
   Future<void> _editFavourite(FavoritePlace favourite) async {
@@ -440,55 +535,7 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
     final query = _query;
     final hasFullQuery = query.length >= 3;
 
-    if (!hasFullQuery) {
-      final favourites = _offerableFavourites;
-      final recents = _offerableRecents;
-      return ListView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-        children: [
-          if (widget.showMyLocation) ...[
-            _ResultRow(
-              icon: LucideIcons.locateFixed,
-              title: myLocationName,
-              subtitle: 'Where you are now',
-              onTap: () => _pick(myLocationSuggestion),
-            ),
-            const SizedBox(height: 8),
-          ],
-          if (widget.showFavourites) ...[
-            _sectionHeading('Favourites'),
-            if (favourites.isEmpty)
-              // Two different emptinesses: nothing kept at all, or things
-              // kept that this search cannot use.
-              _hint(
-                _stopsOnly && _favourites.isNotEmpty
-                    ? 'None of your favourites is a stop.'
-                    : 'Tap the heart on a place to keep it here.',
-              )
-            else
-              for (final favourite in favourites)
-                _FavouriteRow(
-                  favourite: favourite,
-                  onTap: () => _pick(_favouriteToSuggestion(favourite)),
-                  onEdit: () => unawaited(_editFavourite(favourite)),
-                ),
-            const SizedBox(height: 20),
-          ],
-          if (recents.isNotEmpty) ...[
-            _sectionHeading('Recent'),
-            for (final place in recents.take(8))
-              _ResultRow(
-                icon: _iconForType(place.type),
-                title: place.name,
-                subtitle: place.city,
-                onTap: () => _pick(_savedToSuggestion(place)),
-              ),
-          ],
-          if (favourites.isEmpty && recents.isEmpty && !widget.showFavourites)
-            _hint('Start typing to search for a place.'),
-        ],
-      );
-    }
+    if (!hasFullQuery) return _buildLists();
 
     if (_isFetching && _suggestions.isEmpty) {
       return _hint('Searching…');
@@ -502,15 +549,164 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
       itemCount: _suggestions.length,
       itemBuilder: (context, index) {
         final suggestion = _suggestions[index];
-        return _ResultRow(
-          icon: _iconForType(suggestion.type),
-          title: suggestion.name,
+        return _buildPlaceRow(
+          suggestion,
           subtitle: suggestion.defaultArea ?? suggestion.country,
-          onTap: () => _pick(suggestion),
         );
       },
     );
   }
+
+  /// What is offered before anything is typed: where you are, the
+  /// favourites, which can be dragged into order, and the recents.
+  Widget _buildLists() {
+    final favourites = _offerableFavourites;
+    final recents = _offerableRecents;
+    final listsFavourites = widget.showFavourites && favourites.isNotEmpty;
+    return Listener(
+      onPointerDown: (event) => _pressOrigin = event.position,
+      onPointerMove: _onPointerMove,
+      onPointerUp: (_) => _endHold(),
+      onPointerCancel: (_) => _endHold(),
+      child: CustomScrollView(
+        slivers: [
+          _inGutter(
+            SliverList.list(
+              children: [
+                if (widget.showMyLocation) ...[
+                  _ResultRow(
+                    icon: LucideIcons.locateFixed,
+                    title: myLocationName,
+                    subtitle: 'Where you are now',
+                    onTap: () => _pick(myLocationSuggestion),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                if (widget.showFavourites) ...[
+                  _sectionHeading('Favourites'),
+                  // Two different emptinesses: nothing kept at all, or
+                  // things kept that this search cannot use.
+                  if (favourites.isEmpty)
+                    _hint(
+                      _stopsOnly && _favourites.isNotEmpty
+                          ? 'None of your favourites is a stop.'
+                          : 'Tap the heart on a place to keep it here.',
+                    ),
+                ],
+              ],
+            ),
+          ),
+          if (listsFavourites) _inGutter(_buildFavouriteList(favourites)),
+          _inGutter(
+            SliverList.list(
+              children: [
+                if (widget.showFavourites) const SizedBox(height: 20),
+                if (recents.isNotEmpty) ...[
+                  _sectionHeading('Recent'),
+                  for (final place in recents.take(8))
+                    _buildPlaceRow(
+                      _savedToSuggestion(place),
+                      subtitle: place.city,
+                    ),
+                ],
+                if (favourites.isEmpty &&
+                    recents.isEmpty &&
+                    !widget.showFavourites)
+                  _hint('Start typing to search for a place.'),
+              ],
+            ),
+            bottom: 32,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _inGutter(Widget sliver, {double bottom = 0}) => SliverPadding(
+    padding: EdgeInsets.fromLTRB(20, 0, 20, bottom),
+    sliver: sliver,
+  );
+
+  /// Long press lifts a favourite to drag it; holding it still for longer
+  /// opens its menu instead.
+  Widget _buildFavouriteList(List<FavoritePlace> favourites) =>
+      SliverReorderableList(
+        key: _favouriteListKey,
+        itemCount: favourites.length,
+        onReorderStart: (index) => _onFavouriteLifted(favourites[index]),
+        onReorderEnd: (_) => _endHold(),
+        onReorder: (from, slot) => _reorderFavourites(favourites, from, slot),
+        proxyDecorator: _liftedFavourite,
+        itemBuilder: (context, index) {
+          final favourite = favourites[index];
+          return ReorderableDelayedDragStartListener(
+            key: ValueKey(favourite.id),
+            index: index,
+            child: _FavouriteRow(
+              favourite: favourite,
+              onTap: () => _pick(_favouriteToSuggestion(favourite)),
+              onEdit: () => unawaited(_editFavourite(favourite)),
+              onMoveUp: index == 0
+                  ? null
+                  : () => _reorderFavourites(favourites, index, index - 1),
+              onMoveDown: index == favourites.length - 1
+                  ? null
+                  : () => _reorderFavourites(favourites, index, index + 2),
+            ),
+          );
+        },
+      );
+
+  /// The row in hand: a card under it, wider than the row so its icon does
+  /// not sit on the edge, rising as it lifts.
+  Widget _liftedFavourite(
+    Widget child,
+    int index,
+    Animation<double> animation,
+  ) => AnimatedBuilder(
+    animation: animation,
+    child: child,
+    builder: (context, child) {
+      final lift = Curves.easeOut.transform(animation.value);
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: -12,
+            right: -12,
+            top: 0,
+            bottom: 0,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.black.withValues(alpha: 0.14 * lift),
+                    blurRadius: 18 * lift,
+                    offset: Offset(0, 6 * lift),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          child!,
+        ],
+      );
+    },
+  );
+
+  /// A place that can be picked or kept: a recent, or a search result.
+  Widget _buildPlaceRow(
+    TransitousLocationSuggestion place, {
+    String? subtitle,
+  }) => _ResultRow(
+    icon: placeIcon(place.type, modes: place.modes),
+    title: place.name,
+    subtitle: subtitle,
+    onTap: () => _pick(place),
+    trailing: _heartFor(place),
+  );
 
   Widget _sectionHeading(String text) => Padding(
     padding: const EdgeInsets.only(top: 8, bottom: 8),
@@ -548,13 +744,8 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
         lat: place.lat,
         lon: place.lon,
         type: place.type,
+        modes: place.modes,
       );
-
-  static IconData _iconForType(String type) => switch (type.toUpperCase()) {
-    'STOP' => LucideIcons.busFront,
-    'ADDRESS' => LucideIcons.locateFixed,
-    _ => LucideIcons.mapPin,
-  };
 }
 
 /// A kept place, with its name and the two ways to rename it.
@@ -563,11 +754,18 @@ class _FavouriteRow extends StatelessWidget {
     required this.favourite,
     required this.onTap,
     required this.onEdit,
+    this.onMoveUp,
+    this.onMoveDown,
   });
 
   final FavoritePlace favourite;
   final VoidCallback onTap;
   final VoidCallback onEdit;
+
+  /// The drag's order, for a screen reader, which cannot drag. Null at the
+  /// end the row cannot move past.
+  final VoidCallback? onMoveUp;
+  final VoidCallback? onMoveDown;
 
   @override
   Widget build(BuildContext context) {
@@ -575,12 +773,17 @@ class _FavouriteRow extends StatelessWidget {
     return Semantics(
       button: true,
       label: favourite.displayName,
+      customSemanticsActions: {
+        if (onMoveUp case final moveUp?)
+          const CustomSemanticsAction(label: 'Move up'): moveUp,
+        if (onMoveDown case final moveDown?)
+          const CustomSemanticsAction(label: 'Move down'): moveDown,
+      },
+      // A long press is the list's: it lifts the row to drag, and held
+      // longer opens the same menu as the three dots.
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        // The same actions from a long press, since a three-dot button is a
-        // small target and holding the row is the habit people already have.
-        onLongPress: onEdit,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: Row(
@@ -657,12 +860,14 @@ class _ResultRow extends StatelessWidget {
     required this.title,
     required this.onTap,
     this.subtitle,
+    this.trailing,
   });
 
   final IconData icon;
   final String title;
   final String? subtitle;
   final VoidCallback onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -709,6 +914,7 @@ class _ResultRow extends StatelessWidget {
                   ],
                 ),
               ),
+              ?trailing,
             ],
           ),
         ),

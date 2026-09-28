@@ -31,10 +31,6 @@ class RouteFieldBox extends StatefulWidget {
     this.footer,
     required this.onFromPressed,
     required this.onToPressed,
-    this.isFromFavourite = false,
-    this.isToFavourite = false,
-    required this.onToggleFromFavourite,
-    required this.onToggleToFavourite,
   });
 
   final TextEditingController fromController;
@@ -61,11 +57,6 @@ class RouteFieldBox extends StatefulWidget {
   /// place is a search with favourites and recents of its own.
   final VoidCallback onFromPressed;
   final VoidCallback onToPressed;
-
-  final bool isFromFavourite;
-  final bool isToFavourite;
-  final VoidCallback onToggleFromFavourite;
-  final VoidCallback onToggleToFavourite;
 
   @override
   State<RouteFieldBox> createState() => _RouteFieldBoxState();
@@ -129,22 +120,7 @@ class _RouteFieldBoxState extends State<RouteFieldBox> {
               railFrom: _EndpointRailFrom.marker,
               markerCenter: _EndpointRow.originMarkerCenter,
               marker: _EndpointDot(color: widget.accentColor, filled: false),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Where you are is not a place to keep.
-                  if (!_originIsMyLocation) ...[
-                    _HeartButton(
-                      filled: widget.isFromFavourite,
-                      accentColor: widget.accentColor,
-                      label: 'origin',
-                      onPressed: widget.onToggleFromFavourite,
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  _buildSwapButton(context),
-                ],
-              ),
+              trailing: _buildSwapButton(context),
               child: Padding(
                 padding: const EdgeInsets.only(top: 4, bottom: 6),
                 child: Column(
@@ -180,12 +156,6 @@ class _RouteFieldBoxState extends State<RouteFieldBox> {
                 color: widget.accentColor,
                 filled: true,
                 size: 11,
-              ),
-              trailing: _HeartButton(
-                filled: widget.isToFavourite,
-                accentColor: widget.accentColor,
-                label: 'destination',
-                onPressed: widget.onToggleToFavourite,
               ),
               child: SizedBox(
                 height: _EndpointRow.prominentMarkerCenter * 2,
@@ -406,60 +376,6 @@ class _EndpointDot extends StatelessWidget {
         color: filled ? color : AppColors.white,
         shape: BoxShape.circle,
         border: Border.all(color: color, width: 2),
-      ),
-    );
-  }
-}
-
-/// Keeps a place, or lets it go.
-class _HeartButton extends StatelessWidget {
-  const _HeartButton({
-    required this.filled,
-    required this.accentColor,
-    required this.label,
-    required this.onPressed,
-  });
-
-  final bool filled;
-  final Color accentColor;
-
-  /// Names which end this is, for a screen reader.
-  final String label;
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      toggled: filled,
-      label: filled ? 'Remove $label from favourites' : 'Keep $label',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          Haptics.lightTick();
-          onPressed();
-        },
-        // Lucide has no solid heart, so kept reads as accent on a tint and
-        // unkept as a pale outline on nothing.
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: filled
-                ? accentColor.withValues(alpha: 0.16)
-                : const Color(0x00000000),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            LucideIcons.heart,
-            size: 16,
-            color: filled
-                ? accentColor
-                : AppColors.black.withValues(alpha: 0.3),
-          ),
-        ),
       ),
     );
   }

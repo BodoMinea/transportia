@@ -1,4 +1,5 @@
 import '../utils/geo_utils.dart';
+import 'transitous/enums.dart';
 
 class SavedPlace {
   const SavedPlace({
@@ -10,6 +11,7 @@ class SavedPlace {
     this.stopId,
     this.city,
     this.countryCode,
+    this.modes = const [],
   });
 
   static const int keyPrecision = 5;
@@ -32,6 +34,12 @@ class SavedPlace {
   final String? city;
   final String? countryCode;
 
+  /// What serves this stop, so a list can show a train station as one.
+  ///
+  /// Empty for anywhere that is not a stop, and for stops saved before it was
+  /// recorded; like [stopId], not part of [key].
+  final List<TransitMode> modes;
+
   String get key => buildKey(type: type, lat: lat, lon: lon);
 
   SavedPlace copyWith({
@@ -43,6 +51,7 @@ class SavedPlace {
     String? stopId,
     String? city,
     String? countryCode,
+    List<TransitMode>? modes,
   }) {
     return SavedPlace(
       name: name ?? this.name,
@@ -53,6 +62,7 @@ class SavedPlace {
       stopId: stopId ?? this.stopId,
       city: city ?? this.city,
       countryCode: countryCode ?? this.countryCode,
+      modes: modes ?? this.modes,
     );
   }
 
@@ -66,6 +76,7 @@ class SavedPlace {
       'stopId': stopId,
       'city': city,
       'countryCode': countryCode,
+      'modes': [for (final mode in modes) mode.wireName],
     };
   }
 
@@ -80,6 +91,13 @@ class SavedPlace {
     final city = json['city'] as String?;
     final countryCode =
         (json['countryCode'] as String?) ?? (json['country'] as String?);
+    final rawModes = json['modes'];
+    // A mode this build does not know is dropped rather than failing the
+    // place: the icon falls back, the recent stays.
+    final modes = [
+      if (rawModes is List)
+        for (final raw in rawModes) ?TransitMode.fromWire(raw),
+    ];
     if (name == null || name.trim().isEmpty) return null;
     if (type == null || type.trim().isEmpty) return null;
     if (lat == null || lon == null) return null;
@@ -92,6 +110,7 @@ class SavedPlace {
       stopId: stopId,
       city: city,
       countryCode: countryCode,
+      modes: modes,
     );
   }
 

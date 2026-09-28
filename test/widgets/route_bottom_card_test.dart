@@ -76,6 +76,17 @@ void main() {
     });
   });
 
+  testWidgets('the ends are not kept from here', (tester) async {
+    // Keeping a place happens where it is found, in the place search; a
+    // heart here was a second way to do it with less to go on.
+    await _pump(
+      tester,
+      const BottomCardHost(from: 'Hauptbahnhof', to: 'Ostkreuz'),
+    );
+
+    expect(find.byIcon(LucideIcons.heart), findsNothing);
+  });
+
   group('the destination', () {
     testWidgets('asks to be searched for while empty', (tester) async {
       await _pump(tester, const BottomCardHost());

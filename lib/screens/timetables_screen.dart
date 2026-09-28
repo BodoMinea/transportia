@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_colors.dart';
 import '../models/time_selection.dart';
-import '../models/saved_place.dart';
 import '../models/stop_time.dart';
 import '../screens/connection_info_screen.dart';
 import '../services/location_service.dart';
@@ -49,7 +48,6 @@ class _TimetablesScreenState extends State<TimetablesScreen> {
   TimeSelection _timeSelection = TimeSelection.now();
   bool _showTimeSelectionOverlay = false;
   bool _suppressTimeSelectionReopen = false;
-  List<SavedPlace> _savedTimetablePlaces = [];
   LatLng? _lastUserLatLng;
   TransitousLocationSuggestion? _selectedStop;
   List<StopTime>? _stopTimes;
@@ -91,7 +89,6 @@ class _TimetablesScreenState extends State<TimetablesScreen> {
     _searchController.addListener(_onSearchTextChanged);
     _searchFocus.addListener(_onFocusChanged);
     _checkLocationPermission();
-    unawaited(_loadSavedTimetablePlaces());
     unawaited(FavoritesService.getFavorites());
     _applyInitialStop(widget.initialStop);
   }
@@ -142,28 +139,22 @@ class _TimetablesScreenState extends State<TimetablesScreen> {
     );
   }
 
-  Future<void> _loadSavedTimetablePlaces() async {
-    final places = await SavedPlacesService.loadPlaces(
-      bucket: SavedPlacesBucket.timetable,
-    );
-    if (!mounted) return;
-    setState(() {
-      _savedTimetablePlaces = places;
-    });
-  }
-
+  /// Remembers a stop resolved from typed text, which never went through the
+  /// search's list and so was not remembered there.
+  ///
+  /// Read fresh rather than kept: the search records its own picks, and a
+  /// copy taken when this screen opened would write over them.
   Future<void> _recordSavedPlace(
     TransitousLocationSuggestion suggestion,
   ) async {
-    final updated = SavedPlacesService.recordSelection(
+    final places = await SavedPlacesService.loadPlaces(
       bucket: SavedPlacesBucket.timetable,
-      places: _savedTimetablePlaces,
+    );
+    SavedPlacesService.recordSelection(
+      bucket: SavedPlacesBucket.timetable,
+      places: places,
       suggestion: suggestion,
     );
-    if (!mounted) return;
-    setState(() {
-      _savedTimetablePlaces = updated;
-    });
   }
 
   void _onFocusChanged() {
@@ -265,8 +256,9 @@ class _TimetablesScreenState extends State<TimetablesScreen> {
 
   /// Picking a stop is the whole question this screen asks, so answering it
   /// opens the departure board rather than filling a field and waiting.
+  ///
+  /// The search has already remembered the pick.
   void _onSuggestionSelected(TransitousLocationSuggestion suggestion) {
-    unawaited(_recordSavedPlace(suggestion));
     setState(() {
       _searchController.text = suggestion.name;
       _selectedStop = suggestion;
@@ -321,6 +313,18 @@ class _TimetablesScreenState extends State<TimetablesScreen> {
       // and a late answer would put the departures back over a screen the
       // rider has already left.
       if (!mounted || _selectedStop?.stopId != stopId) return;
+
+      // The board says what calls here, which a stop picked from the recents
+      // list, or remembered before modes were, has no other way to learn.
+      if (response.place?.modes case final modes?) {
+        unawaited(
+          SavedPlacesService.recordModes(
+            bucket: SavedPlacesBucket.timetable,
+            stopId: stopId,
+            modes: modes,
+          ),
+        );
+      }
 
       setState(() {
         _stopTimes = deduplicateStopTimes(response.stopTimes);
@@ -889,5 +893,3 @@ class _TimeWithDelayText extends StatelessWidget {
     );
   }
 }
-
-/// One remembered stop, offered before anything has been searched for.

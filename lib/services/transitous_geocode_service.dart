@@ -30,6 +30,7 @@ class TransitousLocationSuggestion {
     this.stopId,
     this.country,
     this.defaultArea,
+    this.modes = const [],
     this.match,
   });
 
@@ -52,6 +53,12 @@ class TransitousLocationSuggestion {
   final String type;
   final String? country;
   final String? defaultArea;
+
+  /// What serves this stop, as the geocoder or a remembered place said.
+  ///
+  /// Empty for anywhere that is not a stop, and for stops remembered before
+  /// the app recorded it.
+  final List<TransitMode> modes;
 
   /// Null for suggestions built from a raw coordinate.
   final Match? match;
@@ -113,6 +120,7 @@ class TransitousLocationSuggestion {
       type: type,
       country: match.country,
       defaultArea: _defaultAreaOf(match),
+      modes: match.modes,
       match: match,
     );
   }

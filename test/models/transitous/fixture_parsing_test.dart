@@ -9,6 +9,7 @@ import 'package:transportia/models/transitous/reachability.dart';
 import 'package:transportia/models/transitous/rentals_response.dart';
 import 'package:transportia/models/transitous/route_info.dart';
 import 'package:transportia/models/transitous/server_config.dart';
+import 'package:transportia/services/transitous_geocode_service.dart';
 
 /// Parses the real captures in `test/fixtures/transitous/`.
 ///
@@ -115,6 +116,16 @@ void main() {
       expect(stopTime.tripId, isNotEmpty);
       expect(response.nextPageCursor, isNotNull);
     });
+
+    test('names what serves the stop the board is for', () {
+      // How a recent picked from the list, which never asks the geocoder
+      // again, learns its icon.
+      final response = StopTimesResponse.fromJson(
+        _fixture('stoptimes.json') as Map<String, dynamic>,
+      );
+
+      expect(response.place?.modes, contains(TransitMode.subway));
+    });
   });
 
   group('stop.json', () {
@@ -147,6 +158,28 @@ void main() {
       expect(match.tokens, isNotEmpty);
       // The distinguishing area is what a suggestion row should show.
       expect(match.displayArea, isNotNull);
+    });
+
+    test('a stop suggestion carries what serves it', () {
+      // What the recents draw a station by.
+      final suggestions = [
+        for (final m in _fixture('geocode.json') as List)
+          TransitousLocationSuggestion.fromMatch(
+            Match.fromJson(m as Map<String, dynamic>),
+          ),
+      ];
+
+      final alex = suggestions.firstWhere(
+        (s) => s.stopId == 'de-DELFI_de:11000:900100003',
+      );
+      expect(alex.modes, [
+        TransitMode.regionalRail,
+        TransitMode.suburban,
+        TransitMode.subway,
+        TransitMode.bus,
+      ]);
+      // A place is served by nothing.
+      expect(suggestions.firstWhere((s) => s.type == 'PLACE').modes, isEmpty);
     });
 
     test('reverse geocode results parse the same way', () {
