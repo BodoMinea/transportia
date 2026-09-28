@@ -194,6 +194,8 @@ class _TransitOptionsViaStopsCardState
   }
 
   Widget _buildSearchField(Color accent) {
+    // A stop abroad says so; one at home does not repeat the country.
+    final homeCountry = View.of(context).platformDispatcher.locale.countryCode;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -267,9 +269,10 @@ class _TransitOptionsViaStopsCardState
                             color: AppColors.black,
                           ),
                         ),
-                        if (suggestion.subtitle.isNotEmpty)
+                        if (suggestion.caption(homeCountry: homeCountry)
+                            case final caption when caption.isNotEmpty)
                           Text(
-                            suggestion.subtitle,
+                            caption,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(

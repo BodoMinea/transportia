@@ -5,6 +5,7 @@ import '../api/transitous_api_exception.dart';
 import '../models/transitous/enums.dart';
 import '../models/transitous/match.dart';
 import '../utils/geo_utils.dart';
+import '../utils/place_caption.dart';
 
 class TransitousGeocodeException implements Exception {
   TransitousGeocodeException(this.message, [this.cause]);
@@ -76,16 +77,21 @@ class TransitousLocationSuggestion {
       coordinateDistanceInMeters(lat, lon, other.lat, other.lon) <
           _samePlaceMetres;
 
-  String get subtitle {
-    final pieces = <String>[];
-    if (defaultArea != null && defaultArea!.isNotEmpty) {
-      pieces.add(defaultArea!);
-    }
-    if (country != null && country!.isNotEmpty) {
-      pieces.add(country!);
-    }
-    return pieces.join(' • ');
-  }
+  /// The line under the name in a result list; see [placeCaption].
+  ///
+  /// [from] is where the rider is, for the distance; [homeCountry] the
+  /// country the phone is set to, which is not spelt out.
+  String caption({LatLng? from, String? homeCountry}) => placeCaption(
+    name: name,
+    district: match?.districtArea?.name,
+    city: match?.cityArea?.name ?? defaultArea,
+    region: match?.regionArea?.name,
+    country: country,
+    homeCountry: homeCountry,
+    metres: from == null
+        ? null
+        : coordinateDistanceInMeters(from.latitude, from.longitude, lat, lon),
+  );
 
   factory TransitousLocationSuggestion.fromLatLon(LatLng latLng) {
     return TransitousLocationSuggestion(

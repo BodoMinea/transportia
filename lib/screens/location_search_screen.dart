@@ -544,6 +544,8 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
       return _hint('No matches for “$query”.');
     }
 
+    // A place abroad says so; one at home does not repeat the country.
+    final homeCountry = View.of(context).platformDispatcher.locale.countryCode;
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       itemCount: _suggestions.length,
@@ -551,7 +553,10 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
         final suggestion = _suggestions[index];
         return _buildPlaceRow(
           suggestion,
-          subtitle: suggestion.defaultArea ?? suggestion.country,
+          subtitle: suggestion.caption(
+            from: widget.placeBias,
+            homeCountry: homeCountry,
+          ),
         );
       },
     );

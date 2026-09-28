@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
@@ -105,6 +106,7 @@ Future<void> _pump(
   bool showMyLocation = false,
   String? type,
   SavedPlacesBucket bucket = SavedPlacesBucket.search,
+  LatLng? placeBias,
 }) async {
   tester.view.physicalSize = const Size(420, 1000);
   tester.view.devicePixelRatio = 1;
@@ -134,6 +136,7 @@ Future<void> _pump(
             bucket: bucket,
             type: type,
             showMyLocation: showMyLocation,
+            placeBias: placeBias,
           ),
         ),
       ),
@@ -513,6 +516,21 @@ void main() {
 
         expect(FavoritesService.favoritesListenable.value, isEmpty);
         expect(find.bySemanticsLabel('Keep $name'), findsOne);
+      });
+
+      testWidgets('results say how far, where, and which country abroad', (
+        tester,
+      ) async {
+        // A phone set to Germany, standing near Alexanderplatz.
+        tester.platformDispatcher.localeTestValue = const Locale('de', 'DE');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+        await _pump(tester, placeBias: const LatLng(52.52, 13.405));
+        await search(tester);
+
+        // Berlin Alexanderplatz, 736 m off: at home, so no country.
+        expect(find.text('740 m · Mitte, Berlin'), findsWidgets);
+        // Chur has no district; its canton stands in, and it is abroad.
+        expect(find.textContaining('Grisons, CH'), findsOne);
       });
 
       testWidgets('results are drawn by what serves them', (tester) async {
