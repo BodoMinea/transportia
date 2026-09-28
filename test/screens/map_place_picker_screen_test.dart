@@ -166,7 +166,7 @@ void main() {
       // Close enough to tell the stations apart, not a street.
       expect(camera.zoom, inInclusiveRange(11, 12));
       expect(
-        find.text('Tap a result, or anywhere to pick that point'),
+        find.text('Tap a result for details, or anywhere to pick that point'),
         findsOne,
       );
     });
@@ -200,7 +200,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Tap a result to pick it'), findsOne);
+      expect(find.text('Tap a result for details'), findsOne);
       await _tapMap(tester, const LatLng(48.9, 2.4));
 
       expect(find.text('Selected Location'), findsNothing);

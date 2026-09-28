@@ -377,4 +377,36 @@ void main() {
       expect(c.longitude, closeTo(13.4, 1e-9));
     });
   });
+
+  group('centerPlacing', () {
+    const berlin = LatLng(52.52, 13.405);
+
+    for (final bearing in [0.0, 90.0, 217.0]) {
+      test('draws the place where asked, facing $bearing°', () {
+        const offset = Offset(0, -150);
+        final center = centerPlacing(
+          berlin,
+          offset: offset,
+          zoom: 14,
+          bearing: bearing,
+        );
+        final view = MapView(
+          center: center,
+          zoom: 14,
+          size: const Size(400, 700),
+          bearing: bearing,
+        );
+
+        final drawn = view.project(berlin);
+        expect(drawn.dx, closeTo(200, 1e-6));
+        expect(drawn.dy, closeTo(350 - 150, 1e-6));
+      });
+    }
+
+    test('no offset is the place itself', () {
+      final c = centerPlacing(berlin, offset: Offset.zero, zoom: 10);
+      expect(c.latitude, closeTo(berlin.latitude, 1e-9));
+      expect(c.longitude, closeTo(berlin.longitude, 1e-9));
+    });
+  });
 }

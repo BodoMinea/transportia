@@ -98,6 +98,25 @@ LatLng boundsCenter(LatLngBounds bounds) => LatLng(
   (bounds.southwest.longitude + bounds.northeast.longitude) / 2,
 );
 
+/// The camera centre that draws [p] at [offset] from the middle of the map,
+/// at [zoom] and [bearing]: to keep what a sheet is about in the part of
+/// the map the sheet leaves.
+LatLng centerPlacing(
+  LatLng p, {
+  required Offset offset,
+  required double zoom,
+  double bearing = 0,
+}) {
+  final scale = math.pow(2, zoom).toDouble();
+  // [MapView.project] turns by minus the bearing; undoing it turns by plus.
+  final b = bearing * math.pi / 180;
+  final turned = Offset(
+    offset.dx * math.cos(b) - offset.dy * math.sin(b),
+    offset.dx * math.sin(b) + offset.dy * math.cos(b),
+  );
+  return fromWorldPoint(worldPoint(p) - turned / scale);
+}
+
 /// A camera to move to: the centre and zoom that show what was asked.
 typedef MapFrame = ({LatLng center, double zoom});
 

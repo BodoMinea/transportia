@@ -123,4 +123,25 @@ void main() {
       expect(formatPlaceDistance(877600), '878 km');
     });
   });
+
+  group('categoryLabel', () {
+    test('drops the number MOTIS appends', () {
+      expect(categoryLabel('supermarket_14'), 'Supermarket');
+      expect(categoryLabel('fast_food_16'), 'Fast food');
+    });
+
+    test('a category without a number reads the same', () {
+      expect(categoryLabel('square'), 'Square');
+      expect(categoryLabel('parking_entrance_14'), 'Parking entrance');
+    });
+
+    test('a settlement, none and nothing are no label', () {
+      expect(categoryLabel('place_6'), isNull);
+      expect(categoryLabel('place_capital_8'), isNull);
+      expect(categoryLabel('none'), isNull);
+      expect(categoryLabel(''), isNull);
+      expect(categoryLabel('_14'), isNull);
+      expect(categoryLabel(null), isNull);
+    });
+  });
 }

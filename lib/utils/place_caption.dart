@@ -59,3 +59,22 @@ String formatPlaceDistance(double metres) {
   if (tenths < oneDecimalBelowKm) return '${tenths.toStringAsFixed(1)} km';
   return '${km.round()} km';
 }
+
+/// What kind of place MOTIS says this is, for a person: `supermarket_14`
+/// reads "Supermarket", `fast_food_16` "Fast food".
+///
+/// MOTIS appends a number to its category names; the rest is OSM's tag
+/// value. Null for a settlement, whose name already says what it is, and
+/// for `none` or nothing.
+String? categoryLabel(String? category) {
+  if (category == null) return null;
+  final words = category
+      .replaceFirst(RegExp(r'_\d+$'), '')
+      .split('_')
+      .where((w) => w.isNotEmpty)
+      .toList();
+  if (words.isEmpty) return null;
+  if (words.first == 'place' || words.first == 'none') return null;
+  final text = words.join(' ');
+  return text[0].toUpperCase() + text.substring(1);
+}

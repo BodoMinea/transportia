@@ -1,22 +1,29 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/nominatim_client.dart';
+import '../../models/place_details.dart';
+import '../../models/stop_time.dart';
+import '../../models/transit_mode_group.dart';
+import '../../providers/backend_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/favorites_service.dart';
 import '../../services/location_service.dart';
+import '../../services/stop_times_service.dart';
 import '../../services/transitous_geocode_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text.dart';
 import '../../utils/geo_utils.dart';
 import '../../utils/map_framing.dart';
 import '../../utils/map_marker_utils.dart';
+import '../../utils/place_caption.dart';
 import '../../widgets/custom_app_bar.dart';
-import '../../widgets/skeletons/skeleton_shimmer.dart';
+import '../../widgets/map/place_details_sheet.dart';
 import '../../widgets/validation_toast.dart';
 import 'edge_tabs.dart';
 import 'result_pins.dart';
@@ -86,10 +93,14 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   /// and the tabs pointing past them.
   static const EdgeInsets _kFramePadding = EdgeInsets.fromLTRB(48, 48, 48, 96);
 
-  /// How much of the map's foot a card covers, for the tabs to stop above:
-  /// the hint, or the selection card over it.
+  /// How much of the map's foot the hint covers, for the tabs to stop above.
   static const double _kHintFootprint = 84;
-  static const double _kCardFootprint = 196;
+
+  /// The sheet may take this share of the map; its facts scroll beyond it.
+  static const double _kSheetMaxShare = 0.62;
+
+  /// Departures a stop's sheet lists: the next few, not a timetable.
+  static const int _kSheetDepartures = 5;
 
   static const double _kPinSize = 36;
 
@@ -107,6 +118,17 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   LatLng? _point;
   String? _pointName;
   bool _isLoadingName = false;
+
+  PlaceDetails? _details;
+  List<StopTime>? _departures;
+  bool _isLoadingExtras = false;
+
+  /// Guards against an earlier, slower lookup filling a later selection.
+  int _selectionToken = 0;
+
+  /// The details sheet's height, once laid out: the tabs stop above it,
+  /// and a selection is centred in what it leaves.
+  double _sheetHeight = 0;
 
   List<TransitousLocationSuggestion> get _results => widget.results;
   bool get _hasSelection => _selectedResult != null || _point != null;
@@ -167,19 +189,29 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
                 0,
                 0,
                 size.width,
-                size.height -
-                    (_hasSelection ? _kCardFootprint : _kHintFootprint),
+                size.height - (_hasSelection ? _sheetHeight : _kHintFootprint),
               ),
               taken: _pinRects(camera, size),
               onTap: _showMembers,
             ),
           ),
-        Positioned(
-          left: 20,
-          right: 20,
-          bottom: 20,
-          child: _hasSelection ? _buildSelectionCard() : _buildHint(),
-        ),
+        if (_hasSelection)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: size.height * _kSheetMaxShare,
+              ),
+              child: _ReportsHeight(
+                onHeight: _onSheetHeight,
+                child: _buildSheet(),
+              ),
+            ),
+          )
+        else
+          Positioned(left: 20, right: 20, bottom: 20, child: _buildHint()),
       ],
     );
   }
@@ -329,14 +361,22 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   }
 
   void _selectResult(int rank) {
+    final result = _results[rank];
+    final token = ++_selectionToken;
     setState(() {
       _selectedResult = rank;
       _point = null;
+      _details = null;
+      _departures = null;
+      _isLoadingExtras = true;
     });
     unawaited(_refreshPins());
+    unawaited(_loadExtras(result, token));
+    _centreOnceSheetIsUp(result.latLng);
   }
 
   void _selectPoint(LatLng coordinates) {
+    ++_selectionToken;
     setState(() {
       _selectedResult = null;
       _point = coordinates;
@@ -345,14 +385,79 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
     });
     unawaited(_refreshPins());
     unawaited(_fetchPointName(coordinates));
+    _centreOnceSheetIsUp(coordinates);
   }
 
   void _clearSelection() {
+    ++_selectionToken;
     setState(() {
       _selectedResult = null;
       _point = null;
+      _sheetHeight = 0;
     });
     unawaited(_refreshPins());
+  }
+
+  /// A stop's next departures, or what OpenStreetMap knows of a place.
+  Future<void> _loadExtras(
+    TransitousLocationSuggestion result,
+    int token,
+  ) async {
+    PlaceDetails? details;
+    List<StopTime>? departures;
+    final stopId = result.stopId;
+    if (stopId != null) {
+      try {
+        departures = (await StopTimesService.fetchStopTimes(
+          stopId: stopId,
+          n: _kSheetDepartures,
+        )).stopTimes;
+      } catch (_) {
+        departures = const [];
+      }
+    } else {
+      final backend = BackendProvider.instance;
+      final ref = OsmRef.parse(result.match?.id ?? '');
+      if (ref != null && (backend?.placeDetailsEnabled ?? true)) {
+        details = await NominatimClient.instance.lookup(
+          ref,
+          host: backend?.nominatimHost ?? NominatimClient.defaultHost,
+        );
+      }
+    }
+    if (!mounted || token != _selectionToken) return;
+    setState(() {
+      _details = details;
+      _departures = departures;
+      _isLoadingExtras = false;
+    });
+  }
+
+  void _onSheetHeight(double height) {
+    if (!mounted || height == _sheetHeight) return;
+    setState(() => _sheetHeight = height);
+  }
+
+  /// Pans [p] to the middle of the map the sheet leaves, after the sheet
+  /// has been laid out and its height is known.
+  void _centreOnceSheetIsUp(LatLng p) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final controller = _controller;
+      final camera = _camera ?? _initialCamera(_mapSize ?? Size.zero);
+      if (!mounted || controller == null) return;
+      final centre = centerPlacing(
+        p,
+        offset: Offset(0, -_sheetHeight / 2),
+        zoom: camera.zoom,
+        bearing: camera.bearing,
+      );
+      unawaited(
+        controller.animateCamera(
+          CameraUpdate.newLatLng(centre),
+          duration: _kFlyDuration,
+        ),
+      );
+    });
   }
 
   /// Moves the map to show every result a tab stands for: the rider asked
@@ -500,8 +605,9 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
 
   Widget _buildHint() {
     final text = switch ((_results.isNotEmpty, widget.allowsPoint)) {
-      (true, true) => 'Tap a result, or anywhere to pick that point',
-      (true, false) => 'Tap a result to pick it',
+      (true, true) =>
+        'Tap a result for details, or anywhere to pick that point',
+      (true, false) => 'Tap a result for details',
       (false, _) => 'Tap anywhere to pick that point',
     };
     return Container(
@@ -521,151 +627,95 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
     );
   }
 
-  Widget _buildSelectionCard() {
+  Widget _buildSheet() {
     final rank = _selectedResult;
-    final result = rank == null ? null : _results[rank];
-    final title = result?.name ?? _pointName ?? 'Unknown location';
-    final caption = result?.caption(
+    final homeCountry = View.of(context).platformDispatcher.locale.countryCode;
+    if (rank == null) {
+      final point = _point!;
+      final origin = widget.origin;
+      return PlaceDetailsSheet.point(
+        title: _pointName ?? _coordinateName(point),
+        caption: origin == null
+            ? null
+            : formatPlaceDistance(
+                coordinateDistanceInMeters(
+                  origin.latitude,
+                  origin.longitude,
+                  point.latitude,
+                  point.longitude,
+                ),
+              ),
+        isLoading: _isLoadingName,
+        confirmLabel: widget.confirmLabel,
+        onConfirm: _confirm,
+        onCancel: _clearSelection,
+      );
+    }
+    final result = _results[rank];
+    final caption = result.caption(
       from: widget.origin,
-      homeCountry: View.of(context).platformDispatcher.locale.countryCode,
+      homeCountry: homeCountry,
     );
-    final isLoading = result == null && _isLoadingName;
-    final icon = result == null ? LucideIcons.mapPin : resultPinIcon(result);
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.hairline),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 24,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.accentOf(context).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 24, color: AppColors.accentOf(context)),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      result == null ? 'Selected Location' : 'Search result',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.black.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    isLoading
-                        ? SkeletonShimmer(
-                            baseColor: const Color(0xFFE2E7EC),
-                            highlightColor: const Color(0xFFF7F9FC),
-                            period: const Duration(milliseconds: 1100),
-                            child: Container(
-                              width: double.infinity,
-                              height: 18,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE2E7EC),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                          )
-                        : Text(
-                            title,
-                            style: AppText.heading,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                    if (caption != null && caption.isNotEmpty)
-                      Text(
-                        caption,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.black.withValues(alpha: 0.55),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: _clearSelection,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: AppColors.black.withValues(alpha: 0.03),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.hairline),
-                    ),
-                    child: Center(
-                      child: Text(
-                        'Cancel',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.black,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: GestureDetector(
-                  onTap: isLoading ? null : _confirm,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: isLoading
-                          ? AppColors.hairline
-                          : AppColors.accentOf(context),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(
-                        widget.confirmLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.solidWhite,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+    if (result.stopId != null) {
+      return PlaceDetailsSheet.stop(
+        icon: resultPinIcon(result),
+        title: result.name,
+        caption: caption,
+        modes: result.modes.isEmpty
+            ? null
+            : {
+                for (final m in result.modes) TransitModeGroup.modeLabel(m),
+              }.join(' · '),
+        departures: _departures,
+        isLoading: _isLoadingExtras,
+        confirmLabel: widget.confirmLabel,
+        onConfirm: _confirm,
+        onCancel: _clearSelection,
+      );
+    }
+    return PlaceDetailsSheet.place(
+      icon: resultPinIcon(result),
+      title: result.name,
+      caption: caption,
+      category: categoryLabel(result.match?.category),
+      details: _details,
+      isLoading: _isLoadingExtras,
+      confirmLabel: widget.confirmLabel,
+      onConfirm: _confirm,
+      onCancel: _clearSelection,
     );
+  }
+}
+
+/// Tells [onHeight] how tall its child was laid out, after the frame.
+class _ReportsHeight extends SingleChildRenderObjectWidget {
+  const _ReportsHeight({required this.onHeight, super.child});
+
+  final ValueChanged<double> onHeight;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderReportsHeight(onHeight);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderReportsHeight renderObject,
+  ) => renderObject.onHeight = onHeight;
+}
+
+class _RenderReportsHeight extends RenderProxyBox {
+  _RenderReportsHeight(this.onHeight);
+
+  ValueChanged<double> onHeight;
+  double? _reported;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final height = size.height;
+    if (height == _reported) return;
+    _reported = height;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onHeight(height));
   }
 }
