@@ -36,10 +36,6 @@ class BottomCard extends StatefulWidget {
     required this.onAddViaStop,
     required this.onFromPressed,
     required this.onToPressed,
-    required this.isFromFavourite,
-    required this.isToFavourite,
-    required this.onToggleFromFavourite,
-    required this.onToggleToFavourite,
     required this.routeFieldLink,
     required this.fromLoading,
     required this.toLoading,
@@ -81,11 +77,6 @@ class BottomCard extends StatefulWidget {
   /// Opens the place picker for one end or the other.
   final VoidCallback onFromPressed;
   final VoidCallback onToPressed;
-
-  final bool isFromFavourite;
-  final bool isToFavourite;
-  final VoidCallback onToggleFromFavourite;
-  final VoidCallback onToggleToFavourite;
 
   final LayerLink routeFieldLink;
   final bool fromLoading;
@@ -236,10 +227,6 @@ class _BottomCardState extends State<BottomCard> {
                             footer: _buildSearchButton(),
                             onFromPressed: widget.onFromPressed,
                             onToPressed: widget.onToPressed,
-                            isFromFavourite: widget.isFromFavourite,
-                            isToFavourite: widget.isToFavourite,
-                            onToggleFromFavourite: widget.onToggleFromFavourite,
-                            onToggleToFavourite: widget.onToggleToFavourite,
                           ),
                         ),
                       ),

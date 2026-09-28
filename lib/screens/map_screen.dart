@@ -29,7 +29,6 @@ import '../screens/location_settings_screen.dart';
 import '../screens/timetables_screen.dart';
 import '../screens/location_search_screen.dart';
 import '../screens/via_stops_screen.dart';
-import '../services/favorites_service.dart';
 import '../services/location_service.dart';
 import '../services/plan_request.dart';
 import '../services/recent_trips_service.dart';
@@ -262,7 +261,6 @@ class _MapScreenState extends State<MapScreen>
     // One may already be waiting: the shell brings this tab forward in the
     // same frame the request is made, so the listener can miss it.
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyPlanRequest());
-    FavoritesService.favoritesListenable.addListener(_onFavoritesChanged);
     ServerCapabilitiesService.capabilities.addListener(_onCapabilitiesChanged);
     _snapCtrl = AnimationController(
       vsync: this,
@@ -320,7 +318,6 @@ class _MapScreenState extends State<MapScreen>
     _fromCtrl.addListener(_handleFromTextChanged);
     _toCtrl.addListener(_handleToTextChanged);
     unawaited(_loadRecentTrips());
-    unawaited(FavoritesService.getFavorites());
   }
 
   Future<void> _initStartup() async {
@@ -405,7 +402,6 @@ class _MapScreenState extends State<MapScreen>
   @override
   void dispose() {
     PlanRequests.pending.removeListener(_applyPlanRequest);
-    FavoritesService.favoritesListenable.removeListener(_onFavoritesChanged);
     ServerCapabilitiesService.capabilities.removeListener(
       _onCapabilitiesChanged,
     );
@@ -427,12 +423,6 @@ class _MapScreenState extends State<MapScreen>
     unawaited(_removeRouteSymbols());
     super.dispose();
     _snapCtrl.dispose();
-  }
-
-  /// The hearts on the route card read the favourites directly, so a change
-  /// made elsewhere only needs a rebuild to show.
-  void _onFavoritesChanged() {
-    if (mounted) setState(() {});
   }
 
   void _maybeAttachActivateListener() {
@@ -1944,10 +1934,6 @@ class _MapScreenState extends State<MapScreen>
       onAddViaStop: _openViaStopPicker,
       onFromPressed: () => unawaited(_openLocationSearch(RouteFieldKind.from)),
       onToPressed: () => unawaited(_openLocationSearch(RouteFieldKind.to)),
-      isFromFavourite: _isFavourite(_fromSelection),
-      isToFavourite: _isFavourite(_toSelection),
-      onToggleFromFavourite: () => unawaited(_toggleFavourite(_fromSelection)),
-      onToggleToFavourite: () => unawaited(_toggleFavourite(_toSelection)),
       routeFieldLink: _routeFieldLink,
       fromLoading: _isReverseGeocodeLoading(RouteFieldKind.from),
       toLoading: _isReverseGeocodeLoading(RouteFieldKind.to),
@@ -2299,34 +2285,6 @@ class _MapScreenState extends State<MapScreen>
     if (_lastUserLatLng != null) return _lastUserLatLng;
     if (_startCam.target != _initCam.target) return _startCam.target;
     return null;
-  }
-
-  bool _isFavourite(TransitousLocationSuggestion? selection) =>
-      selection != null &&
-      FavoritesService.findAt(selection.lat, selection.lon) != null;
-
-  /// Keeps the place in a field, or lets it go.
-  ///
-  /// Nothing to keep until a place has actually been picked: the text alone
-  /// has no coordinates to store.
-  Future<void> _toggleFavourite(TransitousLocationSuggestion? selection) async {
-    if (selection == null) {
-      showValidationToast(context, 'Pick a place first');
-      return;
-    }
-    Haptics.lightTick();
-    final added = await FavoritesService.toggleAt(
-      name: selection.name,
-      lat: selection.lat,
-      lon: selection.lon,
-      type: selection.type,
-      stopId: selection.stopId,
-    );
-    if (!mounted) return;
-    showValidationToast(
-      context,
-      added == null ? 'Removed from favourites' : 'Kept ${selection.name}',
-    );
   }
 
   /// Opens the place picker for one of the two fields.

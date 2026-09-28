@@ -42,8 +42,11 @@ class FavoritePlace {
     this.label,
     this.type = 'PLACE',
     this.stopId,
-    this.iconName = 'mapPin',
+    this.iconName = defaultIconName,
   });
+
+  /// The icon a place is kept with until the rider picks one.
+  static const String defaultIconName = 'mapPin';
 
   bool get isStation => type.toUpperCase() == 'STOP';
 
@@ -107,7 +110,7 @@ class FavoritePlace {
       lat: (json['lat'] as num).toDouble(),
       lon: (json['lon'] as num).toDouble(),
       addedAt: DateTime.parse(json['addedAt'] as String),
-      iconName: json['iconName'] as String? ?? 'mapPin',
+      iconName: json['iconName'] as String? ?? defaultIconName,
     );
   }
 }
@@ -206,6 +209,7 @@ class FavoritesService {
     required double lon,
     String type = 'PLACE',
     String? stopId,
+    String? iconName,
   }) async {
     final existing = findAt(lat, lon);
     if (existing != null) {
@@ -219,6 +223,7 @@ class FavoritesService {
       lon: lon,
       type: type,
       stopId: stopId,
+      iconName: iconName ?? FavoritePlace.defaultIconName,
       addedAt: DateTime.now(),
     );
     await saveFavorite(place);
