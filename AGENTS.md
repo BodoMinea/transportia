@@ -84,8 +84,7 @@
 ## UI Changes & Screenshots
 - Any change the user can see gets screenshots of your work sent to the user: render them
   with `linux/drafting/`
-- For bigger redesignd, send drafts before writing tests or wiring it up; the
-  design usually moves once the user sees it.
+- For bigger redesignd, send drafts before writing tests or wiring it up; the design usually moves once the user sees it.
 
 ## Commit & Pull Request Guidelines
 - Commits: concise, imperative subject (e.g., “Improve welcome transition”).
