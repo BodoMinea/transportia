@@ -13,7 +13,9 @@ import '../theme/app_colors.dart';
 import '../utils/custom_page_route.dart';
 import '../utils/favorite_icons.dart';
 import '../utils/haptics.dart';
+import '../utils/place_icons.dart';
 import '../widgets/app_page_scaffold.dart';
+import '../widgets/buttons/heart_button.dart';
 import '../widgets/edit_favorite_overlay.dart';
 import 'favourites_map_screen.dart';
 import '../theme/app_text.dart';
@@ -195,15 +197,26 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
       ? _favourites.where((f) => f.hasTimetable).toList()
       : _favourites;
 
-  List<SavedPlace> get _offerableRecents => _stopsOnly
-      ? _recents
-            .where(
-              (p) =>
-                  p.type.toUpperCase() == 'STOP' &&
-                  (p.stopId?.isNotEmpty ?? false),
-            )
-            .toList()
-      : _recents;
+  /// A kept place is listed once, under Favourites, rather than again among
+  /// the recents — but only when Favourites is actually showing it.
+  List<SavedPlace> get _offerableRecents {
+    final listedFavourites = widget.showFavourites
+        ? {for (final favourite in _offerableFavourites) favourite.id}
+        : const <String>{};
+    return [
+      for (final place in _recents)
+        if (_canOffer(place) &&
+            !listedFavourites.contains(
+              FavoritesService.findAt(place.lat, place.lon)?.id,
+            ))
+          place,
+    ];
+  }
+
+  bool _canOffer(SavedPlace place) =>
+      !_stopsOnly ||
+      (place.type.toUpperCase() == 'STOP' &&
+          (place.stopId?.isNotEmpty ?? false));
 
   String get _query => _controller.text.trim();
 
@@ -303,22 +316,13 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
       widget.onPicked(suggestion);
       return;
     }
-    unawaited(
-      SavedPlacesService.savePlaces(
-        bucket: widget.bucket,
-        places: SavedPlacesService.applySelection(
-          _recents,
-          SavedPlace(
-            name: suggestion.name,
-            type: suggestion.type,
-            lat: suggestion.lat,
-            lon: suggestion.lon,
-            importance: SavedPlacesService.initialImportance,
-            city: suggestion.defaultArea,
-            countryCode: suggestion.country,
-          ),
-        ),
-      ),
+    // The only place a pick is remembered, and with everything the list
+    // needs of it later: the stop id that opens a departure board, and the
+    // modes that draw its icon.
+    _recents = SavedPlacesService.recordSelection(
+      bucket: widget.bucket,
+      places: _recents,
+      suggestion: suggestion,
     );
     widget.onPicked(suggestion);
   }
@@ -343,6 +347,23 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
       ),
     );
   }
+
+  /// Keeps the place, or lets it go, without picking it.
+  Future<void> _toggleFavourite(TransitousLocationSuggestion place) async {
+    await FavoritesService.toggleAt(
+      name: place.name,
+      lat: place.lat,
+      lon: place.lon,
+      type: place.type,
+      stopId: place.stopId,
+    );
+  }
+
+  Widget _heartFor(TransitousLocationSuggestion place) => HeartButton(
+    kept: FavoritesService.findAt(place.lat, place.lon) != null,
+    placeName: place.name,
+    onPressed: () => unawaited(_toggleFavourite(place)),
+  );
 
   Future<void> _editFavourite(FavoritePlace favourite) async {
     Haptics.lightTick();
@@ -477,12 +498,7 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
           if (recents.isNotEmpty) ...[
             _sectionHeading('Recent'),
             for (final place in recents.take(8))
-              _ResultRow(
-                icon: _iconForType(place.type),
-                title: place.name,
-                subtitle: place.city,
-                onTap: () => _pick(_savedToSuggestion(place)),
-              ),
+              _buildPlaceRow(_savedToSuggestion(place), subtitle: place.city),
           ],
           if (favourites.isEmpty && recents.isEmpty && !widget.showFavourites)
             _hint('Start typing to search for a place.'),
@@ -502,15 +518,25 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
       itemCount: _suggestions.length,
       itemBuilder: (context, index) {
         final suggestion = _suggestions[index];
-        return _ResultRow(
-          icon: _iconForType(suggestion.type),
-          title: suggestion.name,
+        return _buildPlaceRow(
+          suggestion,
           subtitle: suggestion.defaultArea ?? suggestion.country,
-          onTap: () => _pick(suggestion),
         );
       },
     );
   }
+
+  /// A place that can be picked or kept: a recent, or a search result.
+  Widget _buildPlaceRow(
+    TransitousLocationSuggestion place, {
+    String? subtitle,
+  }) => _ResultRow(
+    icon: placeIcon(place.type, modes: place.modes),
+    title: place.name,
+    subtitle: subtitle,
+    onTap: () => _pick(place),
+    trailing: _heartFor(place),
+  );
 
   Widget _sectionHeading(String text) => Padding(
     padding: const EdgeInsets.only(top: 8, bottom: 8),
@@ -548,13 +574,8 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
         lat: place.lat,
         lon: place.lon,
         type: place.type,
+        modes: place.modes,
       );
-
-  static IconData _iconForType(String type) => switch (type.toUpperCase()) {
-    'STOP' => LucideIcons.busFront,
-    'ADDRESS' => LucideIcons.locateFixed,
-    _ => LucideIcons.mapPin,
-  };
 }
 
 /// A kept place, with its name and the two ways to rename it.
@@ -657,12 +678,14 @@ class _ResultRow extends StatelessWidget {
     required this.title,
     required this.onTap,
     this.subtitle,
+    this.trailing,
   });
 
   final IconData icon;
   final String title;
   final String? subtitle;
   final VoidCallback onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -709,6 +732,7 @@ class _ResultRow extends StatelessWidget {
                   ],
                 ),
               ),
+              ?trailing,
             ],
           ),
         ),

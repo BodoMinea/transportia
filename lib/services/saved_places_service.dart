@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../constants/prefs_keys.dart';
 import '../models/saved_place.dart';
+import '../models/transitous/enums.dart';
 import 'transitous_geocode_service.dart';
 
 enum SavedPlacesBucket { search, timetable }
@@ -74,6 +76,9 @@ class SavedPlacesService {
             stopId: selected.stopId ?? place.stopId,
             city: selected.city ?? place.city,
             countryCode: selected.countryCode ?? place.countryCode,
+            // A pick from the recents list itself carries what was stored; a
+            // geocoder answer can say nothing for a stop that has modes.
+            modes: selected.modes.isNotEmpty ? selected.modes : place.modes,
           ),
         );
       } else {
@@ -116,10 +121,35 @@ class SavedPlacesService {
         stopId: suggestion.stopId,
         city: suggestion.defaultArea,
         countryCode: suggestion.country,
+        modes: suggestion.modes,
       ),
     );
     unawaited(savePlaces(bucket: bucket, places: updated));
     return updated;
+  }
+
+  /// Records what serves the stop with [stopId], wherever it is remembered.
+  ///
+  /// A departure board says which modes call at its stop, so opening one fills
+  /// in a recent that was stored before modes were, or picked from the recents
+  /// list, which never asks the geocoder again. Nothing is written when no
+  /// recent is that stop or it already says the same.
+  static Future<void> recordModes({
+    required SavedPlacesBucket bucket,
+    required String stopId,
+    required List<TransitMode> modes,
+  }) async {
+    if (modes.isEmpty) return;
+    final places = await loadPlaces(bucket: bucket);
+    var changed = false;
+    for (var i = 0; i < places.length; i++) {
+      final place = places[i];
+      if (place.stopId != stopId || listEquals(place.modes, modes)) continue;
+      places[i] = place.copyWith(modes: modes);
+      changed = true;
+    }
+    if (!changed) return;
+    await savePlaces(bucket: bucket, places: places);
   }
 
   static List<SavedPlace> _normalize(List<SavedPlace> places) {
