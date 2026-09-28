@@ -139,9 +139,25 @@ class LocationSearchBody extends StatefulWidget {
 }
 
 class _LocationSearchBodyState extends State<LocationSearchBody> {
-  late final TextEditingController _controller = TextEditingController(
-    text: widget.initialQuery,
-  );
+  // Opened on a filled field, the text is selected: typing replaces it, and
+  // nothing has to be cleared first to get back to the lists.
+  late final TextEditingController _controller =
+      TextEditingController.fromValue(
+        TextEditingValue(
+          text: widget.initialQuery,
+          selection: TextSelection(
+            baseOffset: 0,
+            extentOffset: widget.initialQuery.length,
+          ),
+        ),
+      );
+
+  /// False until the field holds something other than what it opened with.
+  ///
+  /// What a filled field opens with is the current answer, not a question:
+  /// searching it would hide My Location, favourites and recents behind
+  /// results for the place already chosen.
+  bool _hasTyped = false;
   final FocusNode _focus = FocusNode();
 
   List<TransitousLocationSuggestion> _suggestions = const [];
@@ -243,6 +259,11 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
   String get _query => _controller.text.trim();
 
   void _onQueryChanged() {
+    // Selection changes arrive here too; only a changed text is typing.
+    if (!_hasTyped) {
+      if (_controller.text == widget.initialQuery) return;
+      setState(() => _hasTyped = true);
+    }
     _debounce?.cancel();
     final query = _query;
 
@@ -535,7 +556,7 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
     final query = _query;
     final hasFullQuery = query.length >= 3;
 
-    if (!hasFullQuery) return _buildLists();
+    if (!_hasTyped || !hasFullQuery) return _buildLists();
 
     if (_isFetching && _suggestions.isEmpty) {
       return _hint('Searching…');

@@ -107,6 +107,7 @@ Future<void> _pump(
   String? type,
   SavedPlacesBucket bucket = SavedPlacesBucket.search,
   LatLng? placeBias,
+  String initialQuery = '',
 }) async {
   tester.view.physicalSize = const Size(420, 1000);
   tester.view.devicePixelRatio = 1;
@@ -137,6 +138,7 @@ Future<void> _pump(
             type: type,
             showMyLocation: showMyLocation,
             placeBias: placeBias,
+            initialQuery: initialQuery,
           ),
         ),
       ),
@@ -306,6 +308,67 @@ void main() {
     expect(stored.label, 'Work');
     expect(stored.iconName, 'train');
     expect(find.byIcon(LucideIcons.trainFront), findsOne);
+  });
+
+  group('opened on a filled field', () {
+    late List<Uri> requests;
+    setUp(() {
+      requests = [];
+      TransitousClient.instance = TransitousClient(
+        httpClient: MockClient((request) async {
+          requests.add(request.url);
+          return http.Response(
+            File('test/fixtures/transitous/geocode.json').readAsStringSync(),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+    });
+    tearDown(() => TransitousClient.instance = TransitousClient());
+
+    testWidgets('offers My Location, not results for the old answer', (
+      tester,
+    ) async {
+      // Changing a filled origin to where you are is two taps, not three.
+      await _pump(tester, showMyLocation: true, initialQuery: 'Berlin Hbf');
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text(myLocationName), findsOneWidget);
+      expect(requests, isEmpty);
+    });
+
+    testWidgets('selects the text, so typing replaces it', (tester) async {
+      await _pump(tester, initialQuery: 'Berlin Hbf');
+
+      final field = tester.widget<EditableText>(find.byType(EditableText));
+      expect(field.controller.selection.start, 0);
+      expect(field.controller.selection.end, 'Berlin Hbf'.length);
+    });
+
+    testWidgets('searches once something new is typed', (tester) async {
+      await _pump(tester, showMyLocation: true, initialQuery: 'Berlin Hbf');
+
+      await tester.enterText(find.byType(EditableText), 'Alexanderplatz');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(requests.single.queryParameters['text'], 'Alexanderplatz');
+      expect(find.text(myLocationName), findsNothing);
+      expect(find.text('S+U Alexanderplatz Bhf (Berlin)'), findsOne);
+    });
+
+    testWidgets('an empty field still searches the first query', (
+      tester,
+    ) async {
+      await _pump(tester);
+
+      await tester.enterText(find.byType(EditableText), 'Alexanderplatz');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(requests, hasLength(1));
+    });
   });
 
   testWidgets('My Location leads the list when it can answer', (tester) async {
