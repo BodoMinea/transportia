@@ -6,7 +6,8 @@
   - `lib/app.dart`: app shell, routing, locale setup.
   - `lib/environment.dart`: app-wide constants and API version resolution.
   - `lib/api/`: Transitous (MOTIS) client — endpoint registry, HTTP client,
-    query formatting. The only place that talks to `package:http`.
+    query formatting — and the Nominatim client for place details. The only
+    place that talks to `package:http`.
   - `lib/models/`: app-level models; `lib/models/transitous/` holds the
     response models mirroring the MOTIS schema.
   - `lib/screens/`: UI screens (e.g., `map_screen.dart`, `welcome_screen.dart`),

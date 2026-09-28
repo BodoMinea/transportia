@@ -7,9 +7,8 @@ import '../providers/theme_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_icon_header.dart';
 import '../widgets/app_page_scaffold.dart';
-import '../widgets/app_toggle_switch.dart';
 import '../widgets/section_title.dart';
-import '../widgets/settings_tile.dart';
+import '../widgets/toggle_card.dart';
 import '../theme/app_text.dart';
 
 class AppearanceScreen extends StatefulWidget {
@@ -268,7 +267,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               const SizedBox(height: 16),
               // Under the styles, since it decides whether there is a map on
               // the search screen to style at all.
-              _ToggleCard(
+              ToggleCard(
                 icon: searchMapEnabled ? LucideIcons.map : LucideIcons.mapMinus,
                 title: 'Map on the search screen',
                 subtitle: searchMapEnabled
@@ -286,7 +285,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                 style: AppText.bodyFaint,
               ),
               const SizedBox(height: 16),
-              _ToggleCard(
+              ToggleCard(
                 icon: vibrationsEnabled
                     ? LucideIcons.vibrate
                     : LucideIcons.vibrateOff,
@@ -461,41 +460,6 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// A setting that is simply on or off, on the page's faint card.
-class _ToggleCard extends StatelessWidget {
-  const _ToggleCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.black.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.black.withValues(alpha: 0.04)),
-      ),
-      child: SettingsTile(
-        icon: icon,
-        title: title,
-        subtitle: subtitle,
-        trailingIcon: null,
-        trailing: AppToggleSwitch(value: value, onChanged: onChanged),
       ),
     );
   }

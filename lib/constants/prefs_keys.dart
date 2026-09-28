@@ -38,6 +38,14 @@ class PrefsKeys {
   static const String transitousHost = 'transitous_host';
   static const String transitousApiVersion = 'transitous_api_version';
 
+  /// Whether a tapped result's details are looked up on OpenStreetMap.
+  /// Absent means on.
+  static const String placeDetailsEnabled = 'place_details_enabled';
+
+  /// The Nominatim server those details come from. Absent means the
+  /// public one.
+  static const String nominatimHost = 'nominatim_host';
+
   /// All routing preferences, JSON-encoded.
   static const String routingOptions = 'routing_options';
 
