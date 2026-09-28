@@ -65,13 +65,16 @@ class TransitousLocationSuggestion {
 
   LatLng get latLng => LatLng(lat, lon);
 
-  /// One decimal is ~10 km: two results with the same name that close are
-  /// the same place under two spellings, not two places.
-  static const int _dedupeDecimals = 1;
+  /// Two results with the same name this close are one place listed twice —
+  /// a stop in two feeds, say. Further apart, they are two places: the
+  /// branches of a chain are often a few hundred metres from each other.
+  static const double _samePlaceMetres = 150;
 
-  String get dedupeKey =>
-      '${name.toLowerCase()}|'
-      '${coordKey(lat, lon, decimals: _dedupeDecimals, separator: '|')}';
+  /// True when [other] is this place again, under the same name.
+  bool isSamePlaceAs(TransitousLocationSuggestion other) =>
+      name.toLowerCase() == other.name.toLowerCase() &&
+      coordinateDistanceInMeters(lat, lon, other.lat, other.lon) <
+          _samePlaceMetres;
 
   String get subtitle {
     final pieces = <String>[];
@@ -82,14 +85,6 @@ class TransitousLocationSuggestion {
       pieces.add(country!);
     }
     return pieces.join(' • ');
-  }
-
-  int get typePriority {
-    final normalized = type.toLowerCase();
-    if (normalized.contains('stop')) return 0;
-    if (normalized.contains('place')) return 1;
-    if (normalized.contains('address')) return 2;
-    return 3;
   }
 
   factory TransitousLocationSuggestion.fromLatLon(LatLng latLng) {
@@ -149,10 +144,22 @@ class TransitousGeocodeService {
     return LatLng(lat, lon);
   }
 
+  /// How strongly the rider's position outweighs how well a name matches.
+  ///
+  /// Chosen by measuring, not by feel; see docs/geocode-place-bias.md before
+  /// changing it.
+  static const double _kPlaceBias = 1.5;
+
+  /// Results per request. MOTIS answers ten unless asked.
+  static const int pageSize = 20;
+
+  /// Results in MOTIS's order, which weighs name, importance and nearness
+  /// together; only the same place listed twice is dropped.
   static Future<List<TransitousLocationSuggestion>> fetchSuggestions({
     required String text,
     LatLng? placeBias,
     String? type,
+    int numResults = pageSize,
   }) async {
     final query = text.trim();
     if (query.length < 3) {
@@ -165,36 +172,25 @@ class TransitousGeocodeService {
         text: query,
         placeLat: placeBias?.latitude,
         placeLon: placeBias?.longitude,
-        placeBias: placeBias == null ? null : 5,
+        placeBias: placeBias == null ? null : _kPlaceBias,
+        numResults: numResults,
         type: type == null ? null : LocationType.fromWire(type),
       );
     } on TransitousApiException catch (e) {
       throw TransitousGeocodeException('Failed to fetch suggestions', e);
     }
 
-    final seen = <String>{};
     final suggestions = <TransitousLocationSuggestion>[];
-    final orderMap = <TransitousLocationSuggestion, int>{};
-    var order = 0;
     for (final match in matches) {
+      final TransitousLocationSuggestion suggestion;
       try {
-        final suggestion = TransitousLocationSuggestion.fromMatch(match);
-        final key = suggestion.dedupeKey;
-        if (seen.add(key)) {
-          suggestions.add(suggestion);
-          orderMap[suggestion] = order++;
-        }
-      } catch (_) {
+        suggestion = TransitousLocationSuggestion.fromMatch(match);
+      } on TransitousGeocodeException {
         continue;
       }
+      if (suggestions.any(suggestion.isSamePlaceAs)) continue;
+      suggestions.add(suggestion);
     }
-    suggestions.sort((a, b) {
-      final byType = a.typePriority.compareTo(b.typePriority);
-      if (byType != 0) return byType;
-      final ao = orderMap[a] ?? 0;
-      final bo = orderMap[b] ?? 0;
-      return ao.compareTo(bo);
-    });
     return suggestions;
   }
 

@@ -13,6 +13,8 @@ than against hand-written JSON that agrees with our assumptions.
 | `stop.json` | `/api/v6/stop` for Alexanderplatz |
 | `geocode.json` | `/api/v1/geocode?text=Alexanderplatz` |
 | `reverse_geocode.json` | `/api/v1/reverse-geocode` near Alexanderplatz |
+| `geocode_rewe.json` | `/api/v1/geocode?text=Rewe&place=52.52,13.405&placeBias=1.5&numResults=20` (2026-09-28) |
+| `geocode_paris.json` | `/api/v1/geocode?text=Paris&place=52.52,13.405&placeBias=1.5&numResults=20` (2026-09-28) |
 | `map_initial.json` | `/api/v1/map/initial` — carries `serverConfig` |
 | `map_stops.json` | `/api/v1/map/stops` over central Berlin |
 | `map_routes.json` | `/api/experimental/map/routes` over central Berlin |
