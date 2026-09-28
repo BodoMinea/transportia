@@ -27,14 +27,23 @@ final List<(TransitMode, Set<TransitMode>)> _kStopModeRanking = [
 /// one served only by modes too vague to draw (on demand, flexible).
 const IconData kUnknownStopIcon = LucideIcons.signpost;
 
-/// The icon for a stop served by [modes].
-IconData stopIcon(Iterable<TransitMode> modes) {
+/// The mode a stop is known by, or null when nothing drawable serves it.
+///
+/// Keyed as in [_kStopModeRanking]: any rail mode answers
+/// [TransitMode.rail], any cable car [TransitMode.aerialLift].
+TransitMode? headlineMode(Iterable<TransitMode> modes) {
   final served = {for (final mode in modes) TransitModeGroup.canonical(mode)};
   for (final (shownAs, ranked) in _kStopModeRanking) {
-    if (served.any(ranked.contains)) return getLegIcon(shownAs.wireName);
+    if (served.any(ranked.contains)) return shownAs;
   }
-  return kUnknownStopIcon;
+  return null;
 }
+
+/// The icon for a stop served by [modes].
+IconData stopIcon(Iterable<TransitMode> modes) => switch (headlineMode(modes)) {
+  final mode? => getLegIcon(mode.wireName),
+  null => kUnknownStopIcon,
+};
 
 /// The icon for a place of the geocoder's [type]; a stop is drawn by what
 /// serves it.

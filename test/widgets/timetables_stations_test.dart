@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:transportia/widgets/error_notice.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:transportia/models/saved_place.dart';
+import 'package:transportia/models/transitous/enums.dart';
 import 'package:transportia/providers/theme_provider.dart';
 import 'package:transportia/screens/timetables_screen.dart';
 import 'package:transportia/services/favorites_service.dart';
@@ -283,6 +285,68 @@ void main() {
       expect(find.byType(LocationSearchBody), findsNothing);
       // The stop stays chosen, so retrying does not mean picking it again.
       expect(find.byType(EditableText), findsOneWidget);
+    });
+  });
+
+  group('remembering a stop', () {
+    const alexId = 'de-DELFI_de:11000:900100003';
+
+    /// Answers the geocoder and the departure board with the real captures.
+    Future<http.Response> captured(http.Request request) async {
+      final path = request.url.path;
+      final name = path.contains('geocode')
+          ? 'geocode.json'
+          : path.contains('stoptimes')
+          ? 'stoptimes.json'
+          : null;
+      if (name == null) return http.Response('not captured', 404);
+      return http.Response(
+        File('test/fixtures/transitous/$name').readAsStringSync(),
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    }
+
+    Future<List<SavedPlace>> remembered() =>
+        SavedPlacesService.loadPlaces(bucket: SavedPlacesBucket.timetable);
+
+    testWidgets('a pick is remembered once, with its id and what serves it', (
+      tester,
+    ) async {
+      // It used to be written twice — by the search without the id, and by
+      // this screen — and whichever landed last won.
+      TransitousClient.instance = _clientReturning(captured);
+      await _pump(tester);
+
+      await tester.enterText(find.byType(EditableText), 'Alexanderplatz');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('S+U Alexanderplatz Bhf (Berlin)'));
+      await tester.pumpAndSettle();
+
+      final stored = await remembered();
+      expect(stored, hasLength(1));
+      expect(stored.single.stopId, alexId);
+      expect(stored.single.modes, contains(TransitMode.subway));
+    });
+
+    testWidgets('opening a board fills in what serves a remembered stop', (
+      tester,
+    ) async {
+      // Remembered before modes were, and picked from the recents, so the
+      // geocoder is never asked again: the board is the one that can say.
+      TransitousClient.instance = _clientReturning(captured);
+      await SavedPlacesService.savePlaces(
+        bucket: SavedPlacesBucket.timetable,
+        places: [_stop(name: 'Alexanderplatz', stopId: alexId)],
+      );
+      expect((await remembered()).single.modes, isEmpty);
+
+      await _pump(tester);
+      await tester.tap(find.text('Alexanderplatz'));
+      await tester.pumpAndSettle();
+
+      expect((await remembered()).single.modes, contains(TransitMode.subway));
     });
   });
 }
