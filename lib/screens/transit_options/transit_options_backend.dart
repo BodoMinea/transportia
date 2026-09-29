@@ -31,38 +31,40 @@ class _TransitOptionsBackendCardState extends State<TransitOptionsBackendCard> {
   late final FocusNode _nominatimFocusNode;
   late final FocusNode _versionFocusNode;
 
+  /// Held from initState: the focus listeners and dispose run when the
+  /// card may already be out of the tree, where looking it up is unsafe.
+  late final BackendProvider _backend;
+
   @override
   void initState() {
     super.initState();
-    final backend = context.read<BackendProvider>();
+    final backend = _backend = context.read<BackendProvider>();
     _hostController = TextEditingController(text: backend.host);
     _versionController = TextEditingController(text: backend.apiVersion);
     _nominatimController = TextEditingController(text: backend.nominatimHost);
     _nominatimFocusNode = FocusNode();
     _nominatimFocusNode.addListener(() {
       if (!_nominatimFocusNode.hasFocus) {
-        context.read<BackendProvider>().setNominatimHost(
-          _nominatimController.text,
-        );
+        _backend.setNominatimHost(_nominatimController.text);
       }
     });
     _hostFocusNode = FocusNode();
     _versionFocusNode = FocusNode();
     _hostFocusNode.addListener(() {
       if (!_hostFocusNode.hasFocus) {
-        context.read<BackendProvider>().setHost(_hostController.text);
+        _backend.setHost(_hostController.text);
       }
     });
     _versionFocusNode.addListener(() {
       if (!_versionFocusNode.hasFocus) {
-        context.read<BackendProvider>().setApiVersion(_versionController.text);
+        _backend.setApiVersion(_versionController.text);
       }
     });
     backend.addListener(_syncBackendControllers);
   }
 
   void _syncBackendControllers() {
-    final backend = context.read<BackendProvider>();
+    final backend = _backend;
     if (!_hostFocusNode.hasFocus) _hostController.text = backend.host;
     if (!_nominatimFocusNode.hasFocus) {
       _nominatimController.text = backend.nominatimHost;
@@ -74,7 +76,7 @@ class _TransitOptionsBackendCardState extends State<TransitOptionsBackendCard> {
 
   @override
   void dispose() {
-    context.read<BackendProvider>().removeListener(_syncBackendControllers);
+    _backend.removeListener(_syncBackendControllers);
     _hostController.dispose();
     _hostFocusNode.dispose();
     _versionController.dispose();
@@ -384,20 +386,20 @@ class _EndpointVersionFieldState extends State<_EndpointVersionField> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
 
+  /// Held from initState, for the same reason as the card's.
+  late final BackendProvider _backend;
+
   @override
   void initState() {
     super.initState();
-    final backend = context.read<BackendProvider>();
+    final backend = _backend = context.read<BackendProvider>();
     _controller = TextEditingController(
       text: backend.endpointVersionOverride(widget.endpoint) ?? '',
     );
     _focusNode = FocusNode();
     _focusNode.addListener(() {
       if (!_focusNode.hasFocus) {
-        context.read<BackendProvider>().setEndpointVersion(
-          widget.endpoint,
-          _controller.text,
-        );
+        _backend.setEndpointVersion(widget.endpoint, _controller.text);
       }
     });
     backend.addListener(_sync);
@@ -405,9 +407,7 @@ class _EndpointVersionFieldState extends State<_EndpointVersionField> {
 
   void _sync() {
     if (!_focusNode.hasFocus) {
-      final override = context.read<BackendProvider>().endpointVersionOverride(
-        widget.endpoint,
-      );
+      final override = _backend.endpointVersionOverride(widget.endpoint);
       final newText = override ?? '';
       if (_controller.text != newText) _controller.text = newText;
     }
@@ -415,7 +415,7 @@ class _EndpointVersionFieldState extends State<_EndpointVersionField> {
 
   @override
   void dispose() {
-    context.read<BackendProvider>().removeListener(_sync);
+    _backend.removeListener(_sync);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
