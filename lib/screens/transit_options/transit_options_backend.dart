@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/nominatim_client.dart';
 import '../../api/transitous_endpoint.dart';
 import '../../providers/backend_provider.dart';
 import '../../theme/app_colors.dart';
@@ -26,32 +27,48 @@ class _TransitOptionsBackendCardState extends State<TransitOptionsBackendCard> {
   late final TextEditingController _hostController;
   late final FocusNode _hostFocusNode;
   late final TextEditingController _versionController;
+  late final TextEditingController _nominatimController;
+  late final FocusNode _nominatimFocusNode;
   late final FocusNode _versionFocusNode;
+
+  /// Held from initState: the focus listeners and dispose run when the
+  /// card may already be out of the tree, where looking it up is unsafe.
+  late final BackendProvider _backend;
 
   @override
   void initState() {
     super.initState();
-    final backend = context.read<BackendProvider>();
+    final backend = _backend = context.read<BackendProvider>();
     _hostController = TextEditingController(text: backend.host);
     _versionController = TextEditingController(text: backend.apiVersion);
+    _nominatimController = TextEditingController(text: backend.nominatimHost);
+    _nominatimFocusNode = FocusNode();
+    _nominatimFocusNode.addListener(() {
+      if (!_nominatimFocusNode.hasFocus) {
+        _backend.setNominatimHost(_nominatimController.text);
+      }
+    });
     _hostFocusNode = FocusNode();
     _versionFocusNode = FocusNode();
     _hostFocusNode.addListener(() {
       if (!_hostFocusNode.hasFocus) {
-        context.read<BackendProvider>().setHost(_hostController.text);
+        _backend.setHost(_hostController.text);
       }
     });
     _versionFocusNode.addListener(() {
       if (!_versionFocusNode.hasFocus) {
-        context.read<BackendProvider>().setApiVersion(_versionController.text);
+        _backend.setApiVersion(_versionController.text);
       }
     });
     backend.addListener(_syncBackendControllers);
   }
 
   void _syncBackendControllers() {
-    final backend = context.read<BackendProvider>();
+    final backend = _backend;
     if (!_hostFocusNode.hasFocus) _hostController.text = backend.host;
+    if (!_nominatimFocusNode.hasFocus) {
+      _nominatimController.text = backend.nominatimHost;
+    }
     if (!_versionFocusNode.hasFocus) {
       _versionController.text = backend.apiVersion;
     }
@@ -59,10 +76,12 @@ class _TransitOptionsBackendCardState extends State<TransitOptionsBackendCard> {
 
   @override
   void dispose() {
-    context.read<BackendProvider>().removeListener(_syncBackendControllers);
+    _backend.removeListener(_syncBackendControllers);
     _hostController.dispose();
     _hostFocusNode.dispose();
     _versionController.dispose();
+    _nominatimController.dispose();
+    _nominatimFocusNode.dispose();
     _versionFocusNode.dispose();
     super.dispose();
   }
@@ -156,6 +175,66 @@ class _TransitOptionsBackendCardState extends State<TransitOptionsBackendCard> {
               const SizedBox(height: 8),
               Text(
                 'Hostname only, without https:// or trailing slash.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.black.withValues(alpha: 0.4),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Place details server',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.black.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(height: 8),
+              CustomCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+                margin: const EdgeInsets.all(0),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.store, size: 16, color: accent),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: CupertinoTextField.borderless(
+                        controller: _nominatimController,
+                        focusNode: _nominatimFocusNode,
+                        placeholder: NominatimClient.defaultHost,
+                        style: TextStyle(fontSize: 15, color: AppColors.black),
+                        placeholderStyle: TextStyle(
+                          fontSize: 15,
+                          color: AppColors.black.withValues(alpha: 0.3),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        autocorrect: false,
+                        keyboardType: TextInputType.url,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: backendProvider.setNominatimHost,
+                      ),
+                    ),
+                    if (backendProvider.isCustomNominatimHost)
+                      GestureDetector(
+                        onTap: () => backendProvider.setNominatimHost(''),
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Icon(
+                            LucideIcons.rotateCcw,
+                            size: 16,
+                            color: AppColors.black.withValues(alpha: 0.35),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'A Nominatim server, for the details of a result tapped on '
+                'the map.',
                 style: TextStyle(
                   fontSize: 12,
                   color: AppColors.black.withValues(alpha: 0.4),
@@ -307,20 +386,20 @@ class _EndpointVersionFieldState extends State<_EndpointVersionField> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
 
+  /// Held from initState, for the same reason as the card's.
+  late final BackendProvider _backend;
+
   @override
   void initState() {
     super.initState();
-    final backend = context.read<BackendProvider>();
+    final backend = _backend = context.read<BackendProvider>();
     _controller = TextEditingController(
       text: backend.endpointVersionOverride(widget.endpoint) ?? '',
     );
     _focusNode = FocusNode();
     _focusNode.addListener(() {
       if (!_focusNode.hasFocus) {
-        context.read<BackendProvider>().setEndpointVersion(
-          widget.endpoint,
-          _controller.text,
-        );
+        _backend.setEndpointVersion(widget.endpoint, _controller.text);
       }
     });
     backend.addListener(_sync);
@@ -328,9 +407,7 @@ class _EndpointVersionFieldState extends State<_EndpointVersionField> {
 
   void _sync() {
     if (!_focusNode.hasFocus) {
-      final override = context.read<BackendProvider>().endpointVersionOverride(
-        widget.endpoint,
-      );
+      final override = _backend.endpointVersionOverride(widget.endpoint);
       final newText = override ?? '';
       if (_controller.text != newText) _controller.text = newText;
     }
@@ -338,7 +415,7 @@ class _EndpointVersionFieldState extends State<_EndpointVersionField> {
 
   @override
   void dispose() {
-    context.read<BackendProvider>().removeListener(_sync);
+    _backend.removeListener(_sync);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();

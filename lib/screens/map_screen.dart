@@ -42,6 +42,7 @@ import '../services/trip_details_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/color_utils.dart';
 import '../utils/geo_utils.dart';
+import '../utils/map_framing.dart';
 import '../utils/haptics.dart';
 import '../utils/custom_page_route.dart';
 import '../utils/leg_helper.dart';
@@ -2499,20 +2500,7 @@ class _MapScreenState extends State<MapScreen>
       await controller.animateCamera(CameraUpdate.newLatLng(points.first));
       return;
     }
-    double minLat = points.first.latitude;
-    double maxLat = points.first.latitude;
-    double minLng = points.first.longitude;
-    double maxLng = points.first.longitude;
-    for (final p in points.skip(1)) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
-    final bounds = LatLngBounds(
-      southwest: LatLng(minLat, minLng),
-      northeast: LatLng(maxLat, maxLng),
-    );
+    final bounds = boundsOf(points)!;
     final double bottomPadding = _isSheetCollapsed
         ? (_bottomBarHeight + 64.0)
         : 48.0;
@@ -2619,7 +2607,7 @@ class _MapScreenState extends State<MapScreen>
     final controller = _controller;
     if (controller == null) return;
     Future<void> addMarker(String id, Color color, IconData icon) async {
-      final image = await _buildMarkerImage(color, icon);
+      final image = await buildBubbleMarkerImage(color, icon);
       await controller.addImage(id, image);
     }
 
@@ -2658,69 +2646,6 @@ class _MapScreenState extends State<MapScreen>
     } catch (_) {
       return null;
     }
-  }
-
-  Future<Uint8List> _buildMarkerImage(Color color, IconData icon) async {
-    const double width = 72;
-    const double height = 96;
-    const double pointerHeight = 18;
-    const double bubbleRadius = 22;
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    final bubbleCenter = Offset(
-      width / 2,
-      height - pointerHeight - bubbleRadius,
-    );
-
-    final shadowPaint = Paint()
-      ..color = const Color(0x33000000)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawCircle(
-      bubbleCenter + const Offset(0, 2),
-      bubbleRadius + 3,
-      shadowPaint,
-    );
-
-    final bodyPaint = Paint()..color = color;
-    canvas.drawCircle(bubbleCenter, bubbleRadius, bodyPaint);
-
-    final pointerPath = Path()
-      ..moveTo(width / 2, height)
-      ..lineTo(width / 2 - 10, height - pointerHeight)
-      ..lineTo(width / 2 + 10, height - pointerHeight)
-      ..close();
-    canvas.drawPath(pointerPath, bodyPaint);
-
-    final borderPaint = Paint()
-      ..color = AppColors.solidWhite
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(bubbleCenter, bubbleRadius - 1, borderPaint);
-
-    final iconPainter = TextPainter(
-      textDirection: TextDirection.ltr,
-      text: TextSpan(
-        text: String.fromCharCode(icon.codePoint),
-        style: TextStyle(
-          fontSize: 28,
-          fontFamily: icon.fontFamily,
-          package: icon.fontPackage,
-          color: AppColors.solidWhite,
-        ),
-      ),
-    )..layout();
-
-    iconPainter.paint(
-      canvas,
-      bubbleCenter - Offset(iconPainter.width / 2, iconPainter.height / 2),
-    );
-
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(width.toInt(), height.toInt());
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData!.buffer.asUint8List();
   }
 
   Future<void> _applyStopAccentColor() async {
@@ -3409,19 +3334,9 @@ class _MapScreenState extends State<MapScreen>
         points.add(LatLng(leg.toLat, leg.toLon));
       }
     }
-    if (points.isEmpty) return;
-    final first = points.first;
-    double minLat = first.latitude;
-    double maxLat = first.latitude;
-    double minLon = first.longitude;
-    double maxLon = first.longitude;
-    for (final point in points) {
-      if (point.latitude < minLat) minLat = point.latitude;
-      if (point.latitude > maxLat) maxLat = point.latitude;
-      if (point.longitude < minLon) minLon = point.longitude;
-      if (point.longitude > maxLon) maxLon = point.longitude;
-    }
-    final center = LatLng((minLat + maxLat) / 2, (minLon + maxLon) / 2);
+    final bounds = boundsOf(points);
+    if (bounds == null) return;
+    final center = boundsCenter(bounds);
     if (points.length == 1) {
       await controller.animateCamera(
         CameraUpdate.newLatLngZoom(center, _focusedTransferZoomLevel),
@@ -3441,11 +3356,6 @@ class _MapScreenState extends State<MapScreen>
       );
       return;
     }
-
-    final bounds = LatLngBounds(
-      southwest: LatLng(minLat, minLon),
-      northeast: LatLng(maxLat, maxLon),
-    );
 
     try {
       await controller.animateCamera(
