@@ -2,6 +2,7 @@ import '../api/endpoints/trip_endpoint.dart';
 import '../models/itinerary.dart';
 import '../models/routing_options.dart';
 import '../models/transitous/itinerary_id.dart';
+import 'rental_providers_service.dart';
 import 'trip_details_service.dart';
 
 /// How much the app actually knows about an itinerary's current state after
@@ -175,9 +176,11 @@ class ItineraryRefreshService {
   static Future<Itinerary> _refreshViaApi(
     Itinerary itinerary,
     RoutingOptions options,
-  ) {
+  ) async {
     final id = itinerary.id;
-    final params = options.toRefreshParams();
+    final params = options.toRefreshParams(
+      rentalProviderGroups: await RentalProvidersService.activeGroupIds(),
+    );
     // A saved trip parsed from a snapshot taken before the app read `id`
     // still has its legs, which is enough to rebuild the structured form.
     return id != null && id.isNotEmpty

@@ -365,6 +365,7 @@ class RoutingOptions {
     DateTime? time,
     bool? arriveBy,
     String? pageCursor,
+    List<String> rentalProviderGroups = const [],
   }) {
     return PlanParams(
       fromPlace: fromPlace,
@@ -395,9 +396,18 @@ class RoutingOptions {
       maxPostTransitTime: maxLastMileTime,
       directModes: directModes,
       maxDirectTime: maxDirectTime,
-      directRentals: _rentalFilters(firstMileRentalFormFactors),
-      preTransitRentals: _rentalFilters(firstMileRentalFormFactors),
-      postTransitRentals: _rentalFilters(lastMileRentalFormFactors),
+      directRentals: _rentalFilters(
+        firstMileRentalFormFactors,
+        rentalProviderGroups,
+      ),
+      preTransitRentals: _rentalFilters(
+        firstMileRentalFormFactors,
+        rentalProviderGroups,
+      ),
+      postTransitRentals: _rentalFilters(
+        lastMileRentalFormFactors,
+        rentalProviderGroups,
+      ),
       pedestrianSpeed: _msFrom(walkingSpeedKmh, _defaultWalkingSpeedKmh),
       cyclingSpeed: _msFrom(cyclingSpeedKmh, _defaultCyclingSpeedKmh),
       elevationCosts: elevationCosts == ElevationCosts.none
@@ -418,7 +428,9 @@ class RoutingOptions {
   /// `requireDisplayNameMatch` is the other half: it makes the server refuse
   /// to substitute a different journey, rather than handing back a re-plan
   /// that happens to have the same number of legs.
-  RefreshItineraryOptions toRefreshParams() => RefreshItineraryOptions(
+  RefreshItineraryOptions toRefreshParams({
+    List<String> rentalProviderGroups = const [],
+  }) => RefreshItineraryOptions(
     requireDisplayNameMatch: true,
     detailedTransfers: true,
     detailedLegs: true,
@@ -435,6 +447,14 @@ class RoutingOptions {
     maxPreTransitTime: maxFirstMileTime,
     postTransitModes: lastMileModes,
     maxPostTransitTime: maxLastMileTime,
+    preTransitRentals: _rentalFilters(
+      firstMileRentalFormFactors,
+      rentalProviderGroups,
+    ),
+    postTransitRentals: _rentalFilters(
+      lastMileRentalFormFactors,
+      rentalProviderGroups,
+    ),
     pedestrianSpeed: _msFrom(walkingSpeedKmh, _defaultWalkingSpeedKmh),
     cyclingSpeed: _msFrom(cyclingSpeedKmh, _defaultCyclingSpeedKmh),
     elevationCosts: elevationCosts == ElevationCosts.none
@@ -442,9 +462,15 @@ class RoutingOptions {
         : elevationCosts,
   );
 
-  /// One mile's form-factor filter, or none when that mile has no rentals.
-  static RentalFilters _rentalFilters(List<RentalFormFactor> factors) =>
-      RentalFilters(formFactors: factors);
+  /// One mile's rental filter: the vehicles picked for it, and the
+  /// provider groups the rider limited rentals to (empty for any). A mile
+  /// with nothing to rent gets no filter at all.
+  static RentalFilters _rentalFilters(
+    List<RentalFormFactor> factors,
+    List<String> providerGroups,
+  ) => factors.isEmpty
+      ? const RentalFilters()
+      : RentalFilters(formFactors: factors, providerGroups: providerGroups);
 
   /// A mile always has somewhere to start from.
   static List<TransitMode> _atLeastWalking(List<TransitMode> modes) =>
