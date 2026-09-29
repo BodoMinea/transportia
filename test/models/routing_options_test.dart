@@ -375,4 +375,39 @@ void main() {
       expect(_query(options)['maxDirectTime'], '1800');
     });
   });
+
+  group('withSettingsFrom', () {
+    const stored = RoutingOptions(
+      useRoutedTransfers: false,
+      additionalTransferTime: Duration(minutes: 7),
+      elevationCosts: ElevationCosts.high,
+      wheelchairAccessibleOnly: true,
+      maxTransfers: 1,
+    );
+    final search = RoutingOptions.defaults.copyWith(
+      firstMileModes: const [TransitMode.bike],
+      walkingSpeedKmh: 5.5,
+    );
+
+    test('takes the settings-only fields', () {
+      final merged = search.withSettingsFrom(stored);
+
+      expect(merged.useRoutedTransfers, isFalse);
+      expect(merged.additionalTransferTime, const Duration(minutes: 7));
+      expect(merged.elevationCosts, ElevationCosts.high);
+    });
+
+    test('keeps everything the search screen offers', () {
+      final merged = search.withSettingsFrom(stored);
+
+      expect(merged.firstMileModes, [TransitMode.bike]);
+      expect(merged.walkingSpeedKmh, 5.5);
+      expect(merged.wheelchairAccessibleOnly, isFalse);
+      expect(merged.maxTransfers, isNull);
+    });
+
+    test('changes nothing when the settings already agree', () {
+      expect(search.withSettingsFrom(RoutingOptions.defaults), search);
+    });
+  });
 }

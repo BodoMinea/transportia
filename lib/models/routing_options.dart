@@ -281,6 +281,20 @@ class RoutingOptions {
     return current.isEmpty ? defaultRentalFormFactors : current;
   }
 
+  /// These options with the settings-screen-only fields taken from [stored].
+  ///
+  /// The search screen keeps its own copy of the options, and once the rider
+  /// changes something there it stops following the stored defaults. These
+  /// fields cannot be changed on the search screen, so a change to them in
+  /// the settings must still reach a search in progress — otherwise "Save as
+  /// default" would quietly write the old values back. A field belongs here
+  /// exactly when the search screen does not offer it.
+  RoutingOptions withSettingsFrom(RoutingOptions stored) => copyWith(
+    useRoutedTransfers: stored.useRoutedTransfers,
+    additionalTransferTime: stored.additionalTransferTime,
+    elevationCosts: stored.elevationCosts,
+  );
+
   RoutingOptions copyWith({
     List<TransitMode>? transitModes,
     bool? useRoutedTransfers,

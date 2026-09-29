@@ -263,6 +263,9 @@ class _MapScreenState extends State<MapScreen>
     // same frame the request is made, so the listener can miss it.
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyPlanRequest());
     ServerCapabilitiesService.capabilities.addListener(_onCapabilitiesChanged);
+    RoutingOptionsService.optionsListenable.addListener(
+      _onStoredOptionsChanged,
+    );
     _snapCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 220),
@@ -354,6 +357,21 @@ class _MapScreenState extends State<MapScreen>
     });
   }
 
+  /// Follows defaults changed elsewhere — the settings screen, while this
+  /// one stays alive behind the navigation bar.
+  ///
+  /// An untouched search takes them whole. A touched one keeps the rider's
+  /// changes and takes only what the search screen cannot change.
+  void _onStoredOptionsChanged() {
+    if (!mounted) return;
+    final stored = RoutingOptionsService.optionsListenable.value;
+    if (stored == _storedOptions) return;
+    setState(() {
+      _storedOptions = stored;
+      _options = _optionsTouched ? _options.withSettingsFrom(stored) : stored;
+    });
+  }
+
   /// Via stops need a search of their own, so they get a screen.
   Future<void> _openViaStopPicker() async {
     _unfocusInputs();
@@ -403,6 +421,9 @@ class _MapScreenState extends State<MapScreen>
   @override
   void dispose() {
     PlanRequests.pending.removeListener(_applyPlanRequest);
+    RoutingOptionsService.optionsListenable.removeListener(
+      _onStoredOptionsChanged,
+    );
     ServerCapabilitiesService.capabilities.removeListener(
       _onCapabilitiesChanged,
     );
