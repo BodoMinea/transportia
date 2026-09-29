@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
@@ -20,6 +22,7 @@ Future<List<Object?>> _pump(WidgetTester tester, Widget screen) async {
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
+  _leaveMapPending(tester);
   final popped = <Object?>[];
   await tester.pumpWidget(
     ChangeNotifierProvider<ThemeProvider>(
@@ -51,6 +54,21 @@ Future<List<Object?>> _pump(WidgetTester tester, Widget screen) async {
   return popped;
 }
 
+/// The map asks the platform for a native view, which a test cannot make.
+/// Left pending, rather than refused, its area stays blank and nothing
+/// throws once a test waits long enough for the request to settle.
+void _leaveMapPending(WidgetTester tester) {
+  const channel = SystemChannels.platform_views;
+  final messenger = tester.binding.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(
+    channel,
+    (call) => call.method == 'create'
+        ? Completer<Object?>().future
+        : Future<Object?>.value(),
+  );
+  addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+}
+
 class _Opener extends StatelessWidget {
   const _Opener({required this.onOpen});
 
@@ -69,6 +87,17 @@ Future<void> _tapMap(WidgetTester tester, LatLng at) async {
     at,
   );
   // Naming the point fails without a network and falls back to coordinates.
+  await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+  await tester.pump();
+  await tester.pump();
+}
+
+/// Holds a finger on the map.
+Future<void> _holdMap(WidgetTester tester, LatLng at) async {
+  tester.widget<MapLibreMap>(find.byType(MapLibreMap)).onMapLongClick!(
+    const math.Point(0, 0),
+    at,
+  );
   await tester.runAsync(() => Future<void>.delayed(Duration.zero));
   await tester.pump();
   await tester.pump();
@@ -166,7 +195,9 @@ void main() {
       // Close enough to tell the stations apart, not a street.
       expect(camera.zoom, inInclusiveRange(11, 12));
       expect(
-        find.text('Tap a result for details, or anywhere to pick that point'),
+        find.text(
+          'Tap a result for details, or hold anywhere to pick that point',
+        ),
         findsOne,
       );
     });
@@ -185,6 +216,45 @@ void main() {
       expect(tabs, isNotEmpty);
       // Eight towns in the US lie one way: one tab, stacked.
       expect(tabs.where((t) => t.several), isNotEmpty);
+    });
+
+    testWidgets('among results, a tap only puts away; a hold picks', (
+      tester,
+    ) async {
+      final popped = await _pump(
+        tester,
+        MapPlacePickerScreen.pick(
+          title: 'Results for “Paris”',
+          confirmLabel: 'Select',
+          results: _paris(),
+        ),
+      );
+
+      await _tapMap(tester, const LatLng(48.9, 2.4));
+      expect(find.text('Point on the map'), findsNothing);
+
+      await _holdMap(tester, const LatLng(48.9, 2.4));
+      expect(find.text('Point on the map'), findsOne);
+
+      await tester.tap(find.text('Select'));
+      await tester.pumpAndSettle();
+      final place = popped.single! as TransitousLocationSuggestion;
+      expect(place.lat, closeTo(48.9, 1e-9));
+    });
+
+    testWidgets('a timetable cannot hold for a point either', (tester) async {
+      await _pump(
+        tester,
+        MapPlacePickerScreen.pick(
+          title: 'Results for “Paris”',
+          confirmLabel: 'Select',
+          results: _paris(),
+          allowsPoint: false,
+        ),
+      );
+
+      await _holdMap(tester, const LatLng(48.9, 2.4));
+      expect(find.text('Point on the map'), findsNothing);
     });
 
     testWidgets('a timetable picks results, never a bare point', (
