@@ -113,9 +113,6 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   /// and the tabs pointing past them.
   static const EdgeInsets _kFramePadding = EdgeInsets.fromLTRB(48, 48, 48, 96);
 
-  /// How much of the map's foot the hint covers, for the tabs to stop above.
-  static const double _kHintFootprint = 84;
-
   /// The sheet may take this share of the map; its facts scroll beyond it.
   static const double _kSheetMaxShare = 0.62;
 
@@ -131,6 +128,10 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   bool _pinsReady = false;
   bool _pointLayerReady = false;
   DateTime? _lastPinTap;
+
+  /// Where the map opened, framed on the first results. Fixed once: the map
+  /// stays there until moved, whatever a search in this area brings.
+  CameraPosition? _openingCamera;
 
   /// Where the map looks, as last reported; the tabs are placed from it.
   CameraPosition? _camera;
@@ -185,7 +186,7 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
 
   Widget _buildMap(BuildContext context, Size size) {
     _mapSize = size;
-    final initial = _initialCamera(size);
+    final initial = _openingCamera ??= _initialCamera(size);
     final camera = _camera ?? initial;
     return Stack(
       children: [
@@ -217,7 +218,10 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
                 0,
                 0,
                 size.width,
-                size.height - (_hasSelection ? _sheetHeight : _kHintFootprint),
+                // Down to the foot of the map: the hint or the area search
+                // button sits over the tabs there, as over the map. A sheet
+                // covers the map, so the tabs stop above it.
+                size.height - (_hasSelection ? _sheetHeight : 0),
               ),
               taken: _pinRects(camera, size),
               onTap: _showMembers,
@@ -503,6 +507,12 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
     return null;
   }
 
+  /// What a tap on the pin for result [rank] does. The map is a platform
+  /// view and takes no taps in a test, so the sheet's loading is reached
+  /// through here.
+  @visibleForTesting
+  void tapResultForTesting(int rank) => _selectResult(rank);
+
   void _selectResult(int rank) {
     final result = _results[rank];
     final token = ++_selectionToken;
@@ -589,7 +599,7 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   void _centreOnceSheetIsUp(LatLng p) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = _controller;
-      final camera = _camera ?? _initialCamera(_mapSize ?? Size.zero);
+      final camera = _camera ?? _openingCamera!;
       if (!mounted || controller == null) return;
       final centre = centerPlacing(
         p,
@@ -754,7 +764,7 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   Future<void> _searchThisArea() async {
     final query = widget.query;
     if (query == null || _isSearchingArea) return;
-    final centre = (_camera ?? _initialCamera(_mapSize ?? Size.zero)).target;
+    final centre = (_camera ?? _openingCamera!).target;
     setState(() => _isSearchingArea = true);
     try {
       final page = await TransitousGeocodeService.fetchSuggestionPage(
@@ -764,8 +774,10 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
         biasStrength: TransitousGeocodeService.areaPlaceBias,
       );
       if (!mounted) return;
+      // MOTIS answers something for any name, however far: a bias ranks,
+      // it does not restrict. So "nothing here" is nothing on screen.
       if (page.suggestions.isEmpty) {
-        showValidationToast(context, 'Nothing found around here');
+        showValidationToast(context, 'Nothing found for “$query”');
         return;
       }
       ++_selectionToken;
@@ -776,11 +788,32 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
         _sheetHeight = 0;
       });
       await _showNewPins();
+      if (!mounted) return;
+      if (!_anyOnScreen(page.suggestions)) {
+        showValidationToast(
+          context,
+          'Nothing in this area; the arrows point to the nearest',
+        );
+      }
     } catch (_) {
       if (mounted) showValidationToast(context, 'Search failed, try again');
     } finally {
       if (mounted) setState(() => _isSearchingArea = false);
     }
+  }
+
+  bool _anyOnScreen(List<TransitousLocationSuggestion> results) {
+    final size = _mapSize;
+    if (size == null) return true;
+    final camera = _camera ?? _openingCamera!;
+    final view = MapView(
+      center: camera.target,
+      zoom: camera.zoom,
+      size: size,
+      bearing: camera.bearing,
+    );
+    final visible = Offset.zero & size;
+    return results.any((r) => visible.contains(view.project(r.latLng)));
   }
 
   Future<void> _showNewPins() async {

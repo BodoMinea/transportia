@@ -9,7 +9,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:transportia/api/nominatim_client.dart';
 import 'package:transportia/api/transitous_client.dart';
+import 'package:transportia/providers/backend_provider.dart';
 
 import 'package:oktoast/oktoast.dart';
 import 'package:provider/provider.dart';
@@ -100,12 +102,39 @@ Future<void> _tapMap(WidgetTester tester, LatLng at) async {
   await tester.pump();
 }
 
+/// A toast is registered with oktoast for a day and closes itself after a
+/// few seconds; left open, it would also block the next test's, which shares
+/// its static guard. Runs it out, as save_trip_button_test.dart does.
+Future<void> _letToastsRunOut(WidgetTester tester) async {
+  await tester.pump(const Duration(seconds: 3));
+  await tester.pump(const Duration(days: 2));
+  await tester.pumpAndSettle();
+}
+
 /// Holds a finger on the map.
 Future<void> _holdMap(WidgetTester tester, LatLng at) async {
   tester.widget<MapLibreMap>(find.byType(MapLibreMap)).onMapLongClick!(
     const math.Point(0, 0),
     at,
   );
+  await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+  await tester.pump();
+  await tester.pump();
+}
+
+List<TransitousLocationSuggestion> _capture(String name) => [
+  for (final m
+      in jsonDecode(File('test/fixtures/transitous/$name').readAsStringSync())
+          as List)
+    TransitousLocationSuggestion.fromMatch(
+      Match.fromJson(m as Map<String, dynamic>),
+    ),
+];
+
+/// A pin tapped: the map takes no taps in a test.
+Future<void> _tapResult(WidgetTester tester, int rank) async {
+  (tester.state(find.byType(MapPlacePickerScreen)) as dynamic)
+      .tapResultForTesting(rank);
   await tester.runAsync(() => Future<void>.delayed(Duration.zero));
   await tester.pump();
   await tester.pump();
@@ -265,6 +294,27 @@ void main() {
       expect(find.text('Point on the map'), findsNothing);
     });
 
+    testWidgets('tabs reach the foot of the map, under the button', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        MapPlacePickerScreen.pick(
+          title: 'Results for “Paris”',
+          confirmLabel: 'Select',
+          results: _paris(),
+          query: 'Paris',
+        ),
+      );
+
+      final layer = find.byType(EdgeTabsLayer);
+      final area = tester.widget<EdgeTabsLayer>(layer).area;
+      expect(area.bottom, tester.getSize(layer).height);
+      // Drawn after the tabs, so on top of them.
+      final button = tester.getRect(find.text('Search in this area'));
+      expect(button.bottom, lessThanOrEqualTo(tester.getRect(layer).bottom));
+    });
+
     testWidgets('a timetable picks results, never a bare point', (
       tester,
     ) async {
@@ -357,9 +407,10 @@ void main() {
       // The twenty REWEs in Berlin replace the Paris results.
       final tabs = tester.widget<EdgeTabsLayer>(find.byType(EdgeTabsLayer));
       expect(tabs.targets, hasLength(20));
+      await _letToastsRunOut(tester);
     });
 
-    testWidgets('finding nothing says so and keeps what was shown', (
+    testWidgets('an empty answer says so and keeps what was shown', (
       tester,
     ) async {
       serve('[]');
@@ -373,16 +424,172 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('Nothing found around here'), findsOne);
+      expect(find.text('Nothing found for “Rewe”'), findsOne);
       expect(
         tester.widget<EdgeTabsLayer>(find.byType(EdgeTabsLayer)).targets,
         hasLength(before),
       );
-      // The toast is registered with oktoast for a day; let it run out, as
-      // save_trip_button_test.dart does.
-      await tester.pump(const Duration(seconds: 3));
-      await tester.pump(const Duration(days: 2));
+      await _letToastsRunOut(tester);
+    });
+
+    testWidgets('nothing on screen says so, and the tabs point onwards', (
+      tester,
+    ) async {
+      // What MOTIS really answers where nothing is near: matches from far
+      // away. The map is on Paris; these are Springfields in the US.
+      serve(
+        File(
+          'test/fixtures/transitous/geocode_springfield.json',
+        ).readAsStringSync(),
+      );
+      await _pump(tester, picker());
+
+      await tester.tap(find.text('Search in this area'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        find.text('Nothing in this area; the arrows point to the nearest'),
+        findsOne,
+      );
+      final layer = tester.widget<EdgeTabsLayer>(find.byType(EdgeTabsLayer));
+      expect(layer.targets, hasLength(20));
+      expect(find.byType(EdgeTab), findsWidgets);
+      await _letToastsRunOut(tester);
+    });
+
+    testWidgets('results on screen need no word', (tester) async {
+      // The Paris results again, from over Paris.
+      serve(
+        File('test/fixtures/transitous/geocode_paris.json').readAsStringSync(),
+      );
+      await _pump(tester, picker());
+
+      await tester.tap(find.text('Search in this area'));
       await tester.pumpAndSettle();
+
+      expect(find.textContaining('Nothing'), findsNothing);
+    });
+  });
+
+  group('tapping a pin', () {
+    late List<Uri> lookups;
+    setUp(() {
+      lookups = [];
+      NominatimClient.instance = NominatimClient(
+        httpClient: MockClient((request) async {
+          lookups.add(request.url);
+          return http.Response(
+            File('test/fixtures/nominatim/lookup_rewe.json').readAsStringSync(),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+        wait: (_) async {},
+      );
+    });
+    tearDown(() {
+      NominatimClient.instance = NominatimClient();
+      BackendProvider.instance?.dispose();
+    });
+
+    Widget rewePicker() => MapPlacePickerScreen.pick(
+      title: 'Results for “Rewe”',
+      confirmLabel: 'Select',
+      results: _capture('geocode_rewe.json'),
+      query: 'Rewe',
+    );
+
+    testWidgets('a place shows what OpenStreetMap knows of it', (tester) async {
+      await _pump(tester, rewePicker());
+      final rewe = _capture('geocode_rewe.json').first;
+
+      await _tapResult(tester, 0);
+
+      // Asked about the very element MOTIS named.
+      expect(
+        lookups.single.queryParameters['osm_ids'],
+        'N${RegExp(r'\d+').firstMatch(rewe.match!.id)!.group(0)}',
+      );
+      expect(find.text('Mo–Sa 07:00–23:30'), findsOne);
+      expect(find.text('Supermarket'), findsOne);
+      expect(find.text('Details © OpenStreetMap contributors'), findsOne);
+      expect(find.text('Search in this area'), findsNothing);
+    });
+
+    testWidgets('turned off, nothing is asked', (tester) async {
+      final backend = BackendProvider();
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await backend.setPlaceDetailsEnabled(false);
+      await _pump(tester, rewePicker());
+
+      await _tapResult(tester, 0);
+
+      expect(lookups, isEmpty);
+      expect(find.text('REWE'), findsWidgets);
+      expect(find.textContaining('OpenStreetMap'), findsNothing);
+    });
+
+    testWidgets('a stop shows its next departures, not OpenStreetMap', (
+      tester,
+    ) async {
+      TransitousClient.instance = TransitousClient(
+        httpClient: MockClient(
+          (_) async => http.Response(
+            File('test/fixtures/transitous/stoptimes.json').readAsStringSync(),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          ),
+        ),
+      );
+      addTearDown(() => TransitousClient.instance = TransitousClient());
+      final alex = _capture('geocode.json');
+      final stop = alex.indexWhere((r) => r.stopId != null);
+      await _pump(
+        tester,
+        MapPlacePickerScreen.pick(
+          title: 'Results for “Alexanderplatz”',
+          confirmLabel: 'Select',
+          results: alex,
+        ),
+      );
+
+      await _tapResult(tester, stop);
+
+      expect(find.text('NEXT DEPARTURES'), findsOne);
+      expect(lookups, isEmpty);
+    });
+
+    testWidgets('select hands back the result, stop id and all', (
+      tester,
+    ) async {
+      final alex = _capture('geocode.json');
+      final stop = alex.indexWhere((r) => r.stopId != null);
+      final popped = await _pump(
+        tester,
+        MapPlacePickerScreen.pick(
+          title: 'Results for “Alexanderplatz”',
+          confirmLabel: 'Select',
+          results: alex,
+        ),
+      );
+
+      await _tapResult(tester, stop);
+      await tester.tap(find.text('Select'));
+      await tester.pumpAndSettle();
+
+      final picked = popped.single! as TransitousLocationSuggestion;
+      expect(picked.stopId, alex[stop].stopId);
+    });
+
+    testWidgets('cancel puts the sheet away', (tester) async {
+      await _pump(tester, rewePicker());
+      await _tapResult(tester, 0);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pump();
+
+      expect(find.text('Search in this area'), findsOne);
     });
   });
 }
