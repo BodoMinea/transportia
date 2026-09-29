@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/backend_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_icon_header.dart';
@@ -12,6 +13,7 @@ import '../widgets/pressable_highlight.dart';
 import '../widgets/section_title.dart';
 import '../widgets/icon_badge.dart';
 import '../widgets/custom_card.dart';
+import '../widgets/toggle_card.dart';
 import '../theme/app_text.dart';
 
 class LocationSettingsScreen extends StatefulWidget {
@@ -82,6 +84,7 @@ class _LocationSettingsScreenState extends State<LocationSettingsScreen> {
 
   Widget _buildContent() {
     final accent = AppColors.accentOf(context);
+    final backend = context.watch<BackendProvider>();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -145,6 +148,26 @@ class _LocationSettingsScreenState extends State<LocationSettingsScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 32),
+            const SectionTitle(text: 'Place details'),
+            const SizedBox(height: 8),
+            Text(
+              'Your location is never sent, only which place you tapped.',
+              style: AppText.bodyFaint,
+            ),
+            const SizedBox(height: 16),
+            ToggleCard(
+              icon: backend.placeDetailsEnabled
+                  ? LucideIcons.store
+                  : LucideIcons.eyeOff,
+              title: 'Details from OpenStreetMap',
+              subtitle: backend.placeDetailsEnabled
+                  ? 'Address, opening hours and contact for a result you '
+                        'tap on the map, looked up on OpenStreetMap'
+                  : 'Off: a tapped result shows only what the search found',
+              value: backend.placeDetailsEnabled,
+              onChanged: backend.setPlaceDetailsEnabled,
             ),
           ],
         ),

@@ -42,6 +42,7 @@ import '../services/trip_details_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/color_utils.dart';
 import '../utils/geo_utils.dart';
+import '../utils/map_framing.dart';
 import '../utils/haptics.dart';
 import '../utils/custom_page_route.dart';
 import '../utils/leg_helper.dart';
@@ -2499,20 +2500,7 @@ class _MapScreenState extends State<MapScreen>
       await controller.animateCamera(CameraUpdate.newLatLng(points.first));
       return;
     }
-    double minLat = points.first.latitude;
-    double maxLat = points.first.latitude;
-    double minLng = points.first.longitude;
-    double maxLng = points.first.longitude;
-    for (final p in points.skip(1)) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
-    final bounds = LatLngBounds(
-      southwest: LatLng(minLat, minLng),
-      northeast: LatLng(maxLat, maxLng),
-    );
+    final bounds = boundsOf(points)!;
     final double bottomPadding = _isSheetCollapsed
         ? (_bottomBarHeight + 64.0)
         : 48.0;
@@ -3409,19 +3397,9 @@ class _MapScreenState extends State<MapScreen>
         points.add(LatLng(leg.toLat, leg.toLon));
       }
     }
-    if (points.isEmpty) return;
-    final first = points.first;
-    double minLat = first.latitude;
-    double maxLat = first.latitude;
-    double minLon = first.longitude;
-    double maxLon = first.longitude;
-    for (final point in points) {
-      if (point.latitude < minLat) minLat = point.latitude;
-      if (point.latitude > maxLat) maxLat = point.latitude;
-      if (point.longitude < minLon) minLon = point.longitude;
-      if (point.longitude > maxLon) maxLon = point.longitude;
-    }
-    final center = LatLng((minLat + maxLat) / 2, (minLon + maxLon) / 2);
+    final bounds = boundsOf(points);
+    if (bounds == null) return;
+    final center = boundsCenter(bounds);
     if (points.length == 1) {
       await controller.animateCamera(
         CameraUpdate.newLatLngZoom(center, _focusedTransferZoomLevel),
@@ -3441,11 +3419,6 @@ class _MapScreenState extends State<MapScreen>
       );
       return;
     }
-
-    final bounds = LatLngBounds(
-      southwest: LatLng(minLat, minLon),
-      northeast: LatLng(maxLat, maxLon),
-    );
 
     try {
       await controller.animateCamera(

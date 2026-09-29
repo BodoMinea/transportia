@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
@@ -14,7 +16,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 import 'package:transportia/api/transitous_client.dart';
 import 'package:transportia/models/my_location.dart';
 import 'package:transportia/models/transitous/enums.dart';
-import 'package:transportia/screens/favourites_map_screen.dart';
+import 'package:transportia/screens/map_place_picker/map_place_picker_screen.dart';
 import 'package:transportia/screens/location_search_screen.dart';
 import 'package:transportia/services/favorites_service.dart';
 import 'package:transportia/models/saved_place.dart';
@@ -105,6 +107,8 @@ Future<void> _pump(
   bool showMyLocation = false,
   String? type,
   SavedPlacesBucket bucket = SavedPlacesBucket.search,
+  LatLng? placeBias,
+  String initialQuery = '',
 }) async {
   tester.view.physicalSize = const Size(420, 1000);
   tester.view.devicePixelRatio = 1;
@@ -134,6 +138,8 @@ Future<void> _pump(
             bucket: bucket,
             type: type,
             showMyLocation: showMyLocation,
+            placeBias: placeBias,
+            initialQuery: initialQuery,
           ),
         ),
       ),
@@ -141,6 +147,12 @@ Future<void> _pump(
   );
   await tester.pumpAndSettle();
 }
+
+/// The result list's scroller; the field has one of its own.
+final _resultList = find.descendant(
+  of: find.byType(ListView),
+  matching: find.byType(Scrollable),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -214,24 +226,23 @@ void main() {
     expect(find.text('Add Favourite'), findsNothing);
   });
 
-  testWidgets('the map sits in the search field, as its one icon', (
+  testWidgets('the map is a button under the list, not an icon in the field', (
     tester,
   ) async {
-    // It used to be a boxed button beside the field; the search screen's own
-    // map button went, so this is the one way left to point at a place.
+    // A small icon in the field was easy to miss; it is the way to answer
+    // with a point, so it gets a whole row.
     await _pump(tester);
 
     final field = find.byType(CupertinoTextField);
     expect(
       find.descendant(of: field, matching: find.byIcon(LucideIcons.mapPlus)),
-      findsOne,
+      findsNothing,
     );
-    expect(find.byIcon(LucideIcons.mapPlus), findsOne);
+    final button = tester.getRect(find.text('Pick a point on the map'));
+    expect(button.top, greaterThan(tester.getRect(field).bottom));
   });
 
-  testWidgets('clearing the query sits beside the map, not instead of it', (
-    tester,
-  ) async {
+  testWidgets('clearing the query leaves the map on offer', (tester) async {
     await _pump(tester);
 
     await tester.enterText(find.byType(CupertinoTextField), 'Al');
@@ -239,6 +250,181 @@ void main() {
 
     expect(find.byIcon(LucideIcons.x), findsOne);
     expect(find.bySemanticsLabel('Pick a point on the map'), findsOne);
+  });
+
+  group('the map with results', () {
+    setUp(() {
+      TransitousClient.instance = TransitousClient(
+        httpClient: MockClient(
+          (_) async => http.Response(
+            File('test/fixtures/transitous/geocode.json').readAsStringSync(),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          ),
+        ),
+      );
+    });
+    tearDown(() => TransitousClient.instance = TransitousClient());
+
+    Future<void> search(WidgetTester tester) async {
+      await tester.enterText(find.byType(EditableText), 'Alexanderplatz');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('once there are results, the map shows them', (tester) async {
+      await _pump(tester, placeBias: const LatLng(52.52, 13.405));
+      await search(tester);
+
+      expect(find.bySemanticsLabel('Pick a point on the map'), findsNothing);
+      await tester.tap(find.bySemanticsLabel('Show results on map'));
+      await tester.pumpAndSettle();
+
+      final picker = tester.widget<MapPlacePickerScreen>(
+        find.byType(MapPlacePickerScreen),
+      );
+      expect(picker.title, 'Results for “Alexanderplatz”');
+      expect(picker.results, isNotEmpty);
+      expect(picker.results.first.name, 'Berlin Alexanderplatz');
+      expect(picker.origin, const LatLng(52.52, 13.405));
+      expect(picker.allowsPoint, isTrue);
+    });
+
+    testWidgets('a timetable gets the map only for its results', (
+      tester,
+    ) async {
+      await _pump(tester, type: 'STOP');
+      expect(find.bySemanticsLabel('Pick a point on the map'), findsNothing);
+
+      await search(tester);
+      await tester.tap(find.bySemanticsLabel('Show results on map'));
+      await tester.pumpAndSettle();
+
+      final picker = tester.widget<MapPlacePickerScreen>(
+        find.byType(MapPlacePickerScreen),
+      );
+      expect(picker.allowsPoint, isFalse);
+    });
+  });
+
+  group('show more', () {
+    late List<Uri> requests;
+
+    /// Answers [available] distinct places, or as many as were asked for.
+    void serve(int available, {bool failAfterFirst = false}) {
+      requests = [];
+      TransitousClient.instance = TransitousClient(
+        httpClient: MockClient((request) async {
+          requests.add(request.url);
+          if (failAfterFirst && requests.length > 1) {
+            return http.Response('{"error":"too many"}', 400);
+          }
+          final asked = int.parse(request.url.queryParameters['numResults']!);
+          final count = asked < available ? asked : available;
+          return http.Response(
+            jsonEncode([
+              for (var i = 0; i < count; i++)
+                {
+                  'type': 'PLACE',
+                  'name': 'Lidl $i',
+                  'id': 'node/[$i]',
+                  'lat': 52.5 + i * 0.01,
+                  'lon': 13.4,
+                  'score': 0,
+                  'areas': const [],
+                  'tokens': const [],
+                },
+            ]),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+    }
+
+    tearDown(() => TransitousClient.instance = TransitousClient());
+
+    Future<void> search(WidgetTester tester) async {
+      await tester.enterText(find.byType(EditableText), 'Lidl');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> tapMore(WidgetTester tester) async {
+      await tester.scrollUntilVisible(
+        find.text('Show more results'),
+        200,
+        scrollable: _resultList,
+      );
+      // A tap on a list still coasting only stops it.
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Show more results'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a full page offers more, and more asks a page more', (
+      tester,
+    ) async {
+      serve(100);
+      await _pump(tester);
+      await search(tester);
+
+      expect(requests.single.queryParameters['numResults'], '20');
+      await tapMore(tester);
+
+      expect(requests.last.queryParameters['numResults'], '40');
+      expect(requests.last.queryParameters['text'], 'Lidl');
+      await tester.scrollUntilVisible(
+        find.text('Lidl 39'),
+        200,
+        scrollable: _resultList,
+      );
+      expect(find.text('Lidl 39'), findsOne);
+    });
+
+    testWidgets('a short page is all there is', (tester) async {
+      serve(12);
+      await _pump(tester);
+      await search(tester);
+
+      expect(find.text('Show more results', skipOffstage: false), findsNothing);
+    });
+
+    testWidgets('stops offering at a hundred', (tester) async {
+      serve(1000);
+      await _pump(tester);
+      await search(tester);
+      for (var i = 0; i < 4; i++) {
+        await tapMore(tester);
+      }
+
+      expect(requests.last.queryParameters['numResults'], '100');
+      expect(find.text('Show more results', skipOffstage: false), findsNothing);
+    });
+
+    testWidgets('a failed "more" keeps what is listed', (tester) async {
+      serve(100, failAfterFirst: true);
+      await _pump(tester);
+      await search(tester);
+      await tapMore(tester);
+
+      // The list is lazy: its last row is the one still built down here.
+      expect(find.text('Lidl 19', skipOffstage: false), findsOne);
+      expect(find.text('Show more results', skipOffstage: false), findsNothing);
+    });
+
+    testWidgets('a new query starts from one page again', (tester) async {
+      serve(100);
+      await _pump(tester);
+      await search(tester);
+      await tapMore(tester);
+
+      await tester.enterText(find.byType(EditableText), 'Aldi');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(requests.last.queryParameters['numResults'], '20');
+    });
   });
 
   testWidgets('a favourite offers its actions from the dots and a long hold', (
@@ -303,6 +489,67 @@ void main() {
     expect(stored.label, 'Work');
     expect(stored.iconName, 'train');
     expect(find.byIcon(LucideIcons.trainFront), findsOne);
+  });
+
+  group('opened on a filled field', () {
+    late List<Uri> requests;
+    setUp(() {
+      requests = [];
+      TransitousClient.instance = TransitousClient(
+        httpClient: MockClient((request) async {
+          requests.add(request.url);
+          return http.Response(
+            File('test/fixtures/transitous/geocode.json').readAsStringSync(),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+    });
+    tearDown(() => TransitousClient.instance = TransitousClient());
+
+    testWidgets('offers My Location, not results for the old answer', (
+      tester,
+    ) async {
+      // Changing a filled origin to where you are is two taps, not three.
+      await _pump(tester, showMyLocation: true, initialQuery: 'Berlin Hbf');
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text(myLocationName), findsOneWidget);
+      expect(requests, isEmpty);
+    });
+
+    testWidgets('selects the text, so typing replaces it', (tester) async {
+      await _pump(tester, initialQuery: 'Berlin Hbf');
+
+      final field = tester.widget<EditableText>(find.byType(EditableText));
+      expect(field.controller.selection.start, 0);
+      expect(field.controller.selection.end, 'Berlin Hbf'.length);
+    });
+
+    testWidgets('searches once something new is typed', (tester) async {
+      await _pump(tester, showMyLocation: true, initialQuery: 'Berlin Hbf');
+
+      await tester.enterText(find.byType(EditableText), 'Alexanderplatz');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(requests.single.queryParameters['text'], 'Alexanderplatz');
+      expect(find.text(myLocationName), findsNothing);
+      expect(find.text('S+U Alexanderplatz Bhf (Berlin)'), findsOne);
+    });
+
+    testWidgets('an empty field still searches the first query', (
+      tester,
+    ) async {
+      await _pump(tester);
+
+      await tester.enterText(find.byType(EditableText), 'Alexanderplatz');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(requests, hasLength(1));
+    });
   });
 
   testWidgets('My Location leads the list when it can answer', (tester) async {
@@ -513,6 +760,21 @@ void main() {
 
         expect(FavoritesService.favoritesListenable.value, isEmpty);
         expect(find.bySemanticsLabel('Keep $name'), findsOne);
+      });
+
+      testWidgets('results say how far, where, and which country abroad', (
+        tester,
+      ) async {
+        // A phone set to Germany, standing near Alexanderplatz.
+        tester.platformDispatcher.localeTestValue = const Locale('de', 'DE');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+        await _pump(tester, placeBias: const LatLng(52.52, 13.405));
+        await search(tester);
+
+        // Berlin Alexanderplatz, 736 m off: at home, so no country.
+        expect(find.text('740 m · Mitte, Berlin'), findsWidgets);
+        // Chur has no district; its canton stands in, and it is abroad.
+        expect(find.textContaining('Grisons, CH'), findsOne);
       });
 
       testWidgets('results are drawn by what serves them', (tester) async {

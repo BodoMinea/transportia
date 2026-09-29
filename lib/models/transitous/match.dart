@@ -96,7 +96,8 @@ class Match {
   /// Relevance of this match; higher sorts first.
   final double score;
 
-  /// OSM category of a place, e.g. `railway=station`.
+  /// What kind of place this is, e.g. `supermarket_14`, `fast_food_16`, or
+  /// `place_6` for a city. Absent for stops and addresses.
   final String? category;
 
   /// Which parts of the query text this match covers.
@@ -126,6 +127,48 @@ class Match {
     }
     for (final area in areas) {
       if (area.isDefault) return area;
+    }
+    return null;
+  }
+
+  /// OSM admin level of a region: a state, a Land, a French région.
+  static const double _regionLevel = 4;
+
+  /// The most specific level still read as a district: an Ortsteil, a
+  /// quartier. Anything finer is a neighbourhood nobody asks for by name.
+  static const double _finestDistrictLevel = 10;
+
+  /// A city, town or village rather than something in one.
+  bool get isSettlement => category?.startsWith('place') ?? false;
+
+  /// The area MOTIS marks for display by default: the city, usually.
+  Area? get cityArea {
+    for (final area in areas) {
+      if (area.isDefault) return area;
+    }
+    return null;
+  }
+
+  /// The most specific area inside [cityArea], down to a district.
+  ///
+  /// Null for a settlement: the district of a city's centre point is not
+  /// where the city is.
+  Area? get districtArea {
+    final city = cityArea;
+    if (city == null || isSettlement) return null;
+    Area? district;
+    for (final area in areas) {
+      final level = area.adminLevel;
+      if (level <= city.adminLevel || level > _finestDistrictLevel) continue;
+      if (district == null || level > district.adminLevel) district = area;
+    }
+    return district;
+  }
+
+  /// The state or region the match lies in.
+  Area? get regionArea {
+    for (final area in areas) {
+      if (area.adminLevel == _regionLevel) return area;
     }
     return null;
   }

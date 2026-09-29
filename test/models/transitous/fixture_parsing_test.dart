@@ -160,6 +160,50 @@ void main() {
       expect(match.displayArea, isNotNull);
     });
 
+    test('a shop sits in a district of its city', () {
+      final rewe = Match.fromJson(
+        (_fixture('geocode_rewe.json') as List).first as Map<String, dynamic>,
+      );
+
+      expect(rewe.isSettlement, isFalse);
+      expect(rewe.cityArea?.name, 'Berlin');
+      // Prenzlauer Berg (10) over Pankow (9): the finest district.
+      expect(rewe.districtArea?.name, 'Prenzlauer Berg');
+      expect(rewe.regionArea?.name, 'Berlin');
+    });
+
+    test('a city is not placed in a district of itself', () {
+      final paris = (_fixture('geocode_paris.json') as List)
+          .map((m) => Match.fromJson(m as Map<String, dynamic>))
+          .toList();
+
+      final city = paris.first;
+      expect(city.country, 'FR');
+      expect(city.isSettlement, isTrue);
+      expect(city.districtArea, isNull);
+      expect(city.regionArea?.name, 'Île-de-France');
+      // A Paris in Texas is told apart by its state.
+      final texas = paris.firstWhere((m) => m.regionArea?.name == 'Texas');
+      expect(texas.country, 'US');
+      expect(texas.districtArea, isNull);
+    });
+
+    test('with no default area there is no city and no district', () {
+      const match = Match(
+        type: LocationType.place,
+        name: 'Somewhere',
+        id: '',
+        lat: 0,
+        lon: 0,
+        score: 0,
+        areas: [Area(name: 'Mitte', adminLevel: 9)],
+      );
+
+      expect(match.cityArea, isNull);
+      expect(match.districtArea, isNull);
+      expect(match.regionArea, isNull);
+    });
+
     test('a stop suggestion carries what serves it', () {
       // What the recents draw a station by.
       final suggestions = [

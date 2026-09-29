@@ -6,7 +6,8 @@
   - `lib/app.dart`: app shell, routing, locale setup.
   - `lib/environment.dart`: app-wide constants and API version resolution.
   - `lib/api/`: Transitous (MOTIS) client — endpoint registry, HTTP client,
-    query formatting. The only place that talks to `package:http`.
+    query formatting — and the Nominatim client for place details. The only
+    place that talks to `package:http`.
   - `lib/models/`: app-level models; `lib/models/transitous/` holds the
     response models mirroring the MOTIS schema.
   - `lib/screens/`: UI screens (e.g., `map_screen.dart`, `welcome_screen.dart`),
@@ -20,7 +21,8 @@
     `skeletons/`.
   - `lib/providers/`, `lib/theme/`, `lib/constants/`, `lib/animations/`:
     app state, colours, preference keys, shared curves.
-- `docs/`: audit trackers (`doc-contradictions.md`, `unused-code.md`).
+- `docs/`: audit trackers (`doc-contradictions.md`, `unused-code.md`) and
+  the measurements behind tuned constants (`geocode-place-bias.md`).
 - `linux/drafting/`: renders app screens to PNGs for design review; see its
   README. Unrelated to the Linux desktop runner beside it.
 - `assets/`: images and static assets (declared in `pubspec.yaml`).

@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../utils/color_utils.dart';
 import '../utils/duration_formatter.dart';
 import '../utils/geo_utils.dart';
+import '../utils/map_framing.dart';
 import '../utils/itinerary_leg_utils.dart';
 import '../utils/leg_helper.dart';
 import '../utils/map_marker_utils.dart';
@@ -257,17 +258,7 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
     final isTransfer =
         legIndex < _displayLegs.length && _displayLegs[legIndex].isTransfer;
 
-    double minLat = geometry.first.latitude;
-    double maxLat = geometry.first.latitude;
-    double minLon = geometry.first.longitude;
-    double maxLon = geometry.first.longitude;
-
-    for (final point in geometry) {
-      if (point.latitude < minLat) minLat = point.latitude;
-      if (point.latitude > maxLat) maxLat = point.latitude;
-      if (point.longitude < minLon) minLon = point.longitude;
-      if (point.longitude > maxLon) maxLon = point.longitude;
-    }
+    final bounds = boundsOf(geometry)!;
 
     final approxDistance = coordinateDistanceInMeters(
       geometry.first.latitude,
@@ -277,7 +268,7 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
     );
     final shouldClampZoom =
         isTransfer || approxDistance <= _transferDistanceThresholdMeters;
-    final center = LatLng((minLat + maxLat) / 2, (minLon + maxLon) / 2);
+    final center = boundsCenter(bounds);
 
     if (shouldClampZoom) {
       await controller.animateCamera(
@@ -285,11 +276,6 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
       );
       return;
     }
-
-    final bounds = LatLngBounds(
-      southwest: LatLng(minLat, minLon),
-      northeast: LatLng(maxLat, maxLon),
-    );
 
     try {
       await controller.animateCamera(
@@ -308,31 +294,22 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
     }
   }
 
+  /// Where each leg starts and ends: what the camera frames.
+  static List<LatLng> _legEnds(Iterable<Leg> legs) => [
+    for (final leg in legs) ...[
+      LatLng(leg.fromLat, leg.fromLon),
+      LatLng(leg.toLat, leg.toLon),
+    ],
+  ];
+
   CameraPosition _calculateInitialCamera() {
     final legs = _cameraLegs();
     if (legs.isEmpty) {
       return const CameraPosition(target: LatLng(50.087, 14.420), zoom: 13.0);
     }
 
-    double minLat = legs.first.fromLat;
-    double maxLat = legs.first.fromLat;
-    double minLon = legs.first.fromLon;
-    double maxLon = legs.first.fromLon;
-
-    for (final leg in legs) {
-      if (leg.fromLat < minLat) minLat = leg.fromLat;
-      if (leg.fromLat > maxLat) maxLat = leg.fromLat;
-      if (leg.fromLon < minLon) minLon = leg.fromLon;
-      if (leg.fromLon > maxLon) maxLon = leg.fromLon;
-      if (leg.toLat < minLat) minLat = leg.toLat;
-      if (leg.toLat > maxLat) maxLat = leg.toLat;
-      if (leg.toLon < minLon) minLon = leg.toLon;
-      if (leg.toLon > maxLon) maxLon = leg.toLon;
-    }
-
-    final centerLat = (minLat + maxLat) / 2;
-    final centerLon = (minLon + maxLon) / 2;
-    return CameraPosition(target: LatLng(centerLat, centerLon), zoom: 13.0);
+    final center = boundsCenter(boundsOf(_legEnds(legs))!);
+    return CameraPosition(target: center, zoom: 13.0);
   }
 
   void _onMapCreated(MapLibreMapController controller) {
@@ -714,26 +691,7 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
     final legs = _cameraLegs();
     if (legs.isEmpty) return;
 
-    double minLat = legs.first.fromLat;
-    double maxLat = legs.first.fromLat;
-    double minLon = legs.first.fromLon;
-    double maxLon = legs.first.fromLon;
-
-    for (final leg in legs) {
-      if (leg.fromLat < minLat) minLat = leg.fromLat;
-      if (leg.fromLat > maxLat) maxLat = leg.fromLat;
-      if (leg.fromLon < minLon) minLon = leg.fromLon;
-      if (leg.fromLon > maxLon) maxLon = leg.fromLon;
-      if (leg.toLat < minLat) minLat = leg.toLat;
-      if (leg.toLat > maxLat) maxLat = leg.toLat;
-      if (leg.toLon < minLon) minLon = leg.toLon;
-      if (leg.toLon > maxLon) maxLon = leg.toLon;
-    }
-
-    final bounds = LatLngBounds(
-      southwest: LatLng(minLat, minLon),
-      northeast: LatLng(maxLat, maxLon),
-    );
+    final bounds = boundsOf(_legEnds(legs))!;
 
     try {
       await controller.animateCamera(

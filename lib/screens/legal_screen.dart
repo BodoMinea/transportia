@@ -100,6 +100,12 @@ class LegalScreen extends StatelessWidget {
                       context,
                     ),
                     _buildDataItem(
+                      'Tapping a search result on the map asks OpenStreetMap\'s '
+                      'Nominatim which place it is, unless turned off under '
+                      'Location',
+                      context,
+                    ),
+                    _buildDataItem(
                       'For more details, refer to our Privacy Policy',
                       context,
                     ),
