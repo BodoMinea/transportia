@@ -410,4 +410,52 @@ void main() {
       expect(search.withSettingsFrom(RoutingOptions.defaults), search);
     });
   });
+
+  group('rental providers', () {
+    Map<String, String> query(RoutingOptions options) {
+      final params = options.toPlanParams(
+        fromPlace: '0,0',
+        toPlace: '1,1',
+        rentalProviderGroups: const ['Dott berlin', 'VOI'],
+      );
+      return {
+        for (final entry in params.toQuery().entries)
+          if (entry.value != null) entry.key: entry.value!,
+      };
+    }
+
+    test('go with every leg that rents', () {
+      final options = RoutingOptions.defaults.copyWith(
+        firstMileModes: const [TransitMode.rental],
+        firstMileRentalFormFactors: const [RentalFormFactor.bicycle],
+        lastMileModes: const [TransitMode.rental],
+        lastMileRentalFormFactors: const [RentalFormFactor.scooterStanding],
+      );
+      final sent = query(options);
+
+      expect(sent['preTransitRentalProviderGroups'], 'Dott berlin,VOI');
+      expect(sent['postTransitRentalProviderGroups'], 'Dott berlin,VOI');
+      expect(sent['directRentalProviderGroups'], 'Dott berlin,VOI');
+    });
+
+    test('stay off legs with nothing to rent', () {
+      final sent = query(RoutingOptions.defaults);
+
+      expect(sent.keys.where((k) => k.contains('ProviderGroups')), isEmpty);
+    });
+
+    test('a refresh keeps the same vehicles and providers', () {
+      final options = RoutingOptions.defaults.copyWith(
+        firstMileModes: const [TransitMode.rental],
+        firstMileRentalFormFactors: const [RentalFormFactor.bicycle],
+      );
+      final sent = options
+          .toRefreshParams(rentalProviderGroups: const ['VOI'])
+          .toQuery();
+
+      expect(sent['preTransitRentalFormFactors'], 'BICYCLE');
+      expect(sent['preTransitRentalProviderGroups'], 'VOI');
+      expect(sent['postTransitRentalProviderGroups'], isNull);
+    });
+  });
 }

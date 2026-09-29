@@ -7,6 +7,7 @@ import '../models/itinerary.dart';
 import '../models/itinerary_response.dart';
 import '../models/routing_options.dart';
 import '../models/time_selection.dart';
+import 'rental_providers_service.dart';
 import 'routing_options_service.dart';
 
 class RoutingService {
@@ -42,11 +43,13 @@ class RoutingService {
     RoutingOptions? options,
   }) async {
     final resolved = options ?? await RoutingOptionsService.load();
+    final providerGroups = await RentalProvidersService.activeGroupIds();
 
     final params = resolved.toPlanParams(
       fromPlace: Q.latLonComma(fromLat, fromLon),
       toPlace: Q.latLonComma(toLat, toLon),
       pageCursor: pageCursor,
+      rentalProviderGroups: providerGroups,
       time: timeSelection == null || timeSelection.isNow
           ? null
           : timeSelection.dateTime,

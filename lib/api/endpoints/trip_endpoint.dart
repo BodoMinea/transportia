@@ -1,5 +1,6 @@
 import '../../models/itinerary.dart';
 import '../../models/transitous/itinerary_id.dart';
+import '../params/plan_params.dart';
 import '../query.dart';
 import '../transitous_client.dart';
 import '../transitous_endpoint.dart';
@@ -96,6 +97,8 @@ class RefreshItineraryOptions {
     this.maxMatchingDistance,
     this.maxPreTransitTime,
     this.maxPostTransitTime,
+    this.preTransitRentals = const RentalFilters(),
+    this.postTransitRentals = const RentalFilters(),
     this.languages = const [],
   });
 
@@ -123,6 +126,14 @@ class RefreshItineraryOptions {
   final double? maxMatchingDistance;
   final Duration? maxPreTransitTime;
   final Duration? maxPostTransitTime;
+
+  /// Which shared vehicles the street legs may use. Without them a refresh
+  /// re-plans with any vehicle from any provider, and can hand back a
+  /// different rental than the one searched for. There is no direct set:
+  /// the endpoint re-plans journeys that use transit.
+  final RentalFilters preTransitRentals;
+  final RentalFilters postTransitRentals;
+
   final List<String> languages;
 
   Map<String, String?> toQuery() => {
@@ -147,6 +158,8 @@ class RefreshItineraryOptions {
     'maxMatchingDistance': Q.number(maxMatchingDistance),
     'maxPreTransitTime': Q.seconds(maxPreTransitTime),
     'maxPostTransitTime': Q.seconds(maxPostTransitTime),
+    ...preTransitRentals.toQuery('preTransit'),
+    ...postTransitRentals.toQuery('postTransit'),
     'language': Q.csv(languages),
   };
 }
