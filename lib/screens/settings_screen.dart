@@ -7,7 +7,7 @@ import 'package:transportia/screens/info_screen.dart';
 import 'package:transportia/screens/legal_screen.dart';
 import 'package:transportia/screens/location_settings_screen.dart';
 import 'package:transportia/utils/custom_page_route.dart';
-import 'package:transportia/screens/transit_options_screen.dart';
+import 'package:transportia/screens/search_options_screen.dart';
 import 'package:transportia/widgets/validation_toast.dart';
 import 'package:transportia/environment.dart';
 import 'package:flutter/cupertino.dart';
@@ -239,11 +239,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   SettingsTile(
                     icon: LucideIcons.settings2,
-                    title: 'Default route options',
-                    subtitle: 'What every new search starts from',
+                    title: 'Search and routing options',
+                    subtitle: 'Place search, rental providers, transfers',
                     onPressed: () {
                       Navigator.of(context).push(
-                        CustomPageRoute(child: const TransitOptionsScreen()),
+                        CustomPageRoute(child: const SearchOptionsScreen()),
                       );
                     },
                   ),

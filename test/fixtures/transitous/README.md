@@ -23,6 +23,7 @@ than against hand-written JSON that agrees with our assumptions.
 | `one_to_many.json` | `/api/v1/one-to-many`, walking, `withDistance` |
 | `one_to_many_intermodal.json` | `/api/experimental/one-to-many-intermodal` |
 | `rentals.json` | `/api/v1/rentals` over central Berlin, all sub-resources |
+| `rentals_groups.json` | `/api/v1/rentals?withProviders=false` — every provider group, nothing else (2026-09-29) |
 | `health.json` | `/api/v1/health` |
 | `debug_transfers.json` | `/api/debug/transfers` for Alexanderplatz |
 

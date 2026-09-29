@@ -11,8 +11,11 @@ class RentalsEndpoint {
 
   /// Give either a bounding box or a [pointLat]/[pointLon] with a [radius].
   ///
-  /// Each `with*` flag adds one list to the response; a request with none of
-  /// them set returns only the provider groups.
+  /// With no area and no provider filter, only the providers come back. Once
+  /// an area or a filter is given, stations, vehicles and zones default to
+  /// included: set the `with*` flags to false to leave them out, or a city's
+  /// worth of vehicles comes back. [withProviders] false drops the provider
+  /// details and keeps just the groups.
   ///
   /// Coordinates are `lat,lon`. The semicolon form is accepted without error
   /// but answers with providers from the wrong region, so it must not be used

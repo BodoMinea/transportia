@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../models/rental_provider_prefs.dart';
 import '../models/routing_options.dart';
 import '../models/time_selection.dart';
 import '../models/transitous/server_config.dart';
 import '../models/saved_trip.dart';
+import '../services/rental_providers_service.dart';
 import '../utils/time_utils.dart';
 import '../widgets/route_field_box.dart';
 import '../theme/app_colors.dart';
@@ -136,11 +138,20 @@ class _BottomCardState extends State<BottomCard> {
   /// The journey stages. Collapsed, the card is just a search box.
   Widget? _buildSpine() {
     if (widget.isCollapsed) return null;
-    return JourneySpine(
-      options: widget.options,
-      capabilities: widget.capabilities,
-      onChanged: widget.onOptionsChanged,
-      onAddViaStop: widget.onAddViaStop,
+    // The provider limit is app-wide, not part of this search's options:
+    // it is saved the moment it changes, so it is read straight from the
+    // service rather than handed down with them.
+    return ValueListenableBuilder<RentalProviderPrefs>(
+      valueListenable: RentalProvidersService.prefsListenable,
+      builder: (context, providers, _) => JourneySpine(
+        options: widget.options,
+        capabilities: widget.capabilities,
+        onChanged: widget.onOptionsChanged,
+        onAddViaStop: widget.onAddViaStop,
+        limitToMyProviders: providers.isActive,
+        hasRentalProviders: providers.groups.isNotEmpty,
+        onLimitToMyProvidersChanged: RentalProvidersService.setLimit,
+      ),
     );
   }
 

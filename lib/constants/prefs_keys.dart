@@ -49,6 +49,18 @@ class PrefsKeys {
   /// All routing preferences, JSON-encoded.
   static const String routingOptions = 'routing_options';
 
+  /// How strongly place search leans towards the rider, as a number; 0 means
+  /// their position is not sent. Absent means the default.
+  static const String placeBias = 'place_bias';
+
+  /// The rental provider groups the rider has an account with, and whether
+  /// searches keep to them, JSON-encoded.
+  static const String rentalProviders = 'rental_providers';
+
+  /// The server's list of rental provider groups, with the host and time it
+  /// was fetched, JSON-encoded. A cache; safe to delete.
+  static const String rentalCatalogue = 'rental_catalogue';
+
   /// How 1.0.3 stored the same settings. Read once by the 1.0.3 migration, then
   /// removed; nothing else touches them.
   static const String transitWalkingSpeed = 'transit_walking_speed';

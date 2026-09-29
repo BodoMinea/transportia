@@ -30,8 +30,7 @@ class BackendProvider extends ChangeNotifier {
       _nominatimHost != NominatimClient.defaultHost;
   bool get isCustomHost => _host != defaultHost;
 
-  String get apiVersion =>
-      _apiVersionOverride ?? _computeDefaultApiVersion(_host);
+  String get apiVersion => _apiVersionOverride ?? defaultApiVersion;
   bool get isCustomApiVersion => _apiVersionOverride != null;
 
   /// Version segment to use for [endpoint]: an explicit per-endpoint override
@@ -50,8 +49,11 @@ class BackendProvider extends ChangeNotifier {
   String? endpointVersionOverride(TransitousEndpoint endpoint) =>
       _endpointVersions[endpoint.prefKey];
 
-  static String _computeDefaultApiVersion(String host) =>
-      host.contains('transitous') ? 'v6' : 'v1';
+  /// The MOTIS API version asked for unless the user sets another, on every
+  /// host. The app is written and tested against v6; older versions differ
+  /// in ways it does not handle (see the version overview in MOTIS's
+  /// `openapi.yaml`).
+  static const String defaultApiVersion = 'v6';
 
   static String _endpointPrefKey(String key) =>
       'transitous_api_version_endpoint_$key';
@@ -126,8 +128,7 @@ class BackendProvider extends ChangeNotifier {
 
   Future<void> setApiVersion(String version) async {
     final trimmed = version.trim();
-    final computedDefault = _computeDefaultApiVersion(_host);
-    final effective = trimmed.isEmpty || trimmed == computedDefault
+    final effective = trimmed.isEmpty || trimmed == defaultApiVersion
         ? null
         : trimmed;
     if (effective == _apiVersionOverride) return;

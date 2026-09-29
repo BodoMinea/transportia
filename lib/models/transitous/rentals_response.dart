@@ -56,6 +56,14 @@ class RentalProviderGroup {
         providers: asStringList(json['providers']),
         formFactors: _formFactors(json['formFactors']),
       );
+
+  /// The wire shape, so a cached copy reads back through [fromJson].
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'providers': providers,
+    'formFactors': [for (final factor in formFactors) factor.wireName],
+  };
 }
 
 /// A single vehicle-sharing operator.

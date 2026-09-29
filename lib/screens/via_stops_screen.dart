@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../models/routing_options.dart';
 import '../widgets/app_page_scaffold.dart';
-import 'transit_options/transit_options_via_stops.dart';
+import 'search_options/search_options_via_stops.dart';
 
 /// Picks the stops a journey should pass through.
 ///
@@ -33,7 +33,7 @@ class _ViaStopsScreenState extends State<ViaStopsScreen> {
         title: 'Travel through',
         scrollable: true,
         onBack: () => Navigator.of(context).pop(_options),
-        body: TransitOptionsViaStopsCard(
+        body: SearchOptionsViaStopsCard(
           options: _options,
           onChanged: (next) => setState(() => _options = next),
         ),

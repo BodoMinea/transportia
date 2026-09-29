@@ -169,64 +169,6 @@ void main() {
     });
   });
 
-  group('rentals follow the vehicles picked for them', () {
-    test('ticking the mode alone still leaves something to rent', () {
-      // The defaults editor offers the mode with no vehicle picker, so it
-      // stands for the same set the search screen's Rental icon does.
-      final options = RoutingOptions.defaults.withFirstMileModes(const [
-        TransitMode.walk,
-        TransitMode.rental,
-      ]);
-
-      expect(
-        options.firstMileRentalFormFactors,
-        RoutingOptions.defaultRentalFormFactors,
-      );
-      expect(
-        _query(options)['preTransitRentalFormFactors'],
-        'BICYCLE,SCOOTER_STANDING,OTHER',
-      );
-    });
-
-    test('a vehicle already chosen is not overwritten', () {
-      const picked = RoutingOptions(
-        firstMileModes: [TransitMode.rental],
-        firstMileRentalFormFactors: [RentalFormFactor.car],
-      );
-      final again = picked.withFirstMileModes(const [
-        TransitMode.walk,
-        TransitMode.rental,
-      ]);
-
-      expect(again.firstMileRentalFormFactors, [RentalFormFactor.car]);
-    });
-
-    test('dropping the mode drops its vehicles', () {
-      // Otherwise the filter would sit in storage describing a leg that can
-      // no longer be rented, and come back the next time rentals were on.
-      const picked = RoutingOptions(
-        firstMileModes: [TransitMode.rental],
-        firstMileRentalFormFactors: [RentalFormFactor.car],
-      );
-      final walked = picked.withFirstMileModes(const [TransitMode.walk]);
-
-      expect(walked.firstMileRentalFormFactors, isEmpty);
-    });
-
-    test('the two miles keep their own vehicles', () {
-      const both = RoutingOptions(
-        firstMileModes: [TransitMode.rental],
-        lastMileModes: [TransitMode.rental],
-        firstMileRentalFormFactors: [RentalFormFactor.car],
-        lastMileRentalFormFactors: [RentalFormFactor.moped],
-      );
-      final firstWalksNow = both.withFirstMileModes(const [TransitMode.walk]);
-
-      expect(firstWalksNow.firstMileRentalFormFactors, isEmpty);
-      expect(firstWalksNow.lastMileRentalFormFactors, [RentalFormFactor.moped]);
-    });
-  });
-
   group('storage', () {
     test('mile modes round-trip', () {
       const options = RoutingOptions(
@@ -316,6 +258,146 @@ void main() {
         TransitSelection({TransitMode.longDistance}),
       );
       expect(_query(intercityOnly)['transitModes'], 'LONG_DISTANCE');
+    });
+  });
+
+  group('journeys without transit', () {
+    test('walk only by default, for as long as both street legs', () {
+      final query = _query(RoutingOptions.defaults);
+
+      expect(query['directModes'], 'WALK');
+      expect(query['maxDirectTime'], '1800');
+    });
+
+    test('a bike taken to the station can be ridden all the way', () {
+      const options = RoutingOptions(firstMileModes: [TransitMode.bike]);
+
+      expect(options.directModes, [TransitMode.walk, TransitMode.bike]);
+    });
+
+    test('follows the way there, not the way back', () {
+      const options = RoutingOptions(lastMileModes: [TransitMode.bike]);
+
+      expect(options.directModes, [TransitMode.walk]);
+    });
+
+    test('park and ride drives; a drop-off does not carry over', () {
+      expect(
+        const RoutingOptions(
+          firstMileModes: [TransitMode.carParking],
+        ).directModes,
+        [TransitMode.walk, TransitMode.car],
+      );
+      expect(
+        const RoutingOptions(
+          firstMileModes: [TransitMode.carDropoff],
+        ).directModes,
+        [TransitMode.walk],
+      );
+    });
+
+    test('rents the vehicles picked for the way there', () {
+      final options = RoutingOptions.defaults.copyWith(
+        firstMileModes: const [TransitMode.walk, TransitMode.rental],
+        firstMileRentalFormFactors: const [RentalFormFactor.bicycle],
+      );
+      final query = _query(options);
+
+      expect(query['directModes'], 'WALK,RENTAL');
+      expect(query['directRentalFormFactors'], 'BICYCLE');
+    });
+
+    test('budget is the sum of both street legs', () {
+      const options = RoutingOptions(
+        maxFirstMileTime: Duration(minutes: 20),
+        maxLastMileTime: Duration(minutes: 10),
+      );
+
+      expect(options.maxDirectTime, const Duration(minutes: 30));
+      expect(_query(options)['maxDirectTime'], '1800');
+    });
+  });
+
+  group('withSettingsFrom', () {
+    const stored = RoutingOptions(
+      useRoutedTransfers: false,
+      additionalTransferTime: Duration(minutes: 7),
+      elevationCosts: ElevationCosts.high,
+      wheelchairAccessibleOnly: true,
+      maxTransfers: 1,
+    );
+    final search = RoutingOptions.defaults.copyWith(
+      firstMileModes: const [TransitMode.bike],
+      walkingSpeedKmh: 5.5,
+    );
+
+    test('takes the settings-only fields', () {
+      final merged = search.withSettingsFrom(stored);
+
+      expect(merged.useRoutedTransfers, isFalse);
+      expect(merged.additionalTransferTime, const Duration(minutes: 7));
+      expect(merged.elevationCosts, ElevationCosts.high);
+    });
+
+    test('keeps everything the search screen offers', () {
+      final merged = search.withSettingsFrom(stored);
+
+      expect(merged.firstMileModes, [TransitMode.bike]);
+      expect(merged.walkingSpeedKmh, 5.5);
+      expect(merged.wheelchairAccessibleOnly, isFalse);
+      expect(merged.maxTransfers, isNull);
+    });
+
+    test('changes nothing when the settings already agree', () {
+      expect(search.withSettingsFrom(RoutingOptions.defaults), search);
+    });
+  });
+
+  group('rental providers', () {
+    Map<String, String> query(RoutingOptions options) {
+      final params = options.toPlanParams(
+        fromPlace: '0,0',
+        toPlace: '1,1',
+        rentalProviderGroups: const ['Dott berlin', 'VOI'],
+      );
+      return {
+        for (final entry in params.toQuery().entries)
+          if (entry.value != null) entry.key: entry.value!,
+      };
+    }
+
+    test('go with every leg that rents', () {
+      final options = RoutingOptions.defaults.copyWith(
+        firstMileModes: const [TransitMode.rental],
+        firstMileRentalFormFactors: const [RentalFormFactor.bicycle],
+        lastMileModes: const [TransitMode.rental],
+        lastMileRentalFormFactors: const [RentalFormFactor.scooterStanding],
+      );
+      final sent = query(options);
+
+      expect(sent['preTransitRentalProviderGroups'], 'Dott berlin,VOI');
+      expect(sent['postTransitRentalProviderGroups'], 'Dott berlin,VOI');
+      expect(sent['directRentalProviderGroups'], 'Dott berlin,VOI');
+    });
+
+    test('stay off legs with nothing to rent', () {
+      final sent = query(RoutingOptions.defaults);
+
+      expect(sent.keys.where((k) => k.contains('ProviderGroups')), isEmpty);
+    });
+
+    test('a refresh keeps the same vehicles and providers', () {
+      final options = RoutingOptions.defaults.copyWith(
+        firstMileModes: const [TransitMode.rental],
+        firstMileRentalFormFactors: const [RentalFormFactor.bicycle],
+      );
+      final sent = options
+          .toRefreshParams(rentalProviderGroups: const ['VOI'])
+          .toQuery();
+
+      expect(sent['preTransitRentalFormFactors'], 'BICYCLE');
+      expect(sent['preTransitRentalProviderGroups'], 'VOI');
+      expect(sent['postTransitRentalProviderGroups'], isNull);
     });
   });
 }
