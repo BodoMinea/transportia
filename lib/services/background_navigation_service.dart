@@ -220,6 +220,31 @@ String? _waitingLabel(Leg leg, ItineraryNavigationTracker tracker) {
   return '🟢 Departs in $minutes min';
 }
 
+/// "N stops until STOP (HH:MM)" / "N stops, X min until STOP" / "STOP is
+/// next, in X min" / "STOP is next, at HH:MM" — richer than the shared
+/// [progressLabel] (which only knows the stop *count*, for the carousel
+/// too): the notification also has the leg itself on hand, so it can name
+/// the destination stop and estimate when it'll actually be reached.
+String _stopsProgressLine(Leg leg, int remainingStops) {
+  if (remainingStops <= 0) return 'Arriving now';
+
+  final stopName = leg.toName;
+  final arrival = leg.endTime;
+  final remaining = arrival.difference(DateTime.now());
+  final isSoon = remaining.inMinutes < 15;
+  final minutes = remaining.inMinutes < 1 ? 1 : remaining.inMinutes;
+
+  if (remainingStops == 1) {
+    return isSoon
+        ? '$stopName is next, in $minutes min'
+        : '$stopName is next, at ${formatTime(arrival)}';
+  }
+
+  return isSoon
+      ? '$remainingStops stops, $minutes min until $stopName'
+      : '$remainingStops stops until $stopName (${formatTime(arrival)})';
+}
+
 /// Rasterizes a Lucide glyph (the same ones used in-app for leg icons) into a
 /// bitmap for the notification's large icon. Returns null on any failure so
 /// callers can just omit the icon rather than fail the whole notification.
@@ -291,13 +316,15 @@ void _onServiceStart(ServiceInstance service) async {
         ? current.legs[legIndex].leg
         : null;
     final title = leg == null ? 'Trip complete' : _legTitle(leg);
+    final remainingStops = current.remainingStops;
     final progressLine =
         (leg == null ? null : _waitingLabel(leg, current)) ??
-        progressLabel(
-          remainingWalkMeters: current.remainingWalkMeters,
-          remainingStops: current.remainingStops,
-          nextStopLabel: 'Your stop is next',
-        ) ??
+        (leg != null && leg.mode != 'WALK' && remainingStops != null
+            ? _stopsProgressLine(leg, remainingStops)
+            : progressLabel(
+                remainingWalkMeters: current.remainingWalkMeters,
+                remainingStops: remainingStops,
+              )) ??
         '';
     final body = current.arrived
         ? "You've arrived"
