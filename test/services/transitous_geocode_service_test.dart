@@ -5,7 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:transportia/api/transitous_client.dart';
+import 'package:transportia/services/place_bias_service.dart';
 import 'package:transportia/services/transitous_geocode_service.dart';
 
 const _berlin = LatLng(52.52, 13.405);
@@ -47,6 +51,11 @@ Map<String, dynamic> _match({
 };
 
 void main() {
+  setUp(() {
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
+    PlaceBiasService.invalidate();
+  });
   tearDown(() => TransitousClient.instance = TransitousClient());
 
   group('fetchSuggestions', () {
@@ -66,6 +75,57 @@ void main() {
 
     test('an area search holds hard to its centre', () async {
       final requests = _serve('[]');
+
+      await TransitousGeocodeService.fetchSuggestionPage(
+        text: 'Rewe',
+        placeBias: _berlin,
+        biasStrength: TransitousGeocodeService.areaPlaceBias,
+      );
+
+      expect(requests.single.queryParameters['placeBias'], '20');
+    });
+
+    test("asks with the rider's own bias when they changed it", () async {
+      final requests = _serve('[]');
+      await PlaceBiasService.save(3);
+
+      await TransitousGeocodeService.fetchSuggestions(
+        text: 'Rewe',
+        placeBias: _berlin,
+      );
+
+      expect(requests.single.queryParameters['placeBias'], '3');
+    });
+
+    test('reads a bias stored by an earlier session', () async {
+      final requests = _serve('[]');
+      await SharedPreferencesAsync().setDouble('place_bias', 2.5);
+
+      await TransitousGeocodeService.fetchSuggestions(
+        text: 'Rewe',
+        placeBias: _berlin,
+      );
+
+      expect(requests.single.queryParameters['placeBias'], '2.5');
+    });
+
+    test('sends no position at all once the bias is off', () async {
+      final requests = _serve('[]');
+      await PlaceBiasService.save(0);
+
+      await TransitousGeocodeService.fetchSuggestions(
+        text: 'Rewe',
+        placeBias: _berlin,
+      );
+
+      final query = requests.single.queryParameters;
+      expect(query.containsKey('place'), isFalse);
+      expect(query.containsKey('placeBias'), isFalse);
+    });
+
+    test('an area search keeps its centre with the bias off', () async {
+      final requests = _serve('[]');
+      await PlaceBiasService.save(0);
 
       await TransitousGeocodeService.fetchSuggestionPage(
         text: 'Rewe',
