@@ -13,15 +13,15 @@ import '../../widgets/section_title.dart';
 ///
 /// Collapsed by default: it is a debugging aid for pointing the app at a
 /// different MOTIS instance, not something most people need.
-class TransitOptionsBackendCard extends StatefulWidget {
-  const TransitOptionsBackendCard({super.key});
+class SearchOptionsBackendCard extends StatefulWidget {
+  const SearchOptionsBackendCard({super.key});
 
   @override
-  State<TransitOptionsBackendCard> createState() =>
-      _TransitOptionsBackendCardState();
+  State<SearchOptionsBackendCard> createState() =>
+      _SearchOptionsBackendCardState();
 }
 
-class _TransitOptionsBackendCardState extends State<TransitOptionsBackendCard> {
+class _SearchOptionsBackendCardState extends State<SearchOptionsBackendCard> {
   bool _advancedExpanded = false;
   bool _endpointVersionsExpanded = false;
   late final TextEditingController _hostController;

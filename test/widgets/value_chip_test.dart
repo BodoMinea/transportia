@@ -32,6 +32,8 @@ Future<void> _pumpLeg(
               onBudgetChanged: onBudgetChanged ?? (_) {},
               onBudgetPressed: () {},
               onModesPressed: () {},
+              limitToMyProviders: false,
+              onLimitToMyProvidersPressed: () {},
             ),
           ),
         ),

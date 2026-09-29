@@ -141,6 +141,9 @@ class _BottomCardState extends State<BottomCard> {
       capabilities: widget.capabilities,
       onChanged: widget.onOptionsChanged,
       onAddViaStop: widget.onAddViaStop,
+      limitToMyProviders: false,
+      hasRentalProviders: false,
+      onLimitToMyProvidersChanged: (_) {},
     );
   }
 
