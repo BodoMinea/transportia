@@ -101,7 +101,7 @@ class _SearchOptionsBackendGroupsState
               'Hostname only, without https://. The API version applies to '
               'routes, trips, stop times, stops and vehicles on the map; '
               'place search and rentals stay on v1. Empty means automatic: '
-              'v6 on Transitous, v1 elsewhere.',
+              'v6.',
           children: [
             OptionsTextRow(
               label: 'Host',

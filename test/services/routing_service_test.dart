@@ -145,8 +145,6 @@ void main() {
           maxFirstMileTime: Duration(minutes: 20),
           lastMileModes: [TransitMode.bike],
           maxLastMileTime: Duration(minutes: 10),
-          directModes: [TransitMode.bike],
-          maxDirectTime: Duration(minutes: 45),
           walkingSpeedKmh: 5.4,
           cyclingSpeedKmh: 18.0,
           elevationCosts: ElevationCosts.high,
@@ -166,8 +164,8 @@ void main() {
       expect(query['maxPreTransitTime'], '1200');
       expect(query['postTransitModes'], 'BIKE');
       expect(query['maxPostTransitTime'], '600');
-      expect(query['directModes'], 'BIKE');
-      expect(query['maxDirectTime'], '2700');
+      expect(query['directModes'], 'WALK,BIKE');
+      expect(query['maxDirectTime'], '1800');
       expect(query['elevationCosts'], 'HIGH');
       expect(double.parse(query['cyclingSpeed']!), closeTo(5.0, 0.01));
     });

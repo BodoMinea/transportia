@@ -7,7 +7,6 @@ import '../../models/transitous/server_config.dart';
 import '../../widgets/app_toggle_switch.dart';
 import '../../widgets/options/icon_controls.dart';
 import '../../widgets/options/selectable_tick.dart';
-import '../../widgets/search/street_leg_section.dart';
 import 'search_options_rows.dart';
 
 /// How transfers are walked, and how much slack each one gets.
@@ -70,95 +69,6 @@ class SearchOptionsTransfersGroup extends StatelessWidget {
                 ),
               ),
               const SliderScaleLabels(labels: ['0', '15', '30 min']),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Whether to offer a journey with no transit at all, how, and for how long.
-class SearchOptionsDirectJourneyGroup extends StatelessWidget {
-  const SearchOptionsDirectJourneyGroup({
-    super.key,
-    required this.options,
-    required this.capabilities,
-    required this.onChanged,
-  });
-
-  final RoutingOptions options;
-  final ServerConfig capabilities;
-  final ValueChanged<RoutingOptions> onChanged;
-
-  static const List<int> _budgetChoices = [5, 15, 30, 60];
-
-  void _toggleMode(TransitMode mode) {
-    final modes = options.directModes;
-    onChanged(
-      options.copyWith(
-        directModes: modes.contains(mode)
-            ? [
-                for (final m in modes)
-                  if (m != mode) m,
-              ]
-            : [
-                for (final m in RoutingOptions.streetModeChoices)
-                  if (m == mode || modes.contains(m)) m,
-              ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // The server clamps anything above its own limit, so offering larger
-    // values would just be a lie about what will happen.
-    final choices = _budgetChoices
-        .where((m) => Duration(minutes: m) <= capabilities.maxDirectTime)
-        .toList();
-
-    return OptionsGroup(
-      title: 'Journeys without transit',
-      children: [
-        OptionsRow(
-          icon: LucideIcons.moveRight,
-          label: 'Offer when short enough',
-          value: 'up to ${options.maxDirectTime.inMinutes} min',
-          below: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final minutes in choices)
-                    SelectableTick(
-                      label: '$minutes min',
-                      selected: options.maxDirectTime.inMinutes == minutes,
-                      onPressed: () => onChanged(
-                        options.copyWith(
-                          maxDirectTime: Duration(minutes: minutes),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              const OptionGroupHeading('By'),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final mode in RoutingOptions.streetModeChoices)
-                    SelectableTick(
-                      label: mileModeLabel(mode),
-                      selected: options.directModes.contains(mode),
-                      onPressed: () => _toggleMode(mode),
-                    ),
-                ],
-              ),
             ],
           ),
         ),
