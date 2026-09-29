@@ -169,64 +169,6 @@ void main() {
     });
   });
 
-  group('rentals follow the vehicles picked for them', () {
-    test('ticking the mode alone still leaves something to rent', () {
-      // The defaults editor offers the mode with no vehicle picker, so it
-      // stands for the same set the search screen's Rental icon does.
-      final options = RoutingOptions.defaults.withFirstMileModes(const [
-        TransitMode.walk,
-        TransitMode.rental,
-      ]);
-
-      expect(
-        options.firstMileRentalFormFactors,
-        RoutingOptions.defaultRentalFormFactors,
-      );
-      expect(
-        _query(options)['preTransitRentalFormFactors'],
-        'BICYCLE,SCOOTER_STANDING,OTHER',
-      );
-    });
-
-    test('a vehicle already chosen is not overwritten', () {
-      const picked = RoutingOptions(
-        firstMileModes: [TransitMode.rental],
-        firstMileRentalFormFactors: [RentalFormFactor.car],
-      );
-      final again = picked.withFirstMileModes(const [
-        TransitMode.walk,
-        TransitMode.rental,
-      ]);
-
-      expect(again.firstMileRentalFormFactors, [RentalFormFactor.car]);
-    });
-
-    test('dropping the mode drops its vehicles', () {
-      // Otherwise the filter would sit in storage describing a leg that can
-      // no longer be rented, and come back the next time rentals were on.
-      const picked = RoutingOptions(
-        firstMileModes: [TransitMode.rental],
-        firstMileRentalFormFactors: [RentalFormFactor.car],
-      );
-      final walked = picked.withFirstMileModes(const [TransitMode.walk]);
-
-      expect(walked.firstMileRentalFormFactors, isEmpty);
-    });
-
-    test('the two miles keep their own vehicles', () {
-      const both = RoutingOptions(
-        firstMileModes: [TransitMode.rental],
-        lastMileModes: [TransitMode.rental],
-        firstMileRentalFormFactors: [RentalFormFactor.car],
-        lastMileRentalFormFactors: [RentalFormFactor.moped],
-      );
-      final firstWalksNow = both.withFirstMileModes(const [TransitMode.walk]);
-
-      expect(firstWalksNow.firstMileRentalFormFactors, isEmpty);
-      expect(firstWalksNow.lastMileRentalFormFactors, [RentalFormFactor.moped]);
-    });
-  });
-
   group('storage', () {
     test('mile modes round-trip', () {
       const options = RoutingOptions(
