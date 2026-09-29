@@ -64,6 +64,18 @@ void main() {
       expect(query['place'], '52.520000,13.405000');
     });
 
+    test('an area search holds hard to its centre', () async {
+      final requests = _serve('[]');
+
+      await TransitousGeocodeService.fetchSuggestionPage(
+        text: 'Rewe',
+        placeBias: _berlin,
+        biasStrength: TransitousGeocodeService.areaPlaceBias,
+      );
+
+      expect(requests.single.queryParameters['placeBias'], '20');
+    });
+
     test('sends no bias without a position', () async {
       final requests = _serve('[]');
 

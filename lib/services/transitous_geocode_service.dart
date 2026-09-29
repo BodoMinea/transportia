@@ -156,6 +156,12 @@ class TransitousGeocodeService {
   /// changing it.
   static const double _kPlaceBias = 1.5;
 
+  /// How strongly "Search in this area" holds a search to the map's centre.
+  ///
+  /// Where results stop moving closer: from 20 up to 100 nothing changes,
+  /// and names still match. See docs/geocode-place-bias.md.
+  static const double areaPlaceBias = 20;
+
   /// Results per request. MOTIS answers ten unless asked.
   static const int pageSize = 20;
 
@@ -182,6 +188,7 @@ class TransitousGeocodeService {
     LatLng? placeBias,
     String? type,
     int numResults = pageSize,
+    double biasStrength = _kPlaceBias,
   }) async {
     final query = text.trim();
     if (query.length < 3) {
@@ -197,7 +204,7 @@ class TransitousGeocodeService {
         text: query,
         placeLat: placeBias?.latitude,
         placeLon: placeBias?.longitude,
-        placeBias: placeBias == null ? null : _kPlaceBias,
+        placeBias: placeBias == null ? null : biasStrength,
         numResults: numResults,
         type: type == null ? null : LocationType.fromWire(type),
       );

@@ -80,6 +80,32 @@ What it costs, honestly:
   not worth 5 to fix it, because that brings back the `Paris` problem. The
   spelling with the apostrophe is fine at every strength.
 
+## "Search in this area": `placeBias=20`
+
+The map picker's "Search in this area" asks again from the map's centre,
+where the rider has panned to on purpose, so nearness should win outright.
+Measured 2026-09-29, 20 results from each centre, counting results within
+15 km:
+
+| Query, map centred on | 1.5 | 5 | 10 | **20** | 50 | 100 |
+|---|---|---|---|---|---|---|
+| McDonalds, Paris | 0 | 17 | 20 | **20** | 20 | 20 |
+| Rewe, Hamburg | 20 | 20 | 20 | **20** | 20 | 20 |
+| Hauptbahnhof, München | 1 | 12 | 12 | **12** | 12 | 12 |
+| Paris, Berlin | 1 | 14 | 15 | **15** | 15 | 15 |
+| Lidl, Köln | 19 | 20 | 20 | **20** | 20 | 20 |
+| Springfield, Springfield IL | 6 | 20 | 20 | **20** | 20 | 20 |
+| Bahnhof, Zürich | 4 | 14 | 20 | **20** | 20 | 20 |
+
+20 is where every query stops changing: nothing moves between 20 and 100.
+From 10 to 20 the order still improves (for `Bahnhof` in Zürich, the two
+stations 1–2 km away rise above ones 6–9 km out). Names keep matching: 19
+or 20 of 20 contain the query at every strength.
+
+A strong bias does not restrict. Where nothing matches nearby (`Rewe` from
+Paris) the results simply come from further away, and the edge tabs point
+to them; a bounding box (`min`/`max`) would return nothing instead.
+
 ## Not solved here
 
 Reported upstream rather than patched in the app:
