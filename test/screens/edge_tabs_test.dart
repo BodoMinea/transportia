@@ -142,6 +142,21 @@ void main() {
       expect(resultPinFeatures(const [])['features'], isEmpty);
     });
   });
+
+  group('resultRankOf', () {
+    test('a pin reports the rank it was given', () {
+      expect(resultRankOf('0', 3), 0);
+      expect(resultRankOf('2', 3), 2);
+    });
+
+    test('anything else is no result', () {
+      expect(resultRankOf('3', 3), isNull);
+      expect(resultRankOf('-1', 3), isNull);
+      expect(resultRankOf('abc', 3), isNull);
+      expect(resultRankOf('', 3), isNull);
+      expect(resultRankOf('0', 0), isNull);
+    });
+  });
 }
 
 Future<Rect> _labelRect(WidgetTester tester, List<Rect> taken) async {

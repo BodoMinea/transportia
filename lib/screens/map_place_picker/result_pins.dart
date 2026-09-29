@@ -40,3 +40,12 @@ Map<String, dynamic> resultPinFeatures(
       },
   ],
 };
+
+/// The result a tapped pin stands for, from the feature id MapLibre reports:
+/// the id [resultPinFeatures] gave it, which is its rank. Null for anything
+/// that is not one of [count] results.
+int? resultRankOf(String featureId, int count) {
+  final rank = int.tryParse(featureId.trim());
+  if (rank == null || rank < 0 || rank >= count) return null;
+  return rank;
+}

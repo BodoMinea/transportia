@@ -2607,7 +2607,7 @@ class _MapScreenState extends State<MapScreen>
     final controller = _controller;
     if (controller == null) return;
     Future<void> addMarker(String id, Color color, IconData icon) async {
-      final image = await _buildMarkerImage(color, icon);
+      final image = await buildBubbleMarkerImage(color, icon);
       await controller.addImage(id, image);
     }
 
@@ -2646,69 +2646,6 @@ class _MapScreenState extends State<MapScreen>
     } catch (_) {
       return null;
     }
-  }
-
-  Future<Uint8List> _buildMarkerImage(Color color, IconData icon) async {
-    const double width = 72;
-    const double height = 96;
-    const double pointerHeight = 18;
-    const double bubbleRadius = 22;
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    final bubbleCenter = Offset(
-      width / 2,
-      height - pointerHeight - bubbleRadius,
-    );
-
-    final shadowPaint = Paint()
-      ..color = const Color(0x33000000)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawCircle(
-      bubbleCenter + const Offset(0, 2),
-      bubbleRadius + 3,
-      shadowPaint,
-    );
-
-    final bodyPaint = Paint()..color = color;
-    canvas.drawCircle(bubbleCenter, bubbleRadius, bodyPaint);
-
-    final pointerPath = Path()
-      ..moveTo(width / 2, height)
-      ..lineTo(width / 2 - 10, height - pointerHeight)
-      ..lineTo(width / 2 + 10, height - pointerHeight)
-      ..close();
-    canvas.drawPath(pointerPath, bodyPaint);
-
-    final borderPaint = Paint()
-      ..color = AppColors.solidWhite
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(bubbleCenter, bubbleRadius - 1, borderPaint);
-
-    final iconPainter = TextPainter(
-      textDirection: TextDirection.ltr,
-      text: TextSpan(
-        text: String.fromCharCode(icon.codePoint),
-        style: TextStyle(
-          fontSize: 28,
-          fontFamily: icon.fontFamily,
-          package: icon.fontPackage,
-          color: AppColors.solidWhite,
-        ),
-      ),
-    )..layout();
-
-    iconPainter.paint(
-      canvas,
-      bubbleCenter - Offset(iconPainter.width / 2, iconPainter.height / 2),
-    );
-
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(width.toInt(), height.toInt());
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData!.buffer.asUint8List();
   }
 
   Future<void> _applyStopAccentColor() async {

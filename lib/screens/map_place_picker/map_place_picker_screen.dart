@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
 
@@ -20,6 +21,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_text.dart';
 import '../../utils/geo_utils.dart';
 import '../../utils/map_framing.dart';
+import '../../utils/haptics.dart';
 import '../../utils/map_marker_utils.dart';
 import '../../utils/place_caption.dart';
 import '../../widgets/custom_app_bar.dart';
@@ -82,6 +84,13 @@ class MapPlacePickerScreen extends StatefulWidget {
 class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   static const String _kPinsSourceId = 'picker-results-source';
   static const String _kPinsLayerId = 'picker-results-layer';
+  static const String _kPointSourceId = 'picker-point-source';
+  static const String _kPointLayerId = 'picker-point-layer';
+  static const String _kPointImageId = 'picker-point-marker';
+
+  /// MapLibre may report one tap on a pin both as a feature tap and as a map
+  /// tap; a map tap this soon after a pin's is that same tap.
+  static const Duration _kSameTap = Duration(milliseconds: 400);
 
   /// No closer than this for a city, whose point is only its centre.
   static const double _kSettlementZoom = 12;
@@ -109,6 +118,8 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   MapLibreMapController? _controller;
   bool _didInitialCenter = false;
   bool _pinsReady = false;
+  bool _pointLayerReady = false;
+  DateTime? _lastPinTap;
 
   /// Where the map looks, as last reported; the tabs are placed from it.
   CameraPosition? _camera;
@@ -173,7 +184,7 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
           trackCameraPosition: true,
           onCameraMove: (position) => setState(() => _camera = position),
           onMapClick: _onMapTap,
-          onMapLongClick: _onMapTap,
+          onMapLongClick: _onMapLongPress,
         ),
         if (_results.isNotEmpty)
           Positioned.fill(
@@ -263,16 +274,31 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   double _closestZoomFor(TransitousLocationSuggestion? result) =>
       (result?.match?.isSettlement ?? false) ? _kSettlementZoom : _kPlaceZoom;
 
+  @override
+  void dispose() {
+    _controller?.onFeatureTapped.remove(_onFeatureTapped);
+    super.dispose();
+  }
+
   void _onMapCreated(MapLibreMapController controller) async {
     _controller = controller;
+    // A pin is an interactive feature: a tap on it arrives here, not as a
+    // map tap, which only a long press would otherwise have reached.
+    controller.onFeatureTapped.add(_onFeatureTapped);
     if (_results.isNotEmpty) return;
     await _centerOnUserIfPossible();
   }
 
   Future<void> _onStyleLoaded() async {
     final controller = _controller;
-    if (controller == null || _results.isEmpty) return;
+    if (controller == null) return;
     final accent = AppColors.accentOf(context);
+    await _addPins(controller, accent);
+    await _addPointLayer(controller, accent);
+  }
+
+  Future<void> _addPins(MapLibreMapController controller, Color accent) async {
+    if (_results.isEmpty) return;
     try {
       for (final icon in {for (final r in _results) resultPinIcon(r)}) {
         await controller.addImage(
@@ -316,6 +342,58 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
     }
   }
 
+  /// The marker for a point picked by hand, above the pins: it is what the
+  /// sheet is about.
+  Future<void> _addPointLayer(
+    MapLibreMapController controller,
+    Color accent,
+  ) async {
+    try {
+      await controller.addImage(
+        _kPointImageId,
+        await buildBubbleMarkerImage(accent, LucideIcons.mapPin),
+      );
+      await controller.addGeoJsonSource(_kPointSourceId, _pointFeatures());
+      await controller.addSymbolLayer(
+        _kPointSourceId,
+        _kPointLayerId,
+        const SymbolLayerProperties(
+          iconImage: _kPointImageId,
+          iconAnchor: 'bottom',
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
+        ),
+        enableInteraction: false,
+      );
+      _pointLayerReady = true;
+    } catch (_) {
+      _pointLayerReady = false;
+    }
+  }
+
+  Map<String, dynamic> _pointFeatures() => {
+    'type': 'FeatureCollection',
+    'features': [
+      if (_point case final p?)
+        {
+          'type': 'Feature',
+          'properties': const <String, dynamic>{},
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [p.longitude, p.latitude],
+          },
+        },
+    ],
+  };
+
+  Future<void> _refreshPoint() async {
+    final controller = _controller;
+    if (controller == null || !_pointLayerReady) return;
+    try {
+      await controller.setGeoJsonSource(_kPointSourceId, _pointFeatures());
+    } catch (_) {}
+  }
+
   Future<void> _refreshPins() async {
     final controller = _controller;
     if (controller == null || !_pinsReady) return;
@@ -327,20 +405,56 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
     } catch (_) {}
   }
 
-  /// A pin picks its result; anywhere else, the point itself, where a point
-  /// may be picked.
+  void _onFeatureTapped(
+    math.Point<double> point,
+    LatLng coordinates,
+    String id,
+    String layerId,
+    Annotation? annotation,
+  ) {
+    if (layerId.isNotEmpty && layerId != _kPinsLayerId) return;
+    final rank = resultRankOf(id, _results.length);
+    if (rank == null) return;
+    _lastPinTap = DateTime.now();
+    _selectResult(rank);
+  }
+
+  bool get _wasJustAPinTap {
+    final last = _lastPinTap;
+    return last != null && DateTime.now().difference(last) < _kSameTap;
+  }
+
+  /// A pin picks its result. Among results, a tap elsewhere puts the sheet
+  /// away, and picking a point takes a hold; with none to tap, a tap picks
+  /// the point.
   Future<void> _onMapTap(math.Point<double> point, LatLng coordinates) async {
     final rank = await _resultAt(point);
     if (!mounted) return;
     if (rank != null) {
-      _selectResult(rank);
+      if (rank != _selectedResult) _selectResult(rank);
       return;
     }
-    if (widget.allowsPoint) {
-      _selectPoint(coordinates);
+    if (_wasJustAPinTap) return;
+    if (_results.isNotEmpty || !widget.allowsPoint) {
+      _clearSelection();
       return;
     }
-    _clearSelection();
+    _selectPoint(coordinates);
+  }
+
+  Future<void> _onMapLongPress(
+    math.Point<double> point,
+    LatLng coordinates,
+  ) async {
+    final rank = await _resultAt(point);
+    if (!mounted) return;
+    if (rank != null) {
+      if (rank != _selectedResult) _selectResult(rank);
+      return;
+    }
+    if (!widget.allowsPoint) return;
+    unawaited(Haptics.lightTick());
+    _selectPoint(coordinates);
   }
 
   Future<int?> _resultAt(math.Point<double> point) async {
@@ -371,6 +485,7 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
       _isLoadingExtras = true;
     });
     unawaited(_refreshPins());
+    unawaited(_refreshPoint());
     unawaited(_loadExtras(result, token));
     _centreOnceSheetIsUp(result.latLng);
   }
@@ -384,6 +499,7 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
       _isLoadingName = true;
     });
     unawaited(_refreshPins());
+    unawaited(_refreshPoint());
     unawaited(_fetchPointName(coordinates));
     _centreOnceSheetIsUp(coordinates);
   }
@@ -396,6 +512,7 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
       _sheetHeight = 0;
     });
     unawaited(_refreshPins());
+    unawaited(_refreshPoint());
   }
 
   /// A stop's next departures, or what OpenStreetMap knows of a place.
@@ -606,7 +723,7 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   Widget _buildHint() {
     final text = switch ((_results.isNotEmpty, widget.allowsPoint)) {
       (true, true) =>
-        'Tap a result for details, or anywhere to pick that point',
+        'Tap a result for details, or hold anywhere to pick that point',
       (true, false) => 'Tap a result for details',
       (false, _) => 'Tap anywhere to pick that point',
     };
