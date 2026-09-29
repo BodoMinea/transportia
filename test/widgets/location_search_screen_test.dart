@@ -205,7 +205,7 @@ void main() {
   testWidgets('the map is offered as a way to answer', (tester) async {
     // Some places are easier to point at than to name.
     await _pump(tester);
-    expect(find.bySemanticsLabel('Pick a point on the map'), findsOne);
+    expect(find.text('Pick a point on the map'), findsOne);
   });
 
   testWidgets('the map picker is headed and confirmed for this search', (
@@ -215,7 +215,7 @@ void main() {
     // search was for.
     await _pump(tester);
 
-    await tester.tap(find.bySemanticsLabel('Pick a point on the map'));
+    await tester.tap(find.text('Pick a point on the map'));
     await tester.pumpAndSettle();
 
     final picker = tester.widget<MapPlacePickerScreen>(
@@ -226,20 +226,27 @@ void main() {
     expect(find.text('Add Favourite'), findsNothing);
   });
 
-  testWidgets('the map is a button under the list, not an icon in the field', (
+  testWidgets('the map is the row under the field, above the lists', (
     tester,
   ) async {
-    // A small icon in the field was easy to miss; it is the way to answer
-    // with a point, so it gets a whole row.
-    await _pump(tester);
+    // Pinned to the foot of the screen, the keyboard hid it.
+    await _keep([_favourite(id: 'a', name: 'Hauptbahnhof', label: 'Home')]);
+    await _pump(tester, showMyLocation: true);
 
-    final field = find.byType(CupertinoTextField);
+    final field = tester.getRect(find.byType(CupertinoTextField));
+    final myLocation = tester.getRect(find.text(myLocationName));
+    final map = tester.getRect(find.text('Pick a point on the map'));
+    final favourites = tester.getRect(find.text('FAVOURITES'));
+    expect(map.top, greaterThan(field.bottom));
+    expect(map.top, greaterThan(myLocation.bottom));
+    expect(map.bottom, lessThan(favourites.top));
     expect(
-      find.descendant(of: field, matching: find.byIcon(LucideIcons.mapPlus)),
+      find.descendant(
+        of: find.byType(CupertinoTextField),
+        matching: find.byIcon(LucideIcons.mapPlus),
+      ),
       findsNothing,
     );
-    final button = tester.getRect(find.text('Pick a point on the map'));
-    expect(button.top, greaterThan(tester.getRect(field).bottom));
   });
 
   testWidgets('clearing the query leaves the map on offer', (tester) async {
@@ -249,7 +256,7 @@ void main() {
     await tester.pump();
 
     expect(find.byIcon(LucideIcons.x), findsOne);
-    expect(find.bySemanticsLabel('Pick a point on the map'), findsOne);
+    expect(find.text('Pick a point on the map'), findsOne);
   });
 
   group('the map with results', () {
@@ -272,12 +279,23 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    testWidgets('results are headed, under the way to the map', (tester) async {
+      await _pump(tester);
+      await search(tester);
+
+      final map = tester.getRect(find.text('Show results on map'));
+      final heading = tester.getRect(find.text('SEARCH RESULTS'));
+      final first = tester.getRect(find.text('Berlin Alexanderplatz').first);
+      expect(map.bottom, lessThan(heading.top));
+      expect(heading.bottom, lessThan(first.top));
+    });
+
     testWidgets('once there are results, the map shows them', (tester) async {
       await _pump(tester, placeBias: const LatLng(52.52, 13.405));
       await search(tester);
 
-      expect(find.bySemanticsLabel('Pick a point on the map'), findsNothing);
-      await tester.tap(find.bySemanticsLabel('Show results on map'));
+      expect(find.text('Pick a point on the map'), findsNothing);
+      await tester.tap(find.text('Show results on map'));
       await tester.pumpAndSettle();
 
       final picker = tester.widget<MapPlacePickerScreen>(
@@ -294,10 +312,10 @@ void main() {
       tester,
     ) async {
       await _pump(tester, type: 'STOP');
-      expect(find.bySemanticsLabel('Pick a point on the map'), findsNothing);
+      expect(find.text('Pick a point on the map'), findsNothing);
 
       await search(tester);
-      await tester.tap(find.bySemanticsLabel('Show results on map'));
+      await tester.tap(find.text('Show results on map'));
       await tester.pumpAndSettle();
 
       final picker = tester.widget<MapPlacePickerScreen>(

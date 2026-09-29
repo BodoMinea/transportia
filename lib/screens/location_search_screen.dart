@@ -19,7 +19,6 @@ import '../utils/list_reorder.dart';
 import '../utils/place_icons.dart';
 import '../widgets/app_page_scaffold.dart';
 import '../widgets/buttons/heart_button.dart';
-import '../widgets/buttons/pill_button.dart';
 import '../widgets/edit_favorite_overlay.dart';
 import 'map_place_picker/map_place_picker_screen.dart';
 import '../theme/app_text.dart';
@@ -526,11 +525,6 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
           child: _buildSearchField(context),
         ),
         Expanded(child: _buildResults(context)),
-        if (_canOfferMap)
-          _MapActionBar(
-            showsResults: _mapResults.isNotEmpty,
-            onTap: _pickOnMap,
-          ),
       ],
     );
   }
@@ -598,22 +592,38 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
 
     // A place abroad says so; one at home does not repeat the country.
     final homeCountry = View.of(context).platformDispatcher.locale.countryCode;
-    return ListView.builder(
+    return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-      itemCount: _suggestions.length + (_mayHaveMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == _suggestions.length) {
-          return _ShowMoreRow(isLoading: _isLoadingMore, onTap: _loadMore);
-        }
-        final suggestion = _suggestions[index];
-        return _buildPlaceRow(
-          suggestion,
-          subtitle: suggestion.caption(
-            from: widget.placeBias,
-            homeCountry: homeCountry,
+      children: [
+        // At the top, where the keyboard cannot cover it.
+        _buildMapRow(),
+        const SizedBox(height: 8),
+        _sectionHeading('Search results'),
+        for (final suggestion in _suggestions)
+          _buildPlaceRow(
+            suggestion,
+            subtitle: suggestion.caption(
+              from: widget.placeBias,
+              homeCountry: homeCountry,
+            ),
           ),
-        );
-      },
+        if (_mayHaveMore)
+          _ShowMoreRow(isLoading: _isLoadingMore, onTap: _loadMore),
+      ],
+    );
+  }
+
+  /// The way to the map: the results where they are, or before a search,
+  /// any point — some places are easier shown than named.
+  Widget _buildMapRow() {
+    final showsResults = _mapResults.isNotEmpty;
+    return _ResultRow(
+      icon: LucideIcons.map,
+      title: showsResults ? 'Show results on map' : 'Pick a point on the map',
+      subtitle: showsResults
+          ? 'See where each one is'
+          : 'For a place easier shown than named',
+      onTap: _pickOnMap,
     );
   }
 
@@ -633,15 +643,17 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
           _inGutter(
             SliverList.list(
               children: [
-                if (widget.showMyLocation) ...[
+                if (widget.showMyLocation)
                   _ResultRow(
                     icon: LucideIcons.locateFixed,
                     title: myLocationName,
                     subtitle: 'Where you are now',
                     onTap: () => _pick(myLocationSuggestion),
                   ),
+                // A point is not a stop, so a timetable is not offered one.
+                if (_canOfferMap) _buildMapRow(),
+                if (widget.showMyLocation || _canOfferMap)
                   const SizedBox(height: 8),
-                ],
                 if (widget.showFavourites) ...[
                   _sectionHeading('Favourites'),
                   // Two different emptinesses: nothing kept at all, or
@@ -1016,65 +1028,6 @@ class _ShowMoreRow extends StatelessWidget {
                 Icon(LucideIcons.chevronDown, size: 18, color: accent),
               ],
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The way to the map, pinned under the list: to see the results where
-/// they are, or to point at a place easier shown than named.
-class _MapActionBar extends StatelessWidget {
-  const _MapActionBar({required this.showsResults, required this.onTap});
-
-  /// Whether the map opens on the results listed, or to point anywhere.
-  final bool showsResults;
-  final VoidCallback onTap;
-
-  String get _label =>
-      showsResults ? 'Show results on map' : 'Pick a point on the map';
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = AppColors.accentOf(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        border: Border(top: BorderSide(color: AppColors.hairline)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-        child: Semantics(
-          button: true,
-          label: _label,
-          excludeSemantics: true,
-          child: PillButton(
-            onTap: onTap,
-            restingColor: accent.withValues(alpha: 0.12),
-            pressedColor: accent.withValues(alpha: 0.18),
-            borderColor: const Color(0x00000000),
-            borderRadius: const BorderRadius.all(Radius.circular(14)),
-            padding: const EdgeInsets.symmetric(vertical: 15),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(LucideIcons.map, size: 20, color: accent),
-                const SizedBox(width: 10),
-                Flexible(
-                  child: Text(
-                    _label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: accent,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
