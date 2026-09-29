@@ -8,7 +8,7 @@ import 'package:transportia/providers/backend_provider.dart';
 import 'package:transportia/providers/theme_provider.dart';
 import 'package:transportia/screens/legal_screen.dart';
 import 'package:transportia/screens/location_settings_screen.dart';
-import 'package:transportia/screens/transit_options/transit_options_backend.dart';
+import 'package:transportia/screens/search_options/search_options_backend.dart';
 import 'package:transportia/widgets/app_toggle_switch.dart';
 
 Future<BackendProvider> _pump(WidgetTester tester, Widget screen) async {
@@ -83,7 +83,7 @@ void main() {
     final backend = await _pump(
       tester,
       const CupertinoPageScaffold(
-        child: SingleChildScrollView(child: TransitOptionsBackendCard()),
+        child: SingleChildScrollView(child: SearchOptionsBackendCard()),
       ),
     );
 

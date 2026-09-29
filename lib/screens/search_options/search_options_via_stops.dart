@@ -21,8 +21,8 @@ import '../../theme/app_text.dart';
 /// How long typing has to pause before a via-stop lookup is sent.
 const Duration _kViaSearchDebounce = Duration(milliseconds: 300);
 
-class TransitOptionsViaStopsCard extends StatefulWidget {
-  const TransitOptionsViaStopsCard({
+class SearchOptionsViaStopsCard extends StatefulWidget {
+  const SearchOptionsViaStopsCard({
     super.key,
     required this.options,
     required this.onChanged,
@@ -32,12 +32,11 @@ class TransitOptionsViaStopsCard extends StatefulWidget {
   final ValueChanged<RoutingOptions> onChanged;
 
   @override
-  State<TransitOptionsViaStopsCard> createState() =>
-      _TransitOptionsViaStopsCardState();
+  State<SearchOptionsViaStopsCard> createState() =>
+      _SearchOptionsViaStopsCardState();
 }
 
-class _TransitOptionsViaStopsCardState
-    extends State<TransitOptionsViaStopsCard> {
+class _SearchOptionsViaStopsCardState extends State<SearchOptionsViaStopsCard> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
 

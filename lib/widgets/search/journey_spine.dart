@@ -30,6 +30,9 @@ class JourneySpine extends StatefulWidget {
     required this.capabilities,
     required this.onChanged,
     required this.onAddViaStop,
+    required this.limitToMyProviders,
+    required this.hasRentalProviders,
+    required this.onLimitToMyProvidersChanged,
   });
 
   final RoutingOptions options;
@@ -41,6 +44,17 @@ class JourneySpine extends StatefulWidget {
 
   /// Opens the stop picker; via stops need a search of their own.
   final VoidCallback onAddViaStop;
+
+  /// The app-wide "rent only from my providers" setting. Not part of
+  /// [options]: it is saved the moment it changes, rather than with the
+  /// search.
+  final bool limitToMyProviders;
+
+  /// Whether any provider has been named in the settings. Without one the
+  /// limit has nothing to keep to, so turning it on is refused with a hint.
+  final bool hasRentalProviders;
+
+  final ValueChanged<bool> onLimitToMyProvidersChanged;
 
   @override
   State<JourneySpine> createState() => _JourneySpineState();
@@ -94,6 +108,23 @@ class _JourneySpineState extends State<JourneySpine> {
     setState(() {
       if (!_open.remove(stage)) _open.add(stage);
     });
+  }
+
+  void _toggleProviderLimit() {
+    _tooltips.hide();
+    if (!widget.hasRentalProviders) {
+      _announce(
+        'No providers set. Add yours in Search and routing options',
+        icon: LucideIcons.circleAlert,
+      );
+      return;
+    }
+    final next = !widget.limitToMyProviders;
+    widget.onLimitToMyProvidersChanged(next);
+    _announce(
+      next ? 'Only your providers' : 'Any provider',
+      icon: LucideIcons.scooter,
+    );
   }
 
   Duration get _mileCeiling => widget.capabilities.maxPrePostTransitTime;
@@ -203,6 +234,8 @@ class _JourneySpineState extends State<JourneySpine> {
             },
             onBudgetChanged: (budget) =>
                 _apply(options.copyWith(maxFirstMileTime: budget)),
+            limitToMyProviders: widget.limitToMyProviders,
+            onLimitToMyProvidersPressed: _toggleProviderLimit,
           ),
         ),
         JourneySegment(
@@ -275,6 +308,8 @@ class _JourneySpineState extends State<JourneySpine> {
             },
             onBudgetChanged: (budget) =>
                 _apply(options.copyWith(maxLastMileTime: budget)),
+            limitToMyProviders: widget.limitToMyProviders,
+            onLimitToMyProvidersPressed: _toggleProviderLimit,
           ),
         ),
       ],

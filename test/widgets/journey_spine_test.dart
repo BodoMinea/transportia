@@ -28,6 +28,7 @@ class _Host extends StatefulWidget {
 class _HostState extends State<_Host> {
   late RoutingOptions options = widget.initial;
   int viaTaps = 0;
+  bool limitToMyProviders = false;
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +45,10 @@ class _HostState extends State<_Host> {
               capabilities: ServerConfig.fallback,
               onChanged: (next) => setState(() => options = next),
               onAddViaStop: () => viaTaps++,
+              limitToMyProviders: limitToMyProviders,
+              hasRentalProviders: false,
+              onLimitToMyProvidersChanged: (value) =>
+                  setState(() => limitToMyProviders = value),
             ),
           ),
         ),
