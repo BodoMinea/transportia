@@ -83,13 +83,14 @@ void main() {
     final backend = await _pump(
       tester,
       const CupertinoPageScaffold(
-        child: SingleChildScrollView(child: SearchOptionsBackendCard()),
+        child: SingleChildScrollView(child: SearchOptionsBackendGroups()),
       ),
     );
 
-    await tester.tap(find.text('Advanced'));
-    await tester.pumpAndSettle();
-    expect(find.text('Place details server'), findsOne);
+    expect(
+      find.text('Place details server · Nominatim'.toUpperCase()),
+      findsOne,
+    );
 
     final field = find.byWidgetPredicate(
       (w) =>

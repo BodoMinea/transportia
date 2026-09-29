@@ -1,23 +1,20 @@
 import 'package:flutter/widgets.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:provider/provider.dart';
 
 import '../environment.dart';
 import '../models/rental_provider_prefs.dart';
 import '../models/routing_options.dart';
 import '../models/transitous/rentals_response.dart';
 import '../models/transitous/server_config.dart';
-import '../providers/theme_provider.dart';
 import '../services/routing_options_service.dart';
 import '../services/server_capabilities_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/place_bias.dart';
-import '../widgets/app_icon_header.dart';
 import '../widgets/app_page_scaffold.dart';
 import 'search_options/search_options_backend.dart';
 import 'search_options/search_options_place_bias.dart';
 import 'search_options/search_options_rental_providers.dart';
 import 'search_options/search_options_routing.dart';
+import 'search_options/search_options_rows.dart';
 
 /// The settings that apply to every search and are not offered on the search
 /// screen itself.
@@ -68,30 +65,23 @@ class _SearchOptionsScreenState extends State<SearchOptionsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final accent = context.watch<ThemeProvider>().accentColor;
-
     return AppPageScaffold(
       title: 'Search and routing options',
       scrollable: true,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       body: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AppIconHeader(
-            icon: LucideIcons.settings2,
-            title: 'Every search',
-            subtitle:
-                'Settings that apply to all your searches. Options for a '
-                'single trip are on the search screen, where “Save as '
-                'default” keeps them.',
-            iconColor: accent,
-            backgroundColor: AppColors.accentWash(accent),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 0, 4, 18),
+            child: OptionsNote(
+              'These apply to every search. Options for a single trip are '
+              'on the search screen, where “Save as default” keeps them.',
+            ),
           ),
-          const SizedBox(height: 28),
           // Everything below reads stored values, so waiting avoids showing
           // defaults for a frame and writing them back on the first tap.
           if (!_loaded) const SizedBox(height: 200) else ..._buildSections(),
-          const SizedBox(height: 16),
         ],
       ),
     );
@@ -99,7 +89,7 @@ class _SearchOptionsScreenState extends State<SearchOptionsScreen> {
 
   List<Widget> _buildSections() {
     final sections = <Widget>[
-      SearchOptionsPlaceBiasCard(
+      SearchOptionsPlaceBiasGroup(
         value: _placeBias,
         onChanged: (value) => setState(() => _placeBias = value),
       ),
@@ -110,25 +100,56 @@ class _SearchOptionsScreenState extends State<SearchOptionsScreen> {
         onAdd: (group) => setState(() => _providers = _providers.add(group)),
         onRemove: (id) => setState(() => _providers = _providers.remove(id)),
       ),
-      SearchOptionsTransfersCard(
+      SearchOptionsTransfersGroup(
         options: _options,
         capabilities: _capabilities,
         onChanged: _update,
       ),
-      SearchOptionsDirectJourneyCard(
+      SearchOptionsDirectJourneyGroup(
         options: _options,
         capabilities: _capabilities,
         onChanged: _update,
       ),
       if (_capabilities.hasElevation)
-        SearchOptionsInclineCard(options: _options, onChanged: _update),
-      if (Environment.showBackendSettings) const SearchOptionsBackendCard(),
+        SearchOptionsInclineGroup(options: _options, onChanged: _update),
+      if (Environment.showBackendSettings) const _AdvancedSection(),
     ];
     return [
       for (var i = 0; i < sections.length; i++) ...[
-        if (i > 0) const SizedBox(height: 28),
+        if (i > 0) const SizedBox(height: 20),
         sections[i],
       ],
     ];
+  }
+}
+
+/// The servers, set apart from everything above: only for pointing the app
+/// at another MOTIS instance.
+class _AdvancedSection extends StatelessWidget {
+  const _AdvancedSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 12),
+        Container(height: 1, color: AppColors.black.withValues(alpha: 0.08)),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            'Advanced',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.black,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const SearchOptionsBackendGroups(),
+      ],
+    );
   }
 }
