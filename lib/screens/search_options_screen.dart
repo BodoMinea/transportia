@@ -105,11 +105,6 @@ class _SearchOptionsScreenState extends State<SearchOptionsScreen> {
         capabilities: _capabilities,
         onChanged: _update,
       ),
-      SearchOptionsDirectJourneyGroup(
-        options: _options,
-        capabilities: _capabilities,
-        onChanged: _update,
-      ),
       if (_capabilities.hasElevation)
         SearchOptionsInclineGroup(options: _options, onChanged: _update),
       if (Environment.showBackendSettings) const _AdvancedSection(),

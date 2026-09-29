@@ -318,4 +318,61 @@ void main() {
       expect(_query(intercityOnly)['transitModes'], 'LONG_DISTANCE');
     });
   });
+
+  group('journeys without transit', () {
+    test('walk only by default, for as long as both street legs', () {
+      final query = _query(RoutingOptions.defaults);
+
+      expect(query['directModes'], 'WALK');
+      expect(query['maxDirectTime'], '1800');
+    });
+
+    test('a bike taken to the station can be ridden all the way', () {
+      const options = RoutingOptions(firstMileModes: [TransitMode.bike]);
+
+      expect(options.directModes, [TransitMode.walk, TransitMode.bike]);
+    });
+
+    test('follows the way there, not the way back', () {
+      const options = RoutingOptions(lastMileModes: [TransitMode.bike]);
+
+      expect(options.directModes, [TransitMode.walk]);
+    });
+
+    test('park and ride drives; a drop-off does not carry over', () {
+      expect(
+        const RoutingOptions(
+          firstMileModes: [TransitMode.carParking],
+        ).directModes,
+        [TransitMode.walk, TransitMode.car],
+      );
+      expect(
+        const RoutingOptions(
+          firstMileModes: [TransitMode.carDropoff],
+        ).directModes,
+        [TransitMode.walk],
+      );
+    });
+
+    test('rents the vehicles picked for the way there', () {
+      final options = RoutingOptions.defaults.copyWith(
+        firstMileModes: const [TransitMode.walk, TransitMode.rental],
+        firstMileRentalFormFactors: const [RentalFormFactor.bicycle],
+      );
+      final query = _query(options);
+
+      expect(query['directModes'], 'WALK,RENTAL');
+      expect(query['directRentalFormFactors'], 'BICYCLE');
+    });
+
+    test('budget is the sum of both street legs', () {
+      const options = RoutingOptions(
+        maxFirstMileTime: Duration(minutes: 20),
+        maxLastMileTime: Duration(minutes: 10),
+      );
+
+      expect(options.maxDirectTime, const Duration(minutes: 30));
+      expect(_query(options)['maxDirectTime'], '1800');
+    });
+  });
 }

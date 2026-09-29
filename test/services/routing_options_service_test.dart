@@ -35,8 +35,6 @@ void main() {
         additionalTransferTime: Duration(minutes: 6),
         firstMileModes: [TransitMode.bike],
         maxFirstMileTime: Duration(minutes: 20),
-        directModes: [TransitMode.bike],
-        maxDirectTime: Duration(minutes: 45),
         walkingSpeedKmh: 5.4,
         cyclingSpeedKmh: 18.0,
         elevationCosts: ElevationCosts.high,

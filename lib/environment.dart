@@ -18,16 +18,13 @@ class Environment {
   static String get transitousHost =>
       BackendProvider.instance?.host ?? BackendProvider.defaultHost;
 
-  static String get _mainApiVersion =>
-      transitousHost.contains('transitous') ? 'v6' : 'v1';
-
   /// API version segment for [endpoint], honouring any per-endpoint override.
   ///
   /// Falls back to the endpoint's declared default when no [BackendProvider]
   /// exists yet, which is the case in tests that exercise services directly.
   static String versionFor(TransitousEndpoint endpoint) =>
       BackendProvider.instance?.versionFor(endpoint) ??
-      endpoint.defaultVersion(_mainApiVersion);
+      endpoint.defaultVersion(BackendProvider.defaultApiVersion);
 
   /// Full request path for [endpoint], e.g. `/api/v6/map/trips`.
   static String pathFor(TransitousEndpoint endpoint) =>

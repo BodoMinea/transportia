@@ -84,11 +84,8 @@ class _DefaultHint extends StatelessWidget {
           ),
           const TextSpan(
             text:
-                'measured from Berlin, “Paris” then finds the city and both '
-                'of its main stations before any local shop with Paris in '
-                'its name. Stronger, and nearby shops push the stations '
-                'down; weaker, and far-away stops that merely share a name '
-                'crowd in. ',
+                'it still finds the shops around you, while far-away '
+                'long-distance train stations make it into the results too. ',
           ),
           WidgetSpan(
             alignment: PlaceholderAlignment.baseline,

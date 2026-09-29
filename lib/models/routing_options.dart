@@ -65,8 +65,6 @@ class RoutingOptions {
     this.maxFirstMileTime = const Duration(minutes: 15),
     this.lastMileModes = const [TransitMode.walk],
     this.maxLastMileTime = const Duration(minutes: 15),
-    this.directModes = const [TransitMode.walk],
-    this.maxDirectTime = const Duration(minutes: 30),
     this.firstMileRentalFormFactors = const [],
     this.lastMileRentalFormFactors = const [],
     this.walkingSpeedKmh = _defaultWalkingSpeedKmh,
@@ -152,9 +150,28 @@ class RoutingOptions {
   final List<TransitMode> lastMileModes;
   final Duration maxLastMileTime;
 
-  /// Modes and budget for a transit-free itinerary.
-  final List<TransitMode> directModes;
-  final Duration maxDirectTime;
+  /// How a journey with no transit at all may travel: however the rider
+  /// would reach the station, plus walking.
+  ///
+  /// Taken from the way there rather than set on its own, because it is the
+  /// same question — a rider with their bike can ride it all the way. Park
+  /// & ride means a car to hand, so it becomes driving; being dropped off
+  /// does not carry over, since whoever drives is only going to the station.
+  List<TransitMode> get directModes => [
+    for (final mode in RoutingOptions.streetModeChoices)
+      if (mode == TransitMode.walk ||
+          (_directCapable(mode) && firstMileModes.contains(mode)) ||
+          (mode == TransitMode.car &&
+              firstMileModes.contains(TransitMode.carParking)))
+        mode,
+  ];
+
+  static bool _directCapable(TransitMode mode) =>
+      mode != TransitMode.carParking && mode != TransitMode.carDropoff;
+
+  /// Budget for a journey with no transit: as long as the two street legs of
+  /// a transit journey together. The server clamps it to its own limit.
+  Duration get maxDirectTime => maxFirstMileTime + maxLastMileTime;
 
   /// Which shared vehicles each mile's rental leg may use.
   ///
@@ -280,8 +297,6 @@ class RoutingOptions {
     Duration? maxFirstMileTime,
     List<TransitMode>? lastMileModes,
     Duration? maxLastMileTime,
-    List<TransitMode>? directModes,
-    Duration? maxDirectTime,
     List<RentalFormFactor>? firstMileRentalFormFactors,
     List<RentalFormFactor>? lastMileRentalFormFactors,
     double? walkingSpeedKmh,
@@ -316,8 +331,6 @@ class RoutingOptions {
       maxFirstMileTime: maxFirstMileTime ?? this.maxFirstMileTime,
       lastMileModes: nextLast,
       maxLastMileTime: maxLastMileTime ?? this.maxLastMileTime,
-      directModes: _atLeastWalking(directModes ?? this.directModes),
-      maxDirectTime: maxDirectTime ?? this.maxDirectTime,
       firstMileRentalFormFactors:
           firstMileRentalFormFactors ?? this.firstMileRentalFormFactors,
       lastMileRentalFormFactors:
@@ -368,6 +381,7 @@ class RoutingOptions {
       maxPostTransitTime: maxLastMileTime,
       directModes: directModes,
       maxDirectTime: maxDirectTime,
+      directRentals: _rentalFilters(firstMileRentalFormFactors),
       preTransitRentals: _rentalFilters(firstMileRentalFormFactors),
       postTransitRentals: _rentalFilters(lastMileRentalFormFactors),
       pedestrianSpeed: _msFrom(walkingSpeedKmh, _defaultWalkingSpeedKmh),
@@ -454,8 +468,6 @@ class RoutingOptions {
     'maxFirstMileTimeMinutes': maxFirstMileTime.inMinutes,
     'lastMileModes': [for (final mode in lastMileModes) mode.wireName],
     'maxLastMileTimeMinutes': maxLastMileTime.inMinutes,
-    'directModes': [for (final mode in directModes) mode.wireName],
-    'maxDirectTimeMinutes': maxDirectTime.inMinutes,
     'firstMileRentalFormFactors': [
       for (final f in firstMileRentalFormFactors) f.wireName,
     ],
@@ -501,11 +513,6 @@ class RoutingOptions {
       maxLastMileTime: _minutes(
         json['maxLastMileTimeMinutes'],
         fallback.maxLastMileTime,
-      ),
-      directModes: _mileModes(json['directModes'], fallback.directModes),
-      maxDirectTime: _minutes(
-        json['maxDirectTimeMinutes'],
-        fallback.maxDirectTime,
       ),
       walkingSpeedKmh:
           (json['walkingSpeedKmh'] as num?)?.toDouble() ??
