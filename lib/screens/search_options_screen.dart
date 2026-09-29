@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
 import '../environment.dart';
-import '../models/rental_provider_prefs.dart';
 import '../models/routing_options.dart';
-import '../models/transitous/rentals_response.dart';
 import '../models/transitous/server_config.dart';
+import '../services/location_service.dart';
 import '../services/place_bias_service.dart';
+import '../services/rental_providers_service.dart';
 import '../services/routing_options_service.dart';
 import '../services/server_capabilities_service.dart';
 import '../theme/app_colors.dart';
@@ -35,14 +37,44 @@ class _SearchOptionsScreenState extends State<SearchOptionsScreen> {
   bool _loaded = false;
 
   double _placeBias = PlaceBias.defaultValue;
-  RentalProviderPrefs _providers = RentalProviderPrefs.none;
-  List<RentalProviderGroup>? _catalogue;
+  bool _catalogueLoading = true;
   Set<String> _nearby = const {};
 
   @override
   void initState() {
     super.initState();
+    RentalProvidersService.prefsListenable.addListener(_rebuild);
+    RentalProvidersService.catalogueListenable.addListener(_rebuild);
     _load();
+  }
+
+  @override
+  void dispose() {
+    RentalProvidersService.prefsListenable.removeListener(_rebuild);
+    RentalProvidersService.catalogueListenable.removeListener(_rebuild);
+    super.dispose();
+  }
+
+  void _rebuild() {
+    if (mounted) setState(() {});
+  }
+
+  /// The provider list, and what is near the rider to offer first.
+  ///
+  /// After the rest has loaded, so a slow or failing fetch never holds the
+  /// screen up. The rider's position is only sent while place search may
+  /// use it: switching that off means off for this too.
+  Future<void> _loadProviders() async {
+    await RentalProvidersService.loadPrefs();
+    await RentalProvidersService.ensureCatalogue();
+    if (!mounted) return;
+    setState(() => _catalogueLoading = false);
+    if (PlaceBias.isOff(_placeBias)) return;
+    final position = await LocationService.loadLastLatLng();
+    if (position == null) return;
+    final nearby = await RentalProvidersService.nearbyGroupIds(position);
+    if (!mounted) return;
+    setState(() => _nearby = nearby);
   }
 
   Future<void> _load() async {
@@ -58,6 +90,7 @@ class _SearchOptionsScreenState extends State<SearchOptionsScreen> {
       _placeBias = placeBias;
       _loaded = true;
     });
+    unawaited(_loadProviders());
   }
 
   void _update(RoutingOptions options) {
@@ -101,11 +134,12 @@ class _SearchOptionsScreenState extends State<SearchOptionsScreen> {
         },
       ),
       SearchOptionsRentalProvidersCard(
-        prefs: _providers,
-        catalogue: _catalogue,
+        prefs: RentalProvidersService.prefsListenable.value,
+        catalogue: RentalProvidersService.catalogueListenable.value,
+        loading: _catalogueLoading,
         nearby: _nearby,
-        onAdd: (group) => setState(() => _providers = _providers.add(group)),
-        onRemove: (id) => setState(() => _providers = _providers.remove(id)),
+        onAdd: RentalProvidersService.add,
+        onRemove: RentalProvidersService.remove,
       ),
       SearchOptionsTransfersGroup(
         options: _options,

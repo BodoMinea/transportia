@@ -19,6 +19,7 @@ class SearchOptionsRentalProvidersCard extends StatefulWidget {
     required this.prefs,
     required this.catalogue,
     required this.nearby,
+    this.loading = false,
     required this.onAdd,
     required this.onRemove,
     this.initialQuery = '',
@@ -29,6 +30,10 @@ class SearchOptionsRentalProvidersCard extends StatefulWidget {
   /// Every group the server lists. Null while it has never been fetched, so
   /// the field can say why it offers nothing.
   final List<RentalProviderGroup>? catalogue;
+
+  /// Whether the list is still being fetched for the first time, so a
+  /// missing one is not yet a failure.
+  final bool loading;
 
   /// Ids of the groups around the rider, offered first.
   final Set<String> nearby;
@@ -114,6 +119,7 @@ class _SearchOptionsRentalProvidersCardState
   }
 
   String _helpText(bool unavailable) {
+    if (unavailable && widget.loading) return 'Loading the provider list…';
     if (unavailable) {
       return 'The provider list could not be loaded. Connect to the '
           'internet to add providers.';
