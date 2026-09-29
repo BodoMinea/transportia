@@ -6,30 +6,30 @@ import '../../api/nominatim_client.dart';
 import '../../api/transitous_endpoint.dart';
 import '../../providers/backend_provider.dart';
 import '../../theme/app_colors.dart';
-import '../../widgets/custom_card.dart';
-import '../../widgets/section_title.dart';
+import 'search_options_rows.dart';
 
-/// Backend host and per-endpoint API version overrides.
+/// Which servers the app talks to, and which MOTIS API version it asks for.
 ///
-/// Collapsed by default: it is a debugging aid for pointing the app at a
-/// different MOTIS instance, not something most people need.
-class SearchOptionsBackendCard extends StatefulWidget {
-  const SearchOptionsBackendCard({super.key});
+/// A debugging aid for pointing the app at a different MOTIS instance, so it
+/// sits at the foot of the screen; the version lives with the routing server
+/// because that is the only server it applies to.
+class SearchOptionsBackendGroups extends StatefulWidget {
+  const SearchOptionsBackendGroups({super.key});
 
   @override
-  State<SearchOptionsBackendCard> createState() =>
-      _SearchOptionsBackendCardState();
+  State<SearchOptionsBackendGroups> createState() =>
+      _SearchOptionsBackendGroupsState();
 }
 
-class _SearchOptionsBackendCardState extends State<SearchOptionsBackendCard> {
-  bool _advancedExpanded = false;
+class _SearchOptionsBackendGroupsState
+    extends State<SearchOptionsBackendGroups> {
   bool _endpointVersionsExpanded = false;
   late final TextEditingController _hostController;
   late final FocusNode _hostFocusNode;
   late final TextEditingController _versionController;
+  late final FocusNode _versionFocusNode;
   late final TextEditingController _nominatimController;
   late final FocusNode _nominatimFocusNode;
-  late final FocusNode _versionFocusNode;
 
   /// Held from initState: the focus listeners and dispose run when the
   /// card may already be out of the tree, where looking it up is unsafe.
@@ -40,26 +40,26 @@ class _SearchOptionsBackendCardState extends State<SearchOptionsBackendCard> {
     super.initState();
     final backend = _backend = context.read<BackendProvider>();
     _hostController = TextEditingController(text: backend.host);
-    _versionController = TextEditingController(text: backend.apiVersion);
+    _versionController = TextEditingController(
+      text: backend.isCustomApiVersion ? backend.apiVersion : '',
+    );
     _nominatimController = TextEditingController(text: backend.nominatimHost);
-    _nominatimFocusNode = FocusNode();
-    _nominatimFocusNode.addListener(() {
-      if (!_nominatimFocusNode.hasFocus) {
-        _backend.setNominatimHost(_nominatimController.text);
-      }
-    });
-    _hostFocusNode = FocusNode();
-    _versionFocusNode = FocusNode();
-    _hostFocusNode.addListener(() {
-      if (!_hostFocusNode.hasFocus) {
-        _backend.setHost(_hostController.text);
-      }
-    });
-    _versionFocusNode.addListener(() {
-      if (!_versionFocusNode.hasFocus) {
-        _backend.setApiVersion(_versionController.text);
-      }
-    });
+    _hostFocusNode = FocusNode()
+      ..addListener(() {
+        if (!_hostFocusNode.hasFocus) _backend.setHost(_hostController.text);
+      });
+    _versionFocusNode = FocusNode()
+      ..addListener(() {
+        if (!_versionFocusNode.hasFocus) {
+          _backend.setApiVersion(_versionController.text);
+        }
+      });
+    _nominatimFocusNode = FocusNode()
+      ..addListener(() {
+        if (!_nominatimFocusNode.hasFocus) {
+          _backend.setNominatimHost(_nominatimController.text);
+        }
+      });
     backend.addListener(_syncBackendControllers);
   }
 
@@ -70,7 +70,9 @@ class _SearchOptionsBackendCardState extends State<SearchOptionsBackendCard> {
       _nominatimController.text = backend.nominatimHost;
     }
     if (!_versionFocusNode.hasFocus) {
-      _versionController.text = backend.apiVersion;
+      _versionController.text = backend.isCustomApiVersion
+          ? backend.apiVersion
+          : '';
     }
   }
 
@@ -80,303 +82,125 @@ class _SearchOptionsBackendCardState extends State<SearchOptionsBackendCard> {
     _hostController.dispose();
     _hostFocusNode.dispose();
     _versionController.dispose();
+    _versionFocusNode.dispose();
     _nominatimController.dispose();
     _nominatimFocusNode.dispose();
-    _versionFocusNode.dispose();
     super.dispose();
   }
 
+  @override
   Widget build(BuildContext context) {
-    final accent = AppColors.accentOf(context);
-    final backendProvider = context.watch<BackendProvider>();
+    final backend = context.watch<BackendProvider>();
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OptionsGroup(
+          title: 'Routing server · MOTIS',
+          footnote:
+              'Hostname only, without https://. The API version applies to '
+              'routes, trips, stop times, stops and vehicles on the map; '
+              'place search and rentals stay on v1. Empty means automatic: '
+              'v6 on Transitous, v1 elsewhere.',
+          children: [
+            OptionsTextRow(
+              label: 'Host',
+              controller: _hostController,
+              focusNode: _hostFocusNode,
+              placeholder: BackendProvider.defaultHost,
+              keyboardType: TextInputType.url,
+              onSubmitted: backend.setHost,
+              isCustom: backend.isCustomHost,
+              onReset: backend.resetHost,
+            ),
+            OptionsTextRow(
+              label: 'API version',
+              controller: _versionController,
+              focusNode: _versionFocusNode,
+              placeholder: '${backend.apiVersion} (automatic)',
+              onSubmitted: backend.setApiVersion,
+              isCustom: backend.isCustomApiVersion,
+              onReset: backend.resetApiVersion,
+            ),
+            _buildEndpointVersions(backend),
+          ],
+        ),
+        const SizedBox(height: 20),
+        OptionsGroup(
+          title: 'Place details server · Nominatim',
+          footnote:
+              'For the details of a result tapped on the map. Hostname only.',
+          children: [
+            OptionsTextRow(
+              label: 'Host',
+              controller: _nominatimController,
+              focusNode: _nominatimFocusNode,
+              placeholder: NominatimClient.defaultHost,
+              keyboardType: TextInputType.url,
+              onSubmitted: backend.setNominatimHost,
+              isCustom: backend.isCustomNominatimHost,
+              onReset: () => backend.setNominatimHost(''),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Overrides for single endpoints, folded away: fifteen rows a rider never
+  /// needs, and a debugging aid even among the debugging aids.
+  Widget _buildEndpointVersions(BackendProvider backend) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => _advancedExpanded = !_advancedExpanded),
-          child: Row(
-            children: [
-              const SectionTitle(text: 'Advanced'),
-              const Spacer(),
-              AnimatedRotation(
-                turns: _advancedExpanded ? 0.5 : 0.0,
-                duration: const Duration(milliseconds: 200),
-                child: Icon(
-                  LucideIcons.chevronDown,
-                  size: 18,
-                  color: AppColors.black.withValues(alpha: 0.4),
-                ),
-              ),
-            ],
+          onTap: () => setState(
+            () => _endpointVersionsExpanded = !_endpointVersionsExpanded,
           ),
-        ),
-        AnimatedCrossFade(
-          duration: const Duration(milliseconds: 200),
-          crossFadeState: _advancedExpanded
-              ? CrossFadeState.showSecond
-              : CrossFadeState.showFirst,
-          firstChild: const SizedBox.shrink(),
-          secondChild: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 12),
-              Text(
-                'Backend API host',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.black.withValues(alpha: 0.6),
-                ),
-              ),
-              const SizedBox(height: 8),
-              CustomCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 4,
-                ),
-                margin: const EdgeInsets.all(0),
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.server, size: 16, color: accent),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: CupertinoTextField.borderless(
-                        controller: _hostController,
-                        focusNode: _hostFocusNode,
-                        placeholder: BackendProvider.defaultHost,
-                        style: TextStyle(fontSize: 15, color: AppColors.black),
-                        placeholderStyle: TextStyle(
-                          fontSize: 15,
-                          color: AppColors.black.withValues(alpha: 0.3),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        autocorrect: false,
-                        keyboardType: TextInputType.url,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (value) => backendProvider.setHost(value),
-                      ),
-                    ),
-                    if (backendProvider.isCustomHost)
-                      GestureDetector(
-                        onTap: () => backendProvider.resetHost(),
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: Icon(
-                            LucideIcons.rotateCcw,
-                            size: 16,
-                            color: AppColors.black.withValues(alpha: 0.35),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Hostname only, without https:// or trailing slash.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.black.withValues(alpha: 0.4),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Place details server',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.black.withValues(alpha: 0.6),
-                ),
-              ),
-              const SizedBox(height: 8),
-              CustomCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 4,
-                ),
-                margin: const EdgeInsets.all(0),
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.store, size: 16, color: accent),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: CupertinoTextField.borderless(
-                        controller: _nominatimController,
-                        focusNode: _nominatimFocusNode,
-                        placeholder: NominatimClient.defaultHost,
-                        style: TextStyle(fontSize: 15, color: AppColors.black),
-                        placeholderStyle: TextStyle(
-                          fontSize: 15,
-                          color: AppColors.black.withValues(alpha: 0.3),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        autocorrect: false,
-                        keyboardType: TextInputType.url,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: backendProvider.setNominatimHost,
-                      ),
-                    ),
-                    if (backendProvider.isCustomNominatimHost)
-                      GestureDetector(
-                        onTap: () => backendProvider.setNominatimHost(''),
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: Icon(
-                            LucideIcons.rotateCcw,
-                            size: 16,
-                            color: AppColors.black.withValues(alpha: 0.35),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'A Nominatim server, for the details of a result tapped on '
-                'the map.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.black.withValues(alpha: 0.4),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'API version',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.black.withValues(alpha: 0.6),
-                ),
-              ),
-              const SizedBox(height: 8),
-              CustomCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 4,
-                ),
-                margin: const EdgeInsets.all(0),
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.layers, size: 16, color: accent),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: CupertinoTextField.borderless(
-                        controller: _versionController,
-                        focusNode: _versionFocusNode,
-                        placeholder: backendProvider.apiVersion,
-                        style: TextStyle(fontSize: 15, color: AppColors.black),
-                        placeholderStyle: TextStyle(
-                          fontSize: 15,
-                          color: AppColors.black.withValues(alpha: 0.3),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        autocorrect: false,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (value) =>
-                            backendProvider.setApiVersion(value),
-                      ),
-                    ),
-                    if (backendProvider.isCustomApiVersion)
-                      GestureDetector(
-                        onTap: () => backendProvider.resetApiVersion(),
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: Icon(
-                            LucideIcons.rotateCcw,
-                            size: 16,
-                            color: AppColors.black.withValues(alpha: 0.35),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Affects routing, stop times and map trips. Map stops and geocode stay on v1 unless overridden below. Auto: v5 for transitous hosts, v1 otherwise.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.black.withValues(alpha: 0.4),
-                ),
-              ),
-              const SizedBox(height: 16),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => setState(
-                  () => _endpointVersionsExpanded = !_endpointVersionsExpanded,
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      'Per-endpoint versions',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.black.withValues(alpha: 0.7),
-                      ),
-                    ),
-                    const Spacer(),
-                    AnimatedRotation(
-                      turns: _endpointVersionsExpanded ? 0.5 : 0.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: Icon(
-                        LucideIcons.chevronDown,
-                        size: 16,
-                        color: AppColors.black.withValues(alpha: 0.35),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              AnimatedCrossFade(
-                duration: const Duration(milliseconds: 200),
-                crossFadeState: _endpointVersionsExpanded
-                    ? CrossFadeState.showSecond
-                    : CrossFadeState.showFirst,
-                firstChild: const SizedBox.shrink(),
-                secondChild: Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: CustomCard(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    margin: EdgeInsets.zero,
-                    child: Column(
-                      children: [
-                        for (final endpoint in TransitousEndpoint.values)
-                          _EndpointVersionField(
-                            endpoint: endpoint,
-                            defaultVersion: backendProvider.defaultVersionFor(
-                              endpoint,
-                            ),
-                            isLast: endpoint == TransitousEndpoint.values.last,
-                          ),
-                      ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Per-endpoint versions',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.black.withValues(alpha: 0.65),
                     ),
                   ),
                 ),
-              ),
-            ],
+                Icon(
+                  _endpointVersionsExpanded
+                      ? LucideIcons.chevronUp
+                      : LucideIcons.chevronDown,
+                  size: 16,
+                  color: AppColors.black.withValues(alpha: 0.35),
+                ),
+              ],
+            ),
           ),
         ),
+        if (_endpointVersionsExpanded)
+          for (final endpoint in TransitousEndpoint.values)
+            _EndpointVersionField(
+              endpoint: endpoint,
+              defaultVersion: backend.defaultVersionFor(endpoint),
+            ),
       ],
     );
   }
 }
 
 class _EndpointVersionField extends StatefulWidget {
-  final TransitousEndpoint endpoint;
-  final String defaultVersion;
-  final bool isLast;
-
   const _EndpointVersionField({
     required this.endpoint,
     required this.defaultVersion,
-    this.isLast = false,
   });
 
-  String get label => endpoint.label;
+  final TransitousEndpoint endpoint;
+  final String defaultVersion;
 
   @override
   State<_EndpointVersionField> createState() => _EndpointVersionFieldState();
@@ -386,7 +210,7 @@ class _EndpointVersionFieldState extends State<_EndpointVersionField> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
 
-  /// Held from initState, for the same reason as the card's.
+  /// Held from initState, for the same reason as the group's.
   late final BackendProvider _backend;
 
   @override
@@ -396,21 +220,19 @@ class _EndpointVersionFieldState extends State<_EndpointVersionField> {
     _controller = TextEditingController(
       text: backend.endpointVersionOverride(widget.endpoint) ?? '',
     );
-    _focusNode = FocusNode();
-    _focusNode.addListener(() {
-      if (!_focusNode.hasFocus) {
-        _backend.setEndpointVersion(widget.endpoint, _controller.text);
-      }
-    });
+    _focusNode = FocusNode()
+      ..addListener(() {
+        if (!_focusNode.hasFocus) {
+          _backend.setEndpointVersion(widget.endpoint, _controller.text);
+        }
+      });
     backend.addListener(_sync);
   }
 
   void _sync() {
-    if (!_focusNode.hasFocus) {
-      final override = _backend.endpointVersionOverride(widget.endpoint);
-      final newText = override ?? '';
-      if (_controller.text != newText) _controller.text = newText;
-    }
+    if (_focusNode.hasFocus) return;
+    final newText = _backend.endpointVersionOverride(widget.endpoint) ?? '';
+    if (_controller.text != newText) _controller.text = newText;
   }
 
   @override
@@ -423,66 +245,16 @@ class _EndpointVersionFieldState extends State<_EndpointVersionField> {
 
   @override
   Widget build(BuildContext context) {
-    final accent = AppColors.accentOf(context);
     final backend = context.watch<BackendProvider>();
-    final isOverridden = backend.isEndpointOverridden(widget.endpoint);
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 88,
-                child: Text(
-                  widget.label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.black.withValues(alpha: 0.65),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: CupertinoTextField.borderless(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  placeholder: widget.defaultVersion,
-                  style: TextStyle(fontSize: 14, color: AppColors.black),
-                  placeholderStyle: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.black.withValues(alpha: 0.3),
-                  ),
-                  padding: EdgeInsets.zero,
-                  autocorrect: false,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (v) =>
-                      backend.setEndpointVersion(widget.endpoint, v),
-                ),
-              ),
-              if (isOverridden)
-                GestureDetector(
-                  onTap: () => backend.resetEndpointVersion(widget.endpoint),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Icon(
-                      LucideIcons.rotateCcw,
-                      size: 14,
-                      color: accent.withValues(alpha: 0.6),
-                    ),
-                  ),
-                )
-              else
-                const SizedBox(width: 22),
-            ],
-          ),
-        ),
-        if (!widget.isLast)
-          Container(
-            height: 0.5,
-            color: AppColors.black.withValues(alpha: 0.08),
-          ),
-      ],
+    return OptionsTextRow(
+      label: widget.endpoint.label,
+      labelWidth: 132,
+      controller: _controller,
+      focusNode: _focusNode,
+      placeholder: widget.defaultVersion,
+      onSubmitted: (v) => backend.setEndpointVersion(widget.endpoint, v),
+      isCustom: backend.isEndpointOverridden(widget.endpoint),
+      onReset: () => backend.resetEndpointVersion(widget.endpoint),
     );
   }
 }

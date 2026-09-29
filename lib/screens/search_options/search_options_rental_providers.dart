@@ -5,10 +5,9 @@ import '../../models/rental_provider_prefs.dart';
 import '../../models/transitous/rentals_response.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/rental_provider_search.dart';
-import '../../widgets/custom_card.dart';
 import '../../widgets/options/icon_controls.dart';
 import '../../widgets/search/street_leg_section.dart';
-import '../../widgets/section_title.dart';
+import 'search_options_rows.dart';
 
 /// The rental providers the rider has an account with, picked by name.
 ///
@@ -75,16 +74,12 @@ class _SearchOptionsRentalProvidersCardState
             picked: {for (final group in widget.prefs.groups) group.id},
             nearby: widget.nearby,
           );
-    final muted = AppColors.black.withValues(alpha: 0.5);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return OptionsGroup(
+      title: 'Rental providers',
+      footnote: _helpText(catalogue == null),
       children: [
-        const SectionTitle(text: 'Rental providers'),
-        const SizedBox(height: 12),
-        CustomCard(
-          padding: const EdgeInsets.all(16),
-          margin: EdgeInsets.zero,
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -96,7 +91,7 @@ class _SearchOptionsRentalProvidersCardState
                   onTap: () => _pick(group),
                 ),
               if (widget.prefs.groups.isNotEmpty) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
@@ -111,11 +106,6 @@ class _SearchOptionsRentalProvidersCardState
                   ],
                 ),
               ],
-              const SizedBox(height: 12),
-              Text(
-                _helpText(catalogue == null),
-                style: TextStyle(fontSize: 12.5, height: 1.35, color: muted),
-              ),
             ],
           ),
         ),
@@ -139,23 +129,23 @@ class _SearchOptionsRentalProvidersCardState
   Widget _buildField({required bool enabled}) {
     final hint = AppColors.black.withValues(alpha: 0.35);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: AppColors.black.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
-          Icon(LucideIcons.search, size: 16, color: hint),
+          Icon(LucideIcons.search, size: 15, color: hint),
           const SizedBox(width: 8),
           Expanded(
             child: CupertinoTextField.borderless(
               controller: _controller,
               enabled: enabled,
               placeholder: 'Add a provider',
-              style: TextStyle(fontSize: 15, color: AppColors.black),
-              placeholderStyle: TextStyle(fontSize: 15, color: hint),
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              style: TextStyle(fontSize: 14.5, color: AppColors.black),
+              placeholderStyle: TextStyle(fontSize: 14.5, color: hint),
+              padding: const EdgeInsets.symmetric(vertical: 9),
               autocorrect: false,
               textInputAction: TextInputAction.search,
               onChanged: (_) => setState(() {}),
@@ -191,7 +181,7 @@ class _SuggestionRow extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(color: AppColors.black.withValues(alpha: 0.06)),
@@ -206,7 +196,7 @@ class _SuggestionRow extends StatelessWidget {
                   Text(
                     group.name.trim(),
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: AppColors.black,
                     ),
@@ -224,7 +214,7 @@ class _SuggestionRow extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(LucideIcons.plus, size: 18, color: accent),
+            Icon(LucideIcons.plus, size: 16, color: accent),
           ],
         ),
       ),
