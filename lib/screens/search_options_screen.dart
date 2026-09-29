@@ -5,6 +5,7 @@ import '../models/rental_provider_prefs.dart';
 import '../models/routing_options.dart';
 import '../models/transitous/rentals_response.dart';
 import '../models/transitous/server_config.dart';
+import '../services/place_bias_service.dart';
 import '../services/routing_options_service.dart';
 import '../services/server_capabilities_service.dart';
 import '../theme/app_colors.dart';
@@ -49,10 +50,12 @@ class _SearchOptionsScreenState extends State<SearchOptionsScreen> {
     // Falls back to the published Transitous limits when unavailable, so the
     // controls stay usable offline.
     final capabilities = await ServerCapabilitiesService.ensureLoaded();
+    final placeBias = await PlaceBiasService.load();
     if (!mounted) return;
     setState(() {
       _options = options;
       _capabilities = capabilities;
+      _placeBias = placeBias;
       _loaded = true;
     });
   }
@@ -91,7 +94,11 @@ class _SearchOptionsScreenState extends State<SearchOptionsScreen> {
     final sections = <Widget>[
       SearchOptionsPlaceBiasGroup(
         value: _placeBias,
-        onChanged: (value) => setState(() => _placeBias = value),
+        onChanged: (value) {
+          if (value == _placeBias) return;
+          setState(() => _placeBias = value);
+          PlaceBiasService.save(value);
+        },
       ),
       SearchOptionsRentalProvidersCard(
         prefs: _providers,

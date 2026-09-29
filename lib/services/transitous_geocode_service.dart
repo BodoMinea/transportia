@@ -4,7 +4,9 @@ import '../api/endpoints/geocode_endpoint.dart';
 import '../api/transitous_api_exception.dart';
 import '../models/transitous/enums.dart';
 import '../models/transitous/match.dart';
+import 'place_bias_service.dart';
 import '../utils/geo_utils.dart';
+import '../utils/place_bias.dart';
 import '../utils/place_caption.dart';
 
 class TransitousGeocodeException implements Exception {
@@ -150,12 +152,6 @@ class TransitousGeocodeService {
     return LatLng(lat, lon);
   }
 
-  /// How strongly the rider's position outweighs how well a name matches.
-  ///
-  /// Chosen by measuring, not by feel; see docs/geocode-place-bias.md before
-  /// changing it.
-  static const double _kPlaceBias = 1.5;
-
   /// How strongly "Search in this area" holds a search to the map's centre.
   ///
   /// Where results stop moving closer: from 20 up to 100 nothing changes,
@@ -188,7 +184,7 @@ class TransitousGeocodeService {
     LatLng? placeBias,
     String? type,
     int numResults = pageSize,
-    double biasStrength = _kPlaceBias,
+    double? biasStrength,
   }) async {
     final query = text.trim();
     if (query.length < 3) {
@@ -198,13 +194,21 @@ class TransitousGeocodeService {
       );
     }
 
+    // Without an explicit strength, [placeBias] is the rider's own position,
+    // sent only as strongly as they allow and not at all once they switched
+    // it off. Checked here because every place search passes through. An
+    // explicit strength is for a point the rider picked on the map, which
+    // says nothing about where they are.
+    final strength = biasStrength ?? await PlaceBiasService.load();
+    final place = PlaceBias.isOff(strength) ? null : placeBias;
+
     final List<Match> matches;
     try {
       matches = await GeocodeEndpoint.geocode(
         text: query,
-        placeLat: placeBias?.latitude,
-        placeLon: placeBias?.longitude,
-        placeBias: placeBias == null ? null : biasStrength,
+        placeLat: place?.latitude,
+        placeLon: place?.longitude,
+        placeBias: place == null ? null : strength,
         numResults: numResults,
         type: type == null ? null : LocationType.fromWire(type),
       );
