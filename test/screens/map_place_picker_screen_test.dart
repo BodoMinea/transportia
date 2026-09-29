@@ -7,6 +7,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:transportia/api/transitous_client.dart';
+
+import 'package:oktoast/oktoast.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -27,22 +32,25 @@ Future<List<Object?>> _pump(WidgetTester tester, Widget screen) async {
   await tester.pumpWidget(
     ChangeNotifierProvider<ThemeProvider>(
       create: (_) => ThemeProvider(),
-      child: WidgetsApp(
-        color: const Color(0xFF000000),
-        localizationsDelegates: const [
-          DefaultWidgetsLocalizations.delegate,
-          DefaultCupertinoLocalizations.delegate,
-        ],
-        onGenerateRoute: (settings) => PageRouteBuilder<void>(
-          settings: settings,
-          pageBuilder: (context, _, _) => _Opener(
-            onOpen: () async {
-              popped.add(
-                await Navigator.of(context).push<Object?>(
-                  PageRouteBuilder(pageBuilder: (_, _, _) => screen),
-                ),
-              );
-            },
+      // Where the app's toasts are shown, as in app.dart.
+      child: OKToast(
+        child: WidgetsApp(
+          color: const Color(0xFF000000),
+          localizationsDelegates: const [
+            DefaultWidgetsLocalizations.delegate,
+            DefaultCupertinoLocalizations.delegate,
+          ],
+          onGenerateRoute: (settings) => PageRouteBuilder<void>(
+            settings: settings,
+            pageBuilder: (context, _, _) => _Opener(
+              onOpen: () async {
+                popped.add(
+                  await Navigator.of(context).push<Object?>(
+                    PageRouteBuilder(pageBuilder: (_, _, _) => screen),
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -275,6 +283,106 @@ void main() {
 
       expect(find.text('Selected Location'), findsNothing);
       expect(find.text('Select'), findsNothing);
+    });
+  });
+
+  group('search in this area', () {
+    late List<Uri> requests;
+    void serve(String body) {
+      requests = [];
+      TransitousClient.instance = TransitousClient(
+        httpClient: MockClient((request) async {
+          requests.add(request.url);
+          return http.Response(
+            body,
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+    }
+
+    tearDown(() => TransitousClient.instance = TransitousClient());
+
+    Widget picker() => MapPlacePickerScreen.pick(
+      title: 'Results for “Rewe”',
+      confirmLabel: 'Select',
+      results: _paris(),
+      query: 'Rewe',
+      type: 'PLACE',
+    );
+
+    testWidgets('stands where the hint was, only for a search', (tester) async {
+      await _pump(tester, picker());
+      expect(find.text('Search in this area'), findsOne);
+      expect(find.textContaining('Tap a result'), findsNothing);
+    });
+
+    testWidgets('a picker for a point keeps its hint', (tester) async {
+      await _pump(
+        tester,
+        const MapPlacePickerScreen.pick(
+          title: 'Select Origin',
+          confirmLabel: 'Select',
+        ),
+      );
+      expect(find.text('Search in this area'), findsNothing);
+      expect(find.text('Tap anywhere to pick that point'), findsOne);
+    });
+
+    testWidgets('asks again from the middle of the map, held there', (
+      tester,
+    ) async {
+      serve(
+        File('test/fixtures/transitous/geocode_rewe.json').readAsStringSync(),
+      );
+      await _pump(tester, picker());
+      final centre = tester
+          .widget<MapLibreMap>(find.byType(MapLibreMap))
+          .initialCameraPosition
+          .target;
+
+      await tester.tap(find.text('Search in this area'));
+      await tester.pumpAndSettle();
+
+      final query = requests.single.queryParameters;
+      expect(query['text'], 'Rewe');
+      expect(query['type'], 'PLACE');
+      expect(query['placeBias'], '20');
+      expect(
+        query['place'],
+        '${centre.latitude.toStringAsFixed(6)},'
+        '${centre.longitude.toStringAsFixed(6)}',
+      );
+      // The twenty REWEs in Berlin replace the Paris results.
+      final tabs = tester.widget<EdgeTabsLayer>(find.byType(EdgeTabsLayer));
+      expect(tabs.targets, hasLength(20));
+    });
+
+    testWidgets('finding nothing says so and keeps what was shown', (
+      tester,
+    ) async {
+      serve('[]');
+      await _pump(tester, picker());
+      final before = tester
+          .widget<EdgeTabsLayer>(find.byType(EdgeTabsLayer))
+          .targets
+          .length;
+
+      await tester.tap(find.text('Search in this area'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Nothing found around here'), findsOne);
+      expect(
+        tester.widget<EdgeTabsLayer>(find.byType(EdgeTabsLayer)).targets,
+        hasLength(before),
+      );
+      // The toast is registered with oktoast for a day; let it run out, as
+      // save_trip_button_test.dart does.
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(days: 2));
+      await tester.pumpAndSettle();
     });
   });
 }

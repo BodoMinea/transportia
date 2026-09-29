@@ -306,6 +306,8 @@ void main() {
       expect(picker.results.first.name, 'Berlin Alexanderplatz');
       expect(picker.origin, const LatLng(52.52, 13.405));
       expect(picker.allowsPoint, isTrue);
+      // To ask again from wherever the map is moved to.
+      expect(picker.query, 'Alexanderplatz');
     });
 
     testWidgets('a timetable gets the map only for its results', (

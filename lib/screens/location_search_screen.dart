@@ -423,6 +423,8 @@ class _LocationSearchBodyState extends State<LocationSearchBody> {
               confirmLabel: widget.mapPickerConfirmLabel,
               results: results,
               origin: widget.placeBias,
+              query: results.isEmpty ? null : _query,
+              type: widget.type,
               // A point is not a stop, so a timetable is not offered one.
               allowsPoint: !_stopsOnly,
             ),

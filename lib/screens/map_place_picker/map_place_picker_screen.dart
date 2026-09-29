@@ -42,6 +42,8 @@ class MapPlacePickerScreen extends StatefulWidget {
       confirmLabel = 'Save',
       results = const [],
       origin = null,
+      query = null,
+      type = null,
       allowsPoint = true,
       _savesFavourite = true;
 
@@ -57,6 +59,8 @@ class MapPlacePickerScreen extends StatefulWidget {
     required this.confirmLabel,
     this.results = const [],
     this.origin,
+    this.query,
+    this.type,
     this.allowsPoint = true,
   }) : _savesFavourite = false;
 
@@ -70,6 +74,13 @@ class MapPlacePickerScreen extends StatefulWidget {
 
   /// Where the rider is, for how far each result is.
   final LatLng? origin;
+
+  /// What [results] were searched for: asked again, from the map's centre,
+  /// by "Search in this area". Null when there is nothing to ask again.
+  final String? query;
+
+  /// The geocoder type the search was limited to, e.g. `STOP`.
+  final String? type;
 
   /// Whether any point may be picked, or only a result: a timetable needs a
   /// stop, and a point is not one.
@@ -141,7 +152,13 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
   /// and a selection is centred in what it leaves.
   double _sheetHeight = 0;
 
-  List<TransitousLocationSuggestion> get _results => widget.results;
+  /// The results on the map: the search's, until one is made here.
+  late List<TransitousLocationSuggestion> _results = widget.results;
+  bool _isSearchingArea = false;
+
+  /// Pin images already on the map, by id: a search here may bring icons
+  /// the first did not.
+  final Set<String> _pinImages = {};
   bool get _hasSelection => _selectedResult != null || _point != null;
 
   @override
@@ -222,7 +239,12 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
             ),
           )
         else
-          Positioned(left: 20, right: 20, bottom: 20, child: _buildHint()),
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 20,
+            child: widget.query == null ? _buildHint() : _buildAreaSearch(),
+          ),
       ],
     );
   }
@@ -297,15 +319,22 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
     await _addPointLayer(controller, accent);
   }
 
+  Future<void> _ensurePinImages(
+    MapLibreMapController controller,
+    Color accent,
+  ) async {
+    for (final icon in {for (final r in _results) resultPinIcon(r)}) {
+      final id = resultPinImageId(icon);
+      if (_pinImages.contains(id)) continue;
+      await controller.addImage(id, await buildResultPinImage(accent, icon));
+      _pinImages.add(id);
+    }
+  }
+
   Future<void> _addPins(MapLibreMapController controller, Color accent) async {
     if (_results.isEmpty) return;
     try {
-      for (final icon in {for (final r in _results) resultPinIcon(r)}) {
-        await controller.addImage(
-          resultPinImageId(icon),
-          await buildResultPinImage(accent, icon),
-        );
-      }
+      await _ensurePinImages(controller, accent);
       await controller.addGeoJsonSource(
         _kPinsSourceId,
         resultPinFeatures(_results, selected: _selectedResult),
@@ -718,6 +747,93 @@ class _MapPlacePickerScreenState extends State<MapPlacePickerScreen> {
         showValidationToast(context, "Failed to add favourite");
       }
     }
+  }
+
+  /// Asks the search again from the middle of the map, held there hard:
+  /// for "that shop, but here", after panning to here.
+  Future<void> _searchThisArea() async {
+    final query = widget.query;
+    if (query == null || _isSearchingArea) return;
+    final centre = (_camera ?? _initialCamera(_mapSize ?? Size.zero)).target;
+    setState(() => _isSearchingArea = true);
+    try {
+      final page = await TransitousGeocodeService.fetchSuggestionPage(
+        text: query,
+        placeBias: centre,
+        type: widget.type,
+        biasStrength: TransitousGeocodeService.areaPlaceBias,
+      );
+      if (!mounted) return;
+      if (page.suggestions.isEmpty) {
+        showValidationToast(context, 'Nothing found around here');
+        return;
+      }
+      ++_selectionToken;
+      setState(() {
+        _results = page.suggestions;
+        _selectedResult = null;
+        _point = null;
+        _sheetHeight = 0;
+      });
+      await _showNewPins();
+    } catch (_) {
+      if (mounted) showValidationToast(context, 'Search failed, try again');
+    } finally {
+      if (mounted) setState(() => _isSearchingArea = false);
+    }
+  }
+
+  Future<void> _showNewPins() async {
+    final controller = _controller;
+    if (controller == null) return;
+    final accent = AppColors.accentOf(context);
+    if (!_pinsReady) return _addPins(controller, accent);
+    try {
+      await _ensurePinImages(controller, accent);
+    } catch (_) {}
+    await _refreshPins();
+    await _refreshPoint();
+  }
+
+  Widget _buildAreaSearch() {
+    final accent = AppColors.accentOf(context);
+    return Center(
+      child: Semantics(
+        button: true,
+        child: GestureDetector(
+          onTap: _isSearchingArea ? null : _searchThisArea,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x26000000),
+                  blurRadius: 16,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(LucideIcons.search, size: 18, color: accent),
+                const SizedBox(width: 8),
+                Text(
+                  _isSearchingArea ? 'Searching…' : 'Search in this area',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: accent,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildHint() {
