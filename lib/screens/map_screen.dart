@@ -32,6 +32,7 @@ import '../screens/via_stops_screen.dart';
 import '../services/location_service.dart';
 import '../services/plan_request.dart';
 import '../services/recent_trips_service.dart';
+import '../services/backend_reload_service.dart';
 import '../services/rental_providers_service.dart';
 import '../services/routing_options_service.dart';
 import '../services/saved_places_service.dart';
@@ -267,6 +268,7 @@ class _MapScreenState extends State<MapScreen>
     RoutingOptionsService.optionsListenable.addListener(
       _onStoredOptionsChanged,
     );
+    BackendReloadService.generation.addListener(_onBackendSwitched);
     _snapCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 220),
@@ -374,6 +376,25 @@ class _MapScreenState extends State<MapScreen>
     });
   }
 
+  /// Another server, or another API version: what the map shows came from
+  /// the old one, so it is cleared and fetched again rather than left until
+  /// the camera next moves.
+  void _onBackendSwitched() {
+    if (!mounted) return;
+    _lastTripsRequestKey = null;
+    _lastStopsRequestKey = null;
+    _dismissStopOverlay();
+    unawaited(_reloadMapData());
+  }
+
+  Future<void> _reloadMapData() async {
+    await _clearVehicleMarkers();
+    await _clearStopMarkers();
+    if (!mounted) return;
+    unawaited(_refreshStops());
+    unawaited(_refreshTrips(force: true));
+  }
+
   /// Via stops need a search of their own, so they get a screen.
   Future<void> _openViaStopPicker() async {
     _unfocusInputs();
@@ -426,6 +447,7 @@ class _MapScreenState extends State<MapScreen>
     RoutingOptionsService.optionsListenable.removeListener(
       _onStoredOptionsChanged,
     );
+    BackendReloadService.generation.removeListener(_onBackendSwitched);
     ServerCapabilitiesService.capabilities.removeListener(
       _onCapabilitiesChanged,
     );

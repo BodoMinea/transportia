@@ -14,6 +14,7 @@ import 'providers/theme_provider.dart';
 import 'screens/itinerary_list_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'screens/welcome_screen.dart';
+import 'services/backend_reload_service.dart';
 import 'services/location_service.dart';
 import 'services/transitous_geocode_service.dart';
 import 'widgets/offline_banner_shell.dart';
@@ -26,7 +27,13 @@ class Transportia extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => BackendProvider()),
+        ChangeNotifierProvider(
+          create: (_) {
+            final backend = BackendProvider();
+            BackendReloadService.watch(backend);
+            return backend;
+          },
+        ),
       ],
       child: OKToast(
         child: Consumer<ThemeProvider>(

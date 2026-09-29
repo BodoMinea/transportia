@@ -219,6 +219,17 @@ class RentalProvidersService {
     }
   }
 
+  /// Drops what is held about the server, keeping the rider's picks, so the
+  /// next [ensureCatalogue] starts over. For a switch of server; the stored
+  /// list is kept, since it names its host and is ignored for any other.
+  static void forgetServer() {
+    _catalogueInFlight = null;
+    _catalogueHost = null;
+    _catalogueFetchedAt = null;
+    catalogueListenable.value = null;
+    _nearby.clear();
+  }
+
   /// Forgets everything held in memory, so the next calls read storage again.
   @visibleForTesting
   static void invalidate() {
