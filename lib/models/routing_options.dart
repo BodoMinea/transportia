@@ -231,8 +231,7 @@ class RoutingOptions {
   /// Every mode a street leg may use, in the order the pickers read.
   ///
   /// The search screen gives the first five an icon each and puts the rest
-  /// behind a chevron; the defaults editor lists them all. Both read this, so
-  /// neither can offer a mode the other cannot show.
+  /// behind a chevron; a journey without transit picks from the same list.
   static const List<TransitMode> streetModeChoices = [
     TransitMode.walk,
     TransitMode.bike,
@@ -247,39 +246,15 @@ class RoutingOptions {
 
   /// What a plain "rentals, please" means, with no vehicle named.
   ///
-  /// Rentals are the vehicles picked for them, so a control that offers the
-  /// mode without offering vehicles needs a set to stand for. These three are
-  /// the ones you would actually grab for a mile; anything larger has to be
-  /// asked for by name.
+  /// Rentals are the vehicles picked for them, so the Rental icon, which
+  /// offers the mode without naming vehicles, needs a set to stand for.
+  /// These three are the ones you would actually grab for a mile; anything
+  /// larger has to be asked for by name.
   static const List<RentalFormFactor> defaultRentalFormFactors = [
     RentalFormFactor.bicycle,
     RentalFormFactor.scooterStanding,
     RentalFormFactor.other,
   ];
-
-  /// Sets one mile's modes, keeping its rentals in step.
-  ///
-  /// For screens that offer the rental mode but no vehicle picker. Ticking
-  /// Rental takes [defaultRentalFormFactors]; unticking it hands them back,
-  /// so no saved default can carry rentals over a mile with nothing to rent.
-  /// The search screen picks vehicles directly and has no use for this.
-  RoutingOptions withFirstMileModes(List<TransitMode> modes) => copyWith(
-    firstMileModes: modes,
-    firstMileRentalFormFactors: _rentalsFor(modes, firstMileRentalFormFactors),
-  );
-
-  RoutingOptions withLastMileModes(List<TransitMode> modes) => copyWith(
-    lastMileModes: modes,
-    lastMileRentalFormFactors: _rentalsFor(modes, lastMileRentalFormFactors),
-  );
-
-  static List<RentalFormFactor> _rentalsFor(
-    List<TransitMode> modes,
-    List<RentalFormFactor> current,
-  ) {
-    if (!modes.contains(TransitMode.rental)) return const [];
-    return current.isEmpty ? defaultRentalFormFactors : current;
-  }
 
   /// These options with the settings-screen-only fields taken from [stored].
   ///

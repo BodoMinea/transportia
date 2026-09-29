@@ -35,9 +35,6 @@ const Map<TransitMode, String> mileModeExtras = {
 ///
 /// The icon sets these directly rather than only switching rentals on: an icon
 /// that enables other buttons and nothing else says nothing about what it did.
-///
-/// The same set the defaults editor gives a mile when Rental is ticked there,
-/// so Rental means one thing across both screens.
 const List<RentalFormFactor> kRentalIconFactors =
     RoutingOptions.defaultRentalFormFactors;
 
