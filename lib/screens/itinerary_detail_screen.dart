@@ -30,10 +30,10 @@ import '../utils/journey_progress.dart';
 import '../utils/leg_helper.dart';
 import '../utils/reported_time.dart';
 import '../utils/time_utils.dart';
-import '../widgets/alert_notice.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/custom_card.dart';
-import '../widgets/journey/platform_unknown_notice.dart';
+import '../utils/leg_notices.dart';
+import '../widgets/journey/leg_notice_stack.dart';
 import '../widgets/journey/spine_node.dart';
 import '../widgets/journey/spine_row.dart';
 import '../widgets/info_chip.dart';
@@ -84,10 +84,6 @@ const TextStyle kSpineStopStyle = TextStyle(
   fontWeight: FontWeight.w400,
   height: kSpineStopLineHeight / 15,
 );
-
-/// Said on the change itself and again at the head of the journey, in the same
-/// words, so the banner and the row it points at read as one statement.
-const String kMissedChangeMessage = 'You will not make this change.';
 
 /// One point on the line: what gets here, and what leaves.
 ///
@@ -1305,7 +1301,8 @@ class _LegDetailsWidgetState extends State<LegDetailsWidget> {
           firstLineHeight: kSpineNameLineHeight,
           time: SpineTimes(point: point),
           meta: _buildMeta(context, isStreet: isStreet, point: point),
-          body: _buildBody(context, isStreet: isStreet, point: point),
+          body: _buildBody(point: point),
+          footer: _buildFooter(context, isStreet: isStreet),
           // A street leg has no stops to unfold, so its tap is free for the
           // map; a transit leg's tap unfolds the stops it calls at.
           onTap: isStreet
@@ -1376,13 +1373,7 @@ class _LegDetailsWidgetState extends State<LegDetailsWidget> {
     );
   }
 
-  Widget _buildBody(
-    BuildContext context, {
-    required bool isStreet,
-    required SpinePoint point,
-  }) {
-    final alerts = widget.leg.alerts;
-
+  Widget _buildBody({required SpinePoint point}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1421,27 +1412,28 @@ class _LegDetailsWidgetState extends State<LegDetailsWidget> {
           ],
         ),
         const SizedBox(height: 4),
-        Row(
-          children: [
-            if (alerts.isNotEmpty)
-              const Padding(
-                padding: EdgeInsets.only(right: 4),
-                child: Icon(
-                  LucideIcons.triangleAlert,
-                  size: 14,
-                  color: Color(0xFFFF8A00),
-                ),
-              ),
-            Expanded(
-              child: Text(
-                _buildNoteLine(),
-                style: AppText.footnote,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-          ],
+        Text(
+          _buildNoteLine(),
+          style: AppText.footnote,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
+      ],
+    );
+  }
+
+  /// Below the body and the platform column both, so the notices span the
+  /// full width on a ride just as on a walk.
+  Widget _buildFooter(BuildContext context, {required bool isStreet}) {
+    final notices = legNotices(widget.leg);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // A walk has nothing to unfold, so it can hold nothing back.
+        if (isStreet || _isExpanded)
+          LegNoticeStack(notices)
+        else
+          LegNoticeStack.folded(notices),
         if (!isStreet) ...[
           const SizedBox(height: 6),
           Row(
@@ -1465,10 +1457,6 @@ class _LegDetailsWidgetState extends State<LegDetailsWidget> {
           ),
         ],
         if (_isExpanded) ...[
-          if (alerts.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            ...alerts.map(_buildAlertWidget),
-          ],
           const SizedBox(height: 8),
           _buildMetadataSection(),
         ],
@@ -1618,18 +1606,9 @@ class _LegDetailsWidgetState extends State<LegDetailsWidget> {
 
   Widget _buildMetadataSection() {
     final metadata = <Widget>[];
-    final departureDelay = _departureDelay;
-    final arrivalDelay = _arrivalDelay;
 
-    if (widget.leg.cancelled) {
-      metadata.add(
-        InfoChip(
-          icon: LucideIcons.circleAlert,
-          label: 'CANCELLED',
-          tint: const Color(0xFFD32F2F),
-        ),
-      );
-    }
+    // No cancelled or delayed chips: a cancellation is a notice above, and a
+    // delay is already the red time and the grey minutes beside the station.
 
     // No track chip: the departure platform now sits on the card's own row
     // and again against the first stop of the timeline, so a chip here would
@@ -1661,33 +1640,6 @@ class _LegDetailsWidgetState extends State<LegDetailsWidget> {
       );
     }
 
-    final hasDelay =
-        (departureDelay != null && !departureDelay.isNegative) ||
-        (arrivalDelay != null && !arrivalDelay.isNegative);
-    final hasAhead =
-        (departureDelay != null && departureDelay.isNegative) ||
-        (arrivalDelay != null && arrivalDelay.isNegative);
-
-    if (hasDelay) {
-      metadata.add(
-        const InfoChip(
-          icon: LucideIcons.circleAlert,
-          label: 'Delayed',
-          tint: Color(0xFFB26A00),
-        ),
-      );
-    }
-
-    if (!hasDelay && hasAhead) {
-      metadata.add(
-        const InfoChip(
-          icon: LucideIcons.check,
-          label: 'Ahead',
-          tint: Color(0xFF2E7D32),
-        ),
-      );
-    }
-
     if (widget.leg.interlineWithPreviousLeg) {
       metadata.add(const InfoChip(icon: LucideIcons.link, label: 'Interlined'));
     }
@@ -1696,17 +1648,6 @@ class _LegDetailsWidgetState extends State<LegDetailsWidget> {
 
     return Wrap(spacing: 8, runSpacing: 8, children: metadata);
   }
-
-  Widget _buildAlertWidget(Alert alert) => Padding(
-    padding: const EdgeInsets.only(bottom: 8.0),
-    child: AlertNotice.compact(alert: alert),
-  );
-
-  Duration? get _departureDelay =>
-      computeDelay(widget.leg.scheduledStartTime, widget.leg.startTime);
-
-  Duration? get _arrivalDelay =>
-      computeDelay(widget.leg.scheduledEndTime, widget.leg.endTime);
 
   Widget _buildTitleWidget() {
     if (widget.leg.displayName != null) {
@@ -1815,7 +1756,8 @@ class TransferLegCard extends StatelessWidget {
 
     return SpineRow(
       node: SpineNode(
-        icon: missed ? LucideIcons.triangleAlert : LucideIcons.arrowLeftRight,
+        // The problem notice's own shape, so node and notice read as one.
+        icon: missed ? LucideIcons.octagonAlert : LucideIcons.arrowLeftRight,
         color: arrived
             ? changeColor.withValues(alpha: changeColor.a * kTravelledOpacity)
             : changeColor,
@@ -1852,71 +1794,49 @@ class TransferLegCard extends StatelessWidget {
               ),
             ),
       onTap: onShowOnMap,
-      body: Padding(
+      footer: Padding(
         padding: const EdgeInsets.only(bottom: 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => openStopSheet(
-                stopId: leg.fromStopId,
-                stopName: leg.fromName,
-                referenceTime: leg.startTime,
-              ),
-              child: Text(
-                leg.fromName,
-                style: kSpineNameStyle.copyWith(color: AppColors.black),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
-              ),
+        child: LegNoticeStack(legNotices(leg, changeover: changeover)),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => openStopSheet(
+              stopId: leg.fromStopId,
+              stopName: leg.fromName,
+              referenceTime: leg.startTime,
             ),
-            if (buildSpineDelay(point) case final delay?) delay,
-            const SizedBox(height: 6),
-            Text(
-              'Change · ${formatDuration(leg.duration)}',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.black.withValues(alpha: 0.75),
-              ),
+            child: Text(
+              leg.fromName,
+              style: kSpineNameStyle.copyWith(color: AppColors.black),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
             ),
-            // The two times are already on screen — this row's arrival and the
-            // next row's departure — so the sentence does not repeat them.
-            // Said in words as well as in red, because the colour alone
-            // reaches nobody using a screen reader.
-            if (missed) ...[
-              const SizedBox(height: 3),
-              Semantics(
-                liveRegion: true,
-                child: Text(
-                  kMissedChangeMessage,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: kMissedChangeColor,
-                  ),
-                ),
-              ),
-            ],
-            if (_platforms() case final platforms?) ...[
-              const SizedBox(height: 3),
-              Text(platforms, style: AppText.footnote),
-            ],
-            if (leg.distance != null && leg.distance! > 0) ...[
-              const SizedBox(height: 3),
-              Text(
-                'Approx. ${formatDistanceKm(leg.distance!)} walk',
-                style: AppText.footnote,
-              ),
-            ],
-            // A change that will not work outranks one whose walk is a guess.
-            if (!missed && (changeover?.platformUnknown ?? false)) ...[
-              const SizedBox(height: PlatformUnknownNotice.lineHeight),
-              const PlatformUnknownNotice(),
-            ],
+          ),
+          if (buildSpineDelay(point) case final delay?) delay,
+          const SizedBox(height: 6),
+          Text(
+            'Change · ${formatDuration(leg.duration)}',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.black.withValues(alpha: 0.75),
+            ),
+          ),
+          if (_platforms() case final platforms?) ...[
+            const SizedBox(height: 3),
+            Text(platforms, style: AppText.footnote),
           ],
-        ),
+          if (leg.distance != null && leg.distance! > 0) ...[
+            const SizedBox(height: 3),
+            Text(
+              'Approx. ${formatDistanceKm(leg.distance!)} walk',
+              style: AppText.footnote,
+            ),
+          ],
+        ],
       ),
     );
   }

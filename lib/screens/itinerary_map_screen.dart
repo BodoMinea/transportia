@@ -21,7 +21,8 @@ import '../utils/polyline_utils.dart';
 import '../utils/reported_time.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/delayed_time.dart';
-import '../widgets/journey/platform_unknown_notice.dart';
+import '../utils/leg_notices.dart';
+import '../widgets/journey/leg_notice_stack.dart';
 import '../widgets/stop_departures_sheet.dart';
 import '../theme/app_text.dart';
 
@@ -1084,6 +1085,7 @@ class _LegCarouselCard extends StatelessWidget {
             ),
             label: leg.toName,
           ),
+          LegNoticeStack.headline(legNotices(leg)),
         ],
       ),
     );
@@ -1189,10 +1191,9 @@ class _TransferCarouselCard extends StatelessWidget {
             time: walked,
             label: leg.toName,
           ),
-          if (changeover.platformUnknown) ...[
-            const SizedBox(height: 10),
-            const PlatformUnknownNotice(),
-          ],
+          LegNoticeStack.headline(
+            legNotices(changeover.transfer, changeover: changeover),
+          ),
         ],
       ),
     );

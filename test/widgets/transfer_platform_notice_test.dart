@@ -8,7 +8,7 @@ import 'package:transportia/providers/theme_provider.dart';
 import 'package:transportia/screens/itinerary_detail_screen.dart';
 import 'package:transportia/utils/changeover.dart';
 import 'package:transportia/utils/itinerary_leg_utils.dart';
-import 'package:transportia/widgets/journey/platform_unknown_notice.dart';
+import 'package:transportia/utils/leg_notices.dart';
 
 final DateTime _t0 = DateTime(2026, 6, 1, 10, 0);
 
@@ -99,18 +99,18 @@ void main() {
     tester,
   ) async {
     await _pump(tester, _change());
-    expect(find.text(PlatformUnknownNotice.message), findsOne);
+    expect(find.text(kPlatformUnknownMessage), findsOne);
   });
 
   testWidgets('with both platforms there is nothing to say', (tester) async {
     await _pump(tester, _change(iceArrivalPlatform: '3'));
-    expect(find.byType(PlatformUnknownNotice), findsNothing);
+    expect(find.text(kPlatformUnknownMessage), findsNothing);
   });
 
   testWidgets('a change that is missed says that instead', (tester) async {
     // Leaving before the walk is done: the platform no longer matters.
     await _pump(tester, _change(reDeparts: 2));
     expect(find.text(kMissedChangeMessage), findsOne);
-    expect(find.byType(PlatformUnknownNotice), findsNothing);
+    expect(find.text(kPlatformUnknownMessage), findsNothing);
   });
 }
