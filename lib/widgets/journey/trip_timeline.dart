@@ -4,7 +4,8 @@ import 'package:timelines_plus/timelines_plus.dart';
 import '../../models/journey_stop.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/vehicle_position.dart';
-import '../stop_schedule_row.dart';
+import '../../utils/reported_time.dart';
+import '../delayed_time.dart';
 import '../timeline_indicator_box.dart';
 
 /// Called when a rider taps a stop with a known id.
@@ -41,6 +42,7 @@ class TripTimeline extends StatelessWidget {
     required this.routeTextColor,
     required this.modeIcon,
     required this.onStopTap,
+    required this.isLive,
   });
 
   final List<JourneyStop> stops;
@@ -49,6 +51,10 @@ class TripTimeline extends StatelessWidget {
   final Color routeTextColor;
   final IconData modeIcon;
   final StopTapCallback onStopTap;
+
+  /// Whether the operator is reporting this trip, so its times are
+  /// observations. See [ReportedTime.isLive].
+  final bool isLive;
 
   /// The stops with a vehicle entry spliced in where the vehicle is running
   /// between two of them.
@@ -97,6 +103,7 @@ class TripTimeline extends StatelessWidget {
       isPassed: _isPassed(entry.stopIndex),
       isUpcoming: entry.stopIndex == _upcomingStopIndex,
       routeColor: routeColor,
+      isLive: isLive,
       onStopTap: onStopTap,
     );
   }
@@ -181,6 +188,7 @@ class _StopContents extends StatelessWidget {
     required this.isPassed,
     required this.isUpcoming,
     required this.routeColor,
+    required this.isLive,
     required this.onStopTap,
   });
 
@@ -190,22 +198,47 @@ class _StopContents extends StatelessWidget {
   final bool isPassed;
   final bool isUpcoming;
   final Color routeColor;
+  final bool isLive;
   final StopTapCallback onStopTap;
+
+  /// A stop the vehicle has left fades with the rest of its text; its times
+  /// keep their colours underneath.
+  Widget _passable(Widget child) =>
+      isPassed ? Opacity(opacity: _kPassedTextOpacity, child: child) : child;
 
   @override
   Widget build(BuildContext context) {
-    final arrivalRow = buildStopScheduleRow(
-      'Arr',
-      stop.scheduledArrival,
+    final arrival = ReportedTime.from(
       stop.arrival,
-      isPassed,
+      stop.scheduledArrival,
+      isLive: isLive,
     );
-    final departureRow = buildStopScheduleRow(
-      'Dep',
-      stop.scheduledDeparture,
+    final departure = ReportedTime.from(
       stop.departure,
-      isPassed,
+      stop.scheduledDeparture,
+      isLive: isLive,
     );
+    final arrivalRow = arrival == null
+        ? null
+        : _passable(
+            DelayedTime.inline(
+              arrival,
+              label: 'Arr',
+              isArrival: departure != null,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          );
+    final departureRow = departure == null
+        ? null
+        : _passable(
+            DelayedTime.inline(
+              departure,
+              label: 'Dep',
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          );
 
     return GestureDetector(
       onTap: stop.stopId == null ? null : _openStop,

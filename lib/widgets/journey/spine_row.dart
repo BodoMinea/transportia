@@ -24,6 +24,7 @@ class SpineRow extends StatelessWidget {
     super.key,
     required this.node,
     required this.body,
+    this.footer,
     this.time,
     this.meta,
     this.nodeCenter = JourneyMetrics.ring / 2,
@@ -55,6 +56,10 @@ class SpineRow extends StatelessWidget {
   final Widget body;
   final Widget? time;
   final Widget? meta;
+
+  /// Under the body and the meta column both, so what it holds spans the
+  /// full width to the right of the line whatever the meta column takes.
+  final Widget? footer;
 
   /// Null draws no line — a terminus, where the row is the end of the spine.
   final Color? railColor;
@@ -165,19 +170,38 @@ class SpineRow extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    left: JourneyMetrics.gap,
-                    top: textTop + aboveAnchor,
-                  ),
-                  child: body,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              left: JourneyMetrics.gap,
+                              top: textTop + aboveAnchor,
+                            ),
+                            child: body,
+                          ),
+                        ),
+                        if (meta case final meta?)
+                          Padding(
+                            padding: EdgeInsets.only(left: 8, top: textTop),
+                            child: meta,
+                          ),
+                      ],
+                    ),
+                    if (footer case final footer?)
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          left: JourneyMetrics.gap,
+                        ),
+                        child: footer,
+                      ),
+                  ],
                 ),
               ),
-              if (meta case final meta?)
-                Padding(
-                  padding: EdgeInsets.only(left: 8, top: textTop),
-                  child: meta,
-                ),
             ],
           ),
         ),

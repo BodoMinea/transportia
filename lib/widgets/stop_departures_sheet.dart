@@ -9,8 +9,9 @@ import '../theme/app_colors.dart';
 import '../utils/color_utils.dart';
 import '../utils/custom_page_route.dart';
 import '../utils/leg_helper.dart';
-import '../utils/time_utils.dart';
+import '../utils/reported_time.dart';
 import 'bottom_overlay_card.dart';
+import 'delayed_time.dart';
 import 'pressable_highlight.dart';
 import 'route_badge_pill.dart';
 import 'skeletons/skeleton_shimmer.dart';
@@ -242,11 +243,11 @@ class _DepartureTile extends StatelessWidget {
       stopTime.routeTextColor,
       AppColors.solidWhite,
     );
-    final departure = place.scheduledDeparture ?? place.departure;
-    final actualDeparture = place.departure;
-    final delay = (departure != null && actualDeparture != null)
-        ? computeDelay(departure, actualDeparture)
-        : null;
+    final departure = ReportedTime.from(
+      place.departure,
+      place.scheduledDeparture,
+      isLive: stopTime.realTime,
+    );
 
     return PressableHighlight(
       onPressed: onTap,
@@ -285,24 +286,7 @@ class _DepartureTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  formatTime(departure, nullPlaceholder: '--:--'),
-                  style: AppText.bodyStrong,
-                ),
-                if (delay != null)
-                  Text(
-                    formatDelay(delay),
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: delayColor(delay),
-                    ),
-                  ),
-              ],
-            ),
+            DelayedTime.end(departure),
           ],
         ),
       ),

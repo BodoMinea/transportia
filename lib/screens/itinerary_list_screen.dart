@@ -17,6 +17,7 @@ import '../services/routing_options_service.dart';
 import '../services/routing_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/custom_app_bar.dart';
+import '../utils/leg_notices.dart';
 import '../utils/color_utils.dart';
 import '../utils/duration_formatter.dart';
 import '../utils/time_utils.dart';
@@ -489,7 +490,9 @@ class _ItineraryCardState extends State<ItineraryCard>
                     ),
                     const SizedBox(width: 12),
                   ],
-                  if (itinerary.alertsCount > 0) ...[
+                  // The same count the itinerary's header gives.
+                  if (journeyNotices(itinerary.legs).length case final count
+                      when count > 0) ...[
                     Icon(
                       LucideIcons.triangleAlert,
                       size: 16,
@@ -497,7 +500,7 @@ class _ItineraryCardState extends State<ItineraryCard>
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '${itinerary.alertsCount}',
+                      '$count',
                       style: TextStyle(
                         fontSize: 14,
                         color: AppColors.black.withValues(alpha: 0.8),

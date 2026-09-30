@@ -213,17 +213,6 @@ class Itinerary {
     return (walkingKm * _caloriesPerWalkedKilometre).round();
   }
 
-  int get alertsCount {
-    int count = 0;
-    for (final leg in legs) {
-      count += leg.alerts.length;
-      for (final stop in leg.intermediateStops) {
-        count += stop.alerts.length;
-      }
-    }
-    return count;
-  }
-
   factory Itinerary.fromJson(
     Map<String, dynamic> json, {
     bool isDirect = false,

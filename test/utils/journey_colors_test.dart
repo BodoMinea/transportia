@@ -1,6 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:transportia/models/itinerary.dart';
+import 'package:transportia/providers/theme_provider.dart';
 import 'package:transportia/utils/journey_colors.dart';
 
 const Color _white = Color(0xFFFFFFFF);
@@ -118,5 +121,56 @@ void main() {
       );
       expect(color, _accent);
     });
+  });
+
+  group('spineTimeColor', () {
+    setUp(() {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.empty();
+    });
+
+    test('late and reported is red, on time and reported is green', () {
+      const late = Duration(minutes: 3);
+      expect(
+        spineTimeColor(isLive: true, delay: late, isArrival: false),
+        kLateDeparture,
+      );
+      expect(
+        spineTimeColor(isLive: true, delay: null, isArrival: false),
+        kOnTimeDeparture,
+      );
+      expect(
+        spineTimeColor(isLive: true, delay: late, isArrival: true),
+        kLateArrival,
+      );
+    });
+
+    test(
+      'a planned time follows the text colour into the dark theme',
+      () async {
+        // Fixed black here vanished on the dark background.
+        TestWidgetsFlutterBinding.ensureInitialized();
+        final provider = ThemeProvider();
+        addTearDown(provider.dispose);
+        while (!provider.isInitialized) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        await provider.setAppThemeMode(AppThemeMode.dark);
+
+        final planned = spineTimeColor(
+          isLive: false,
+          delay: null,
+          isArrival: false,
+        );
+        expect(
+          planned.withValues(alpha: 1),
+          provider.textColor.withValues(alpha: 1),
+        );
+        expect(
+          contrastRatio(planned.withValues(alpha: 1), provider.backgroundColor),
+          greaterThan(4.5),
+        );
+      },
+    );
   });
 }

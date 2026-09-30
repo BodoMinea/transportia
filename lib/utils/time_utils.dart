@@ -1,5 +1,3 @@
-import 'package:flutter/widgets.dart';
-
 String formatTime(DateTime? dateTime, {String nullPlaceholder = '-'}) {
   if (dateTime == null) return nullPlaceholder;
 
@@ -156,8 +154,4 @@ String formatIso8601Millis(DateTime dateTime) {
   }
   final millis = utc.millisecond.toString().padLeft(3, '0');
   return '${base.substring(0, dot)}.${millis}Z';
-}
-
-Color delayColor(Duration delay) {
-  return delay.isNegative ? const Color(0xFF2E7D32) : const Color(0xFFB26A00);
 }
