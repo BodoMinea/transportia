@@ -21,6 +21,7 @@ import '../utils/polyline_utils.dart';
 import '../utils/reported_time.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/delayed_time.dart';
+import '../widgets/journey/platform_unknown_notice.dart';
 import '../widgets/stop_departures_sheet.dart';
 import '../theme/app_text.dart';
 
@@ -1124,7 +1125,18 @@ class _TransferCarouselCard extends StatelessWidget {
                   color: AppColors.black,
                 ),
               ),
-              const Spacer(),
+              // In the heading: the card's height is fixed and already full.
+              Expanded(
+                child: changeover.platformUnknown
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: PlatformUnknownNotice.compact(),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
               Text(formatDuration(leg.duration), style: AppText.bodyStrong),
             ],
           ),

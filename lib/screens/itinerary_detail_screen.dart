@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/itinerary.dart';
-import '../models/transit_mode_group.dart';
 import '../models/saved_trip.dart';
 import '../models/time_selection.dart';
 import '../providers/theme_provider.dart';
@@ -34,6 +33,7 @@ import '../utils/time_utils.dart';
 import '../widgets/alert_notice.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/custom_card.dart';
+import '../widgets/journey/platform_unknown_notice.dart';
 import '../widgets/journey/spine_node.dart';
 import '../widgets/journey/spine_row.dart';
 import '../widgets/info_chip.dart';
@@ -1507,14 +1507,8 @@ class _LegDetailsWidgetState extends State<LegDetailsWidget> {
     return null;
   }
 
-  /// True for the modes that run to numbered platforms.
-  bool get _expectsATrack {
-    final mode = TransitMode.fromWire(widget.leg.mode);
-    if (mode == null) return false;
-    return TransitModeGroup.rail.modes.contains(mode) ||
-        TransitModeGroup.metro.modes.contains(mode) ||
-        mode == TransitMode.rail;
-  }
+  bool get _expectsATrack =>
+      TransitMode.fromWire(widget.leg.mode)?.runsToNumberedPlatforms ?? false;
 
   /// The stops the service calls at, dropped onto the line it already has.
   ///
@@ -1915,6 +1909,11 @@ class TransferLegCard extends StatelessWidget {
                 'Approx. ${formatDistanceKm(leg.distance!)} walk',
                 style: AppText.footnote,
               ),
+            ],
+            // A change that will not work outranks one whose walk is a guess.
+            if (!missed && (changeover?.platformUnknown ?? false)) ...[
+              const SizedBox(height: 5),
+              const PlatformUnknownNotice(),
             ],
           ],
         ),

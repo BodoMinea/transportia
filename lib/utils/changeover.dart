@@ -71,6 +71,56 @@ class Changeover {
     final gap = this.gap;
     return gap != null && gap < needs;
   }
+
+  /// The change is at a mainline station and a train on one side of it has
+  /// no platform there, so the walk between them was routed to a guess.
+  ///
+  /// At a small stop the walk is short whatever the platforms. At a station
+  /// a regional or longer train calls at it can be most of the change, and
+  /// without both ends the planner's route and time for it are an estimate.
+  /// Only trains are asked for a platform: a tram or bus on the other side
+  /// usually has none in the feed, and not knowing it is no news.
+  bool get platformUnknown {
+    final sides = [
+      if (arriving case final ride?) (ride, _arrivalPlatform),
+      if (departing case final ride?) (ride, _departurePlatform),
+    ];
+    final atMainlineStation = sides.any(
+      (side) => _modeOf(side.$1)?.isRegionalOrLongerRail ?? false,
+    );
+    if (!atMainlineStation) return false;
+    return sides.any(
+      (side) => (_modeOf(side.$1)?.isTrain ?? false) && side.$2 == null,
+    );
+  }
+
+  /// Where the arriving train stops. The walk starts from the same place, so
+  /// its platform stands in where the train's own is missing.
+  String? get _arrivalPlatform => _firstPlatform([
+    arriving?.to.track,
+    arriving?.to.scheduledTrack,
+    transfer.from.track,
+    transfer.from.scheduledTrack,
+  ]);
+
+  /// Where the departing train leaves from, or failing that where the walk
+  /// ends.
+  String? get _departurePlatform => _firstPlatform([
+    departing?.from.track,
+    departing?.from.scheduledTrack,
+    transfer.to.track,
+    transfer.to.scheduledTrack,
+  ]);
+
+  static String? _firstPlatform(List<String?> candidates) {
+    for (final candidate in candidates) {
+      final trimmed = candidate?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) return trimmed;
+    }
+    return null;
+  }
+
+  static TransitMode? _modeOf(Leg leg) => TransitMode.fromWire(leg.mode);
 }
 
 /// Every change in a journey, in the order they are travelled.
