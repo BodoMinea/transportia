@@ -230,8 +230,8 @@ class RoutingOptions {
 
   /// Every mode a street leg may use, in the order the pickers read.
   ///
-  /// The search screen gives the first five an icon each and puts the rest
-  /// behind a chevron; a journey without transit picks from the same list.
+  /// The search card files each of them under a `StreetSection`; a journey
+  /// without transit picks from the same list.
   static const List<TransitMode> streetModeChoices = [
     TransitMode.walk,
     TransitMode.bike,
@@ -242,18 +242,6 @@ class RoutingOptions {
     TransitMode.hgv,
     TransitMode.odm,
     TransitMode.flex,
-  ];
-
-  /// What a plain "rentals, please" means, with no vehicle named.
-  ///
-  /// Rentals are the vehicles picked for them, so the Rental icon, which
-  /// offers the mode without naming vehicles, needs a set to stand for.
-  /// These three are the ones you would actually grab for a mile; anything
-  /// larger has to be asked for by name.
-  static const List<RentalFormFactor> defaultRentalFormFactors = [
-    RentalFormFactor.bicycle,
-    RentalFormFactor.scooterStanding,
-    RentalFormFactor.other,
   ];
 
   /// These options with the settings-screen-only fields taken from [stored].

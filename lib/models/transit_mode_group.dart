@@ -40,6 +40,15 @@ enum TransitModeGroup {
     TransitMode.other,
   ];
 
+  /// The trains and coaches that run between regions rather than within one:
+  /// what a regional ticket such as the Deutschlandticket does not cover.
+  static const Set<TransitMode> longDistance = {
+    TransitMode.highspeedRail,
+    TransitMode.longDistance,
+    TransitMode.nightRail,
+    TransitMode.coach,
+  };
+
   /// Every mode a rider can pick, in the order the dropdown lists them.
   ///
   /// Excludes the server-side expanders (`TRANSIT`, `RAIL`), the debug routes,
@@ -93,15 +102,22 @@ enum TransitModeGroup {
   };
 
   /// Which of this group's modes are selected.
-  GroupState stateIn(Set<TransitMode> selected) {
-    final on = modes.where(selected.contains).length;
-    if (on == 0) return GroupState.none;
-    return on == modes.length ? GroupState.all : GroupState.some;
-  }
+  GroupState stateIn(Set<TransitMode> selected) =>
+      GroupState.of(modes.where(selected.contains).length, modes.length);
 }
 
 /// How much of a group is switched on.
-enum GroupState { none, some, all }
+enum GroupState {
+  none,
+  some,
+  all;
+
+  /// [on] of [total] switched on.
+  static GroupState of(int on, int total) {
+    if (on == 0) return GroupState.none;
+    return on == total ? GroupState.all : GroupState.some;
+  }
+}
 
 /// The transit modes a search may use.
 ///
@@ -147,6 +163,39 @@ class TransitSelection {
     return TransitSelection(next);
   }
 
+  /// How much of [section] is on: for sets that are not a
+  /// [TransitModeGroup], such as the extras.
+  GroupState stateOfModes(List<TransitMode> section) =>
+      GroupState.of(section.where(modes.contains).length, section.length);
+
+  /// [toggleGroup] for any set of modes.
+  TransitSelection toggleModes(List<TransitMode> section) {
+    final next = Set.of(modes);
+    if (stateOfModes(section) == GroupState.all) {
+      next.removeAll(section);
+    } else {
+      next.addAll(section);
+    }
+    return TransitSelection(next);
+  }
+
+  /// Nothing long-distance is on, and something else is.
+  bool get isRegionalOnly =>
+      modes.isNotEmpty && !modes.any(TransitModeGroup.longDistance.contains);
+
+  /// Drops every long-distance mode, or brings them all back.
+  ///
+  /// Back means all four, whichever were on before: the switch says "not
+  /// only regional", and any of them could be the one a rider was missing.
+  TransitSelection toggleRegionalOnly() => TransitSelection(
+    isRegionalOnly
+        ? {...modes, ...TransitModeGroup.longDistance}
+        : {
+            for (final mode in modes)
+              if (!TransitModeGroup.longDistance.contains(mode)) mode,
+          },
+  );
+
   TransitSelection toggleMode(TransitMode mode) {
     final canonical = TransitModeGroup.canonical(mode);
     final next = Set.of(modes);
@@ -166,6 +215,14 @@ class TransitSelection {
   ];
 
   bool get _allExtrasOn => TransitModeGroup.extras.every(modes.contains);
+
+  bool get _isEverythingRegional =>
+      isRegionalOnly &&
+      TransitModeGroup.allSelectable.every(
+        (mode) =>
+            modes.contains(mode) ||
+            TransitModeGroup.longDistance.contains(mode),
+      );
 
   bool _isCovered(TransitMode mode) {
     for (final group in TransitModeGroup.values) {
@@ -210,6 +267,7 @@ class TransitSelection {
   String summary() {
     if (isEverything) return 'All transport';
     if (isEmpty) return 'No transport';
+    if (_isEverythingRegional) return 'Regional only';
     return [
       for (final group in TransitModeGroup.values)
         if (group.stateIn(modes) == GroupState.all) group.label,

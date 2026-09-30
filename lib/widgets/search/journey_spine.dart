@@ -4,10 +4,11 @@ import 'package:flutter/widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../models/routing_options.dart';
+import '../../models/street_leg_choice.dart';
+import '../../models/transit_mode_group.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/journey_colors.dart';
 import '../journey/spine_row.dart';
-import '../../models/transitous/enums.dart';
 import '../../models/transitous/server_config.dart';
 import '../options/icon_controls.dart';
 import 'journey_segment.dart';
@@ -65,12 +66,9 @@ class _JourneySpineState extends State<JourneySpine> {
 
   final Set<_Stage> _open = {};
   bool _paceOpen = false;
-  bool _fromBudgetOpen = false;
-  bool _toBudgetOpen = false;
-  bool _fromModesOpen = false;
-  bool _toModesOpen = false;
-  bool _modesOpen = false;
-  bool _changesOpen = false;
+
+  /// Stages showing all their options rather than the compact rows.
+  final Set<_Stage> _full = {};
 
   OptionAnnouncement? _announcement;
   Timer? _announcementTimer;
@@ -184,6 +182,11 @@ class _JourneySpineState extends State<JourneySpine> {
     );
   }
 
+  void _setFull(_Stage stage, bool full) {
+    _tooltips.hide();
+    setState(() => full ? _full.add(stage) : _full.remove(stage));
+  }
+
   Widget _buildStages(RoutingOptions options) {
     // The street stages take the same neutral the itinerary gives a walk, and
     // the ride takes the accent: the search is a picture of the trip's shape
@@ -193,50 +196,21 @@ class _JourneySpineState extends State<JourneySpine> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        JourneySegment(
-          color: kStreetLegColor,
-          dashed: true,
-          icon: mileModesIcon(options.firstMileModes),
+        _streetStage(
+          stage: _Stage.toStation,
           headline: 'To the station',
-          summary:
-              '${mileModesLabel(options.firstMileModes)} · '
-              '${budgetSummaryText(options.maxFirstMileTime)}',
-          isOpen: _open.contains(_Stage.toStation),
-          onToggle: () => _toggleStage(_Stage.toStation),
-          child: StreetLegSection(
+          where: 'to the station',
+          choice: StreetLegChoice(
             modes: options.firstMileModes,
-            budget: options.maxFirstMileTime,
-            maxBudget: _mileCeiling,
             formFactors: options.firstMileRentalFormFactors,
-            tooltips: _tooltips,
-            budgetOpen: _fromBudgetOpen,
-            modesOpen: _fromModesOpen,
-            onBudgetPressed: () {
-              _tooltips.hide();
-              setState(() => _fromBudgetOpen = !_fromBudgetOpen);
-            },
-            onModesPressed: () {
-              _tooltips.hide();
-              setState(() => _fromModesOpen = !_fromModesOpen);
-            },
-            onChanged: (choice) {
-              _apply(
-                options.copyWith(
-                  firstMileModes: choice.modes,
-                  firstMileRentalFormFactors: choice.formFactors,
-                ),
-              );
-              _announceMileChange(
-                options.firstMileModes,
-                choice.modes,
-                'to the station',
-              );
-            },
-            onBudgetChanged: (budget) =>
-                _apply(options.copyWith(maxFirstMileTime: budget)),
-            limitToMyProviders: widget.limitToMyProviders,
-            onLimitToMyProvidersPressed: _toggleProviderLimit,
           ),
+          budget: options.maxFirstMileTime,
+          onChanged: (choice) => options.copyWith(
+            firstMileModes: choice.modes,
+            firstMileRentalFormFactors: choice.formFactors,
+          ),
+          onBudgetChanged: (budget) =>
+              options.copyWith(maxFirstMileTime: budget),
         ),
         JourneySegment(
           color: accent,
@@ -250,16 +224,8 @@ class _JourneySpineState extends State<JourneySpine> {
           child: TransitSection(
             options: options,
             tooltips: _tooltips,
-            modesOpen: _modesOpen,
-            changesOpen: _changesOpen,
-            onModesPressed: () {
-              _tooltips.hide();
-              setState(() => _modesOpen = !_modesOpen);
-            },
-            onChangesPressed: () {
-              _tooltips.hide();
-              setState(() => _changesOpen = !_changesOpen);
-            },
+            expanded: _full.contains(_Stage.transport),
+            onExpandedChanged: (full) => _setFull(_Stage.transport, full),
             onViaPressed: widget.onAddViaStop,
             onChanged: (next) {
               _apply(next);
@@ -267,70 +233,78 @@ class _JourneySpineState extends State<JourneySpine> {
             },
           ),
         ),
-        JourneySegment(
-          color: kStreetLegColor,
-          dashed: true,
-          icon: mileModesIcon(options.lastMileModes),
+        _streetStage(
+          stage: _Stage.fromStation,
           headline: 'From the station',
-          summary:
-              '${mileModesLabel(options.lastMileModes)} · '
-              '${budgetSummaryText(options.maxLastMileTime)}',
-          isOpen: _open.contains(_Stage.fromStation),
-          onToggle: () => _toggleStage(_Stage.fromStation),
-          child: StreetLegSection(
+          where: 'from the station',
+          choice: StreetLegChoice(
             modes: options.lastMileModes,
-            budget: options.maxLastMileTime,
-            maxBudget: _mileCeiling,
             formFactors: options.lastMileRentalFormFactors,
-            tooltips: _tooltips,
-            budgetOpen: _toBudgetOpen,
-            modesOpen: _toModesOpen,
-            onBudgetPressed: () {
-              _tooltips.hide();
-              setState(() => _toBudgetOpen = !_toBudgetOpen);
-            },
-            onModesPressed: () {
-              _tooltips.hide();
-              setState(() => _toModesOpen = !_toModesOpen);
-            },
-            onChanged: (choice) {
-              _apply(
-                options.copyWith(
-                  lastMileModes: choice.modes,
-                  lastMileRentalFormFactors: choice.formFactors,
-                ),
-              );
-              _announceMileChange(
-                options.lastMileModes,
-                choice.modes,
-                'from the station',
-              );
-            },
-            onBudgetChanged: (budget) =>
-                _apply(options.copyWith(maxLastMileTime: budget)),
-            limitToMyProviders: widget.limitToMyProviders,
-            onLimitToMyProvidersPressed: _toggleProviderLimit,
           ),
+          budget: options.maxLastMileTime,
+          onChanged: (choice) => options.copyWith(
+            lastMileModes: choice.modes,
+            lastMileRentalFormFactors: choice.formFactors,
+          ),
+          onBudgetChanged: (budget) =>
+              options.copyWith(maxLastMileTime: budget),
         ),
       ],
     );
   }
 
-  /// Names the mode that was just added or dropped, since the icon alone
-  /// cannot say which of the two happened.
-  void _announceMileChange(
-    List<TransitMode> before,
-    List<TransitMode> after,
+  /// A street stage: the two differ only in which half of the options they
+  /// read and write.
+  Widget _streetStage({
+    required _Stage stage,
+    required String headline,
+    required String where,
+    required StreetLegChoice choice,
+    required Duration budget,
+    required RoutingOptions Function(StreetLegChoice) onChanged,
+    required RoutingOptions Function(Duration) onBudgetChanged,
+  }) {
+    return JourneySegment(
+      color: kStreetLegColor,
+      dashed: true,
+      icon: streetLegIcon(choice),
+      headline: headline,
+      summary: '${choice.summary} · ${budgetSummaryText(budget)}',
+      isOpen: _open.contains(stage),
+      onToggle: () => _toggleStage(stage),
+      child: StreetLegSection(
+        choice: choice,
+        budget: budget,
+        maxBudget: _mileCeiling,
+        tooltips: _tooltips,
+        expanded: _full.contains(stage),
+        onExpandedChanged: (full) => _setFull(stage, full),
+        onChanged: (next) {
+          _apply(onChanged(next));
+          _announceStreetChange(choice, next, where);
+        },
+        onBudgetChanged: (next) => _apply(onBudgetChanged(next)),
+        limitToMyProviders: widget.limitToMyProviders,
+        onLimitToMyProvidersPressed: _toggleProviderLimit,
+      ),
+    );
+  }
+
+  /// Names the section that was just switched on or off, since its icon
+  /// alone cannot say which of the two happened.
+  void _announceStreetChange(
+    StreetLegChoice before,
+    StreetLegChoice after,
     String where,
   ) {
-    for (final mode in mileModeOrder) {
-      final wasOn = before.contains(mode);
-      if (wasOn == after.contains(mode)) continue;
+    for (final section in StreetSection.values) {
+      final wasOn = before.stateOf(section) != GroupState.none;
+      if (wasOn == (after.stateOf(section) != GroupState.none)) continue;
       _announce(
         wasOn
-            ? 'No ${mileModeLabel(mode).toLowerCase()} $where'
-            : '${mileModeLabel(mode)} $where',
-        icon: mileModeIcon(mode),
+            ? 'No ${section.title.toLowerCase()} $where'
+            : '${section.title} $where',
+        icon: streetSectionIcons[section],
       );
       return;
     }
@@ -361,6 +335,15 @@ class _JourneySpineState extends State<JourneySpine> {
             ? 'Reservation-free only'
             : 'Reservations allowed',
         icon: LucideIcons.ticketX,
+      );
+      return;
+    }
+    if (after.transitSelection.isRegionalOnly !=
+        before.transitSelection.isRegionalOnly) {
+      _announce(
+        after.transitSelection.isRegionalOnly
+            ? 'Regional only'
+            : 'Long-distance too',
       );
       return;
     }
