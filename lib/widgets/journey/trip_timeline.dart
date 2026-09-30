@@ -221,7 +221,7 @@ class _StopContents extends StatelessWidget {
     final arrivalRow = arrival == null
         ? null
         : _passable(
-            DelayedTime.start(
+            DelayedTime.inline(
               arrival,
               label: 'Arr',
               isArrival: departure != null,
@@ -232,7 +232,7 @@ class _StopContents extends StatelessWidget {
     final departureRow = departure == null
         ? null
         : _passable(
-            DelayedTime.start(
+            DelayedTime.inline(
               departure,
               label: 'Dep',
               fontSize: 13,

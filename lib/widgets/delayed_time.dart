@@ -5,14 +5,17 @@ import '../utils/journey_colors.dart';
 import '../utils/reported_time.dart';
 import '../utils/time_utils.dart';
 
+enum _DelayPlacement { underStart, underEnd, after }
+
 /// A time at a stop, printed the way the journey spine prints it: the real
-/// time, coloured by who is reporting it, and the delay right beneath it in
-/// grey.
+/// time, coloured by who is reporting it, and the delay in grey — under it,
+/// or after it where a column of labelled times would otherwise lose its
+/// left edge.
 ///
 /// Every list of times goes through this, so no screen can go back to
-/// printing the plan with a "+5m" for the rider to add up. The delay is a
-/// line of its own in the layout rather than something drawn over it, so
-/// whatever holds a delayed time grows to fit it.
+/// printing the plan with a "+5m" for the rider to add up. The delay is laid
+/// out, never drawn over anything, so whatever holds a delayed time grows to
+/// fit it.
 class DelayedTime extends StatelessWidget {
   /// The delay under the time's first digit — for times read left to right.
   const DelayedTime.start(
@@ -22,7 +25,7 @@ class DelayedTime extends StatelessWidget {
     this.isArrival = false,
     this.fontSize = 14,
     this.fontWeight = FontWeight.w600,
-  }) : _alignment = CrossAxisAlignment.start;
+  }) : _placement = _DelayPlacement.underStart;
 
   /// The delay under the time's last digit — for a column of times against
   /// the end of a row.
@@ -33,7 +36,20 @@ class DelayedTime extends StatelessWidget {
     this.isArrival = false,
     this.fontSize = 14,
     this.fontWeight = FontWeight.w600,
-  }) : _alignment = CrossAxisAlignment.end;
+  }) : _placement = _DelayPlacement.underEnd;
+
+  /// The delay after the time, on the same line — for a stack of labelled
+  /// times ("Arr", "Dep"), where a delay under the time would sit out of line
+  /// with the labels around it. It drops to the next line only when the line
+  /// has no room.
+  const DelayedTime.inline(
+    this.time, {
+    super.key,
+    this.label,
+    this.isArrival = false,
+    this.fontSize = 14,
+    this.fontWeight = FontWeight.w600,
+  }) : _placement = _DelayPlacement.after;
 
   /// Null prints a placeholder, so a row of arrivals and departures keeps its
   /// shape where the feed has no time for one of them.
@@ -49,7 +65,7 @@ class DelayedTime extends StatelessWidget {
 
   final double fontSize;
   final FontWeight fontWeight;
-  final CrossAxisAlignment _alignment;
+  final _DelayPlacement _placement;
 
   static const String _placeholder = '--:--';
 
@@ -65,12 +81,25 @@ class DelayedTime extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final delay = _delay();
+    final label = this.label == null ? null : _label(this.label!);
+    if (_placement == _DelayPlacement.after) {
+      return Wrap(
+        crossAxisAlignment: WrapCrossAlignment.end,
+        children: [
+          ?label,
+          _clock(),
+          if (delay != null)
+            Padding(padding: const EdgeInsets.only(left: 6), child: delay),
+        ],
+      );
+    }
     final column = Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: _alignment,
+      crossAxisAlignment: _placement == _DelayPlacement.underEnd
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       children: [_clock(), ?delay],
     );
-    final label = this.label;
     if (label == null) return column;
     // Beside the column rather than in it, so the delay lines up under the
     // time it belongs to, not under the word naming it.
@@ -78,21 +107,20 @@ class DelayedTime extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.baseline,
       textBaseline: TextBaseline.alphabetic,
-      children: [
-        Text(
-          '$label ',
-          maxLines: 1,
-          softWrap: false,
-          style: TextStyle(
-            fontSize: fontSize,
-            fontWeight: FontWeight.w500,
-            color: AppColors.black.withValues(alpha: 0.6),
-          ),
-        ),
-        column,
-      ],
+      children: [label, column],
     );
   }
+
+  Widget _label(String label) => Text(
+    '$label ',
+    maxLines: 1,
+    softWrap: false,
+    style: TextStyle(
+      fontSize: fontSize,
+      fontWeight: FontWeight.w500,
+      color: AppColors.black.withValues(alpha: 0.6),
+    ),
+  );
 
   Widget _clock() {
     final time = this.time;

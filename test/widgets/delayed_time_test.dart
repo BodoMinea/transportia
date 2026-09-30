@@ -121,4 +121,35 @@ void main() {
     final late = tester.getSize(find.byType(DelayedTime)).height;
     expect(late, greaterThan(onTime));
   });
+
+  testWidgets('.inline puts the delay after the time, on its line', (
+    tester,
+  ) async {
+    await _pump(tester, DelayedTime.inline(_late(3), label: 'Arr'));
+    final label = tester.getRect(find.text('Arr '));
+    final time = tester.getRect(find.text('09:38'));
+    final delay = tester.getRect(find.text('+3m'));
+    expect(delay.left, greaterThan(time.right));
+    expect(delay.bottom, closeTo(time.bottom, 1));
+    expect(time.left, greaterThanOrEqualTo(label.right));
+  });
+
+  testWidgets('.inline drops the delay to the next line with no room', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      SizedBox(
+        width: 70,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: DelayedTime.inline(_late(3), label: 'Arr'),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    final time = tester.getRect(find.text('09:38'));
+    final delay = tester.getRect(find.text('+3m'));
+    expect(delay.top, greaterThanOrEqualTo(time.bottom));
+  });
 }
