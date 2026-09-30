@@ -1,7 +1,9 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:transportia/models/routing_options.dart';
+import 'package:transportia/models/street_leg_choice.dart';
 import 'package:transportia/models/transit_mode_group.dart';
 import 'package:transportia/models/transitous/enums.dart';
 import 'package:transportia/models/transitous/server_config.dart';
@@ -11,6 +13,7 @@ import 'package:transportia/widgets/journey/spine_node.dart';
 import 'package:transportia/widgets/journey/spine_row.dart';
 import 'package:transportia/widgets/search/journey_segment.dart';
 import 'package:transportia/widgets/search/journey_spine.dart';
+import 'package:transportia/widgets/search/leg_panel.dart';
 import 'package:transportia/widgets/search/traveller_strip.dart';
 import 'package:transportia/widgets/search/street_leg_section.dart';
 
@@ -88,10 +91,6 @@ Finder _valueChip(String label) => find
     .byWidgetPredicate((w) => w is ValueChip && w.label == label)
     .hitTestable();
 
-Finder _modeChip(String label) => find
-    .byWidgetPredicate((w) => w is ModeChip && w.label == label)
-    .hitTestable();
-
 Future<void> _open(WidgetTester tester, String headline) async {
   await tester.tap(find.text(headline));
   await tester.pumpAndSettle();
@@ -114,267 +113,165 @@ void main() {
     expect(find.text('All transport · unlimited changes'), findsOneWidget);
   });
 
-  testWidgets('the summary follows a mile mode without expanding it', (
-    tester,
-  ) async {
+  testWidgets('the summary names the sections that are on', (tester) async {
     await _pumpSpine(
       tester,
       initial: RoutingOptions.defaults.copyWith(
-        firstMileModes: const [TransitMode.bike],
+        firstMileModes: const [TransitMode.walk, TransitMode.rental],
+        firstMileRentalFormFactors: const [RentalFormFactor.scooterStanding],
         maxFirstMileTime: const Duration(minutes: 90),
       ),
     );
 
-    expect(find.text('Bike · 1 h 30'), findsOneWidget);
+    expect(find.text('Walk, shared · 1 h 30'), findsOneWidget);
     expect(find.text('Walk · 15 min'), findsOneWidget);
   });
 
   testWidgets('opening one stage leaves the others closed', (tester) async {
     await _pumpSpine(tester);
-    expect(_pick('Rental'), findsNothing);
+    expect(_pick('Shared bikes & scooters'), findsNothing);
 
     await _open(tester, 'TO THE STATION');
-    // One street leg is open, so each mile mode is offered exactly once.
-    expect(_pick('Rental'), findsOneWidget);
-    expect(_pick('Park & ride'), findsOneWidget);
+    expect(_pick('Shared bikes & scooters'), findsOneWidget);
     expect(_pick('No reservation needed'), findsNothing);
 
     await _open(tester, 'PUBLIC TRANSPORT');
     // Stages expand independently, so both stay open.
-    expect(_pick('Rental'), findsOneWidget);
+    expect(_pick('Shared bikes & scooters'), findsOneWidget);
     expect(_pick('No reservation needed'), findsOneWidget);
 
     await _open(tester, 'TO THE STATION');
-    expect(_pick('Rental'), findsNothing);
+    expect(_pick('Shared bikes & scooters'), findsNothing);
     expect(_pick('No reservation needed'), findsOneWidget);
   });
 
-  testWidgets('a mile mode announces itself, since the icon cannot', (
-    tester,
-  ) async {
-    final host = await _pumpSpine(tester);
-    await _open(tester, 'TO THE STATION');
-
-    await tester.tap(_pick('Rental'));
-    await tester.pump();
-
-    expect(host.options.firstMileModes, contains(TransitMode.rental));
-    expect(find.text('Rental to the station'), findsOneWidget);
-
-    // And it clears itself rather than sitting over the card.
-    await _quiet(tester);
-    expect(find.text('Rental to the station'), findsNothing);
-  });
-
-  testWidgets('every street mode is reachable, by icon or by chevron', (
-    tester,
-  ) async {
-    // A mode the defaults editor can store but this row cannot show would
-    // light up nothing and be summarised as walking.
-    await _pumpSpine(
-      tester,
-      initial: RoutingOptions.defaults.copyWith(
-        firstMileModes: const [TransitMode.car],
-      ),
-    );
-    expect(find.text('Car · 15 min'), findsOneWidget);
-
-    await _open(tester, 'TO THE STATION');
-    for (final mode in mileModeChoices.keys) {
-      expect(
-        _pick(mileModeLabel(mode)),
-        findsOneWidget,
-        reason: '${mode.wireName} has no icon',
-      );
-    }
-    // Drop-off is no longer one of the icons.
-    expect(_pick('Drop-off'), findsNothing);
-
-    await tester.tap(_pick('More ways to travel'));
-    await tester.pumpAndSettle();
-    for (final mode in mileModeExtras.keys) {
-      expect(
-        find.text(mileModeLabel(mode)).hitTestable(),
-        findsOneWidget,
-        reason: '${mode.wireName} is not behind the chevron',
-      );
-    }
-    expect({
-      ...mileModeChoices.keys,
-      ...mileModeExtras.keys,
-    }, RoutingOptions.streetModeChoices.toSet());
-  });
-
-  testWidgets('a mode from the chevron comes back as a chip', (tester) async {
-    final host = await _pumpSpine(tester);
-    await _open(tester, 'TO THE STATION');
-
-    await tester.tap(_pick('More ways to travel'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Drop-off').hitTestable());
-    await tester.pump();
-
-    expect(host.options.firstMileModes, contains(TransitMode.carDropoff));
-    expect(_modeChip('Drop-off'), findsOneWidget);
-    expect(find.text('Walk, Drop-off · 15 min'), findsOneWidget);
-
-    await tester.tap(_modeChip('Drop-off'));
-    await tester.pump();
-    expect(
-      host.options.firstMileModes,
-      isNot(contains(TransitMode.carDropoff)),
-    );
-    await _quiet(tester);
-  });
-
-  testWidgets('picking a shared vehicle brings rentals with it', (
-    tester,
-  ) async {
-    // Filtering shared vehicles says nothing unless rentals are in play.
-    final host = await _pumpSpine(tester);
-    await _open(tester, 'TO THE STATION');
-
-    await tester.tap(_pick('More ways to travel'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Shared cargo bike').hitTestable());
-    await tester.pump();
-
-    expect(
-      host.options.firstMileRentalFormFactors,
-      contains(RentalFormFactor.cargoBicycle),
-    );
-    expect(host.options.firstMileModes, contains(TransitMode.rental));
-
-    // And it stays this mile's business. One list held for both meant a
-    // cargo bike to the station asked for one on the way back as well.
-    expect(host.options.lastMileRentalFormFactors, isEmpty);
-    expect(host.options.lastMileModes, isNot(contains(TransitMode.rental)));
-    await _quiet(tester);
-  });
-
-  group('the rental icon', () {
-    /// Whether the icon reads as lit, which is what the rider goes by.
-    bool selected(WidgetTester tester) =>
-        tester.widget<IconPick>(_pick('Rental')).selected;
-
-    testWidgets('ticks the vehicles it stands for', (tester) async {
-      // It used to toggle the mode and nothing else, so the expanded list
-      // looked identical before and after.
-      final host = await _pumpSpine(tester);
-      await _open(tester, 'TO THE STATION');
-
-      await tester.tap(_pick('Rental'));
-      await tester.pump();
-
-      expect(host.options.firstMileRentalFormFactors, kRentalIconFactors);
-      expect(host.options.firstMileModes, contains(TransitMode.rental));
-      expect(selected(tester), isTrue);
-      await _quiet(tester);
-    });
-
-    testWidgets('turning it off leaves a separate pick alone', (tester) async {
-      final host = await _pumpSpine(
-        tester,
-        initial: RoutingOptions.defaults.copyWith(
-          firstMileModes: const [TransitMode.walk, TransitMode.rental],
-          firstMileRentalFormFactors: const [
-            RentalFormFactor.bicycle,
-            RentalFormFactor.car,
-            RentalFormFactor.scooterStanding,
-            RentalFormFactor.other,
-          ],
-        ),
-      );
-      await _open(tester, 'TO THE STATION');
-      expect(selected(tester), isTrue);
-
-      await tester.tap(_pick('Rental'));
-      await tester.pump();
-
-      // Only its own three go. A shared car was asked for by name and is
-      // still shown by name, so it survives.
-      expect(host.options.firstMileRentalFormFactors, [RentalFormFactor.car]);
-      expect(host.options.firstMileModes, contains(TransitMode.rental));
-      expect(selected(tester), isFalse);
-      expect(_modeChip('Shared car'), findsOneWidget);
-      await _quiet(tester);
-    });
-
-    testWidgets('dropping the last vehicle drops rentals', (tester) async {
-      final host = await _pumpSpine(
-        tester,
-        initial: RoutingOptions.defaults.copyWith(
-          firstMileModes: const [TransitMode.walk, TransitMode.rental],
-          firstMileRentalFormFactors: kRentalIconFactors,
-        ),
-      );
-      await _open(tester, 'TO THE STATION');
-
-      await tester.tap(_pick('Rental'));
-      await tester.pump();
-
-      // Rentals lit over a mile with nothing to rent is the state that
-      // started this. No control may reach it.
-      expect(host.options.firstMileRentalFormFactors, isEmpty);
-      expect(host.options.firstMileModes, isNot(contains(TransitMode.rental)));
-      await _quiet(tester);
-    });
-
-    testWidgets('says its vehicles once, not twice', (tester) async {
+  group('a street leg', () {
+    testWidgets('offers every section as an icon', (tester) async {
       await _pumpSpine(tester);
       await _open(tester, 'TO THE STATION');
-
-      await tester.tap(_pick('Rental'));
-      await tester.pump();
-
-      // Chips carry what the icons cannot say, so a lit icon's own three
-      // have no business appearing beside it as well.
-      for (final factor in kRentalIconFactors) {
-        expect(
-          _modeChip(rentalFormFactorLabels[factor]!),
-          findsNothing,
-          reason: '${factor.wireName} is reported twice',
-        );
+      for (final section in StreetSection.values) {
+        expect(_pick(section.title), findsOneWidget, reason: section.name);
       }
-      await _quiet(tester);
     });
 
-    testWidgets('one vehicle of its own is not enough to light it', (
+    testWidgets('a section icon switches the whole section, and says so', (
       tester,
     ) async {
       final host = await _pumpSpine(tester);
       await _open(tester, 'TO THE STATION');
 
-      await tester.tap(_pick('More ways to travel'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Shared bike').hitTestable());
+      await tester.tap(_pick('Shared bikes & scooters'));
       await tester.pump();
 
-      // Rentals are on, but not the set the icon stands for — so the icon
-      // stays dark and the bike says itself.
+      expect(
+        host.options.firstMileRentalFormFactors,
+        unorderedEquals(StreetSection.shared.formFactors),
+      );
       expect(host.options.firstMileModes, contains(TransitMode.rental));
-      expect(selected(tester), isFalse);
-      expect(_modeChip('Shared bike'), findsOneWidget);
+      expect(find.text('Shared bikes & scooters to the station'), findsOne);
+      // And it stays this leg's business.
+      expect(host.options.lastMileRentalFormFactors, isEmpty);
+
+      await tester.tap(_pick('Shared bikes & scooters'));
+      await tester.pump();
+      expect(host.options.firstMileRentalFormFactors, isEmpty);
+      expect(host.options.firstMileModes, isNot(contains(TransitMode.rental)));
       await _quiet(tester);
     });
-  });
 
-  testWidgets('the stage icon follows the last mode picked, left to right', (
-    tester,
-  ) async {
-    // Which mode was chosen first should not decide the icon forever.
-    await _pumpSpine(
+    testWidgets('a partly-on section is drawn as partly on', (tester) async {
+      await _pumpSpine(
+        tester,
+        initial: RoutingOptions.defaults.copyWith(
+          firstMileModes: const [TransitMode.walk, TransitMode.rental],
+          firstMileRentalFormFactors: const [RentalFormFactor.bicycle],
+        ),
+      );
+      await _open(tester, 'TO THE STATION');
+
+      final shared = tester.widget<IconPick>(_pick('Shared bikes & scooters'));
+      expect(shared.selected, isFalse);
+      expect(shared.partial, isTrue);
+    });
+
+    testWidgets('all options shows every choice under its section', (
       tester,
-      initial: RoutingOptions.defaults.copyWith(
-        firstMileModes: const [TransitMode.walk, TransitMode.bike],
-      ),
-    );
+    ) async {
+      final host = await _pumpSpine(tester);
+      await _open(tester, 'TO THE STATION');
+      await tester.tap(find.text('All options').hitTestable());
+      await tester.pumpAndSettle();
 
-    expect(find.text('Walk, Bike · 15 min'), findsOneWidget);
-    expect(
-      mileModesIcon(const [TransitMode.walk, TransitMode.bike]),
-      mileModeIcon(TransitMode.bike),
-    );
+      // Every street mode and shared vehicle has a tick somewhere, so none
+      // the defaults editor can store is out of reach here.
+      for (final section in StreetSection.values) {
+        expect(find.text(section.title.toUpperCase()), findsOneWidget);
+        if (section.modes.length + section.formFactors.length < 2) continue;
+        for (final mode in section.modes) {
+          expect(
+            find.text(StreetSection.modeLabel(mode)).hitTestable(),
+            findsWidgets,
+          );
+        }
+      }
+      expect(find.text('Shared car').hitTestable(), findsOneWidget);
+
+      await tester.tap(find.text('Drop-off').hitTestable());
+      await tester.pump();
+      expect(host.options.firstMileModes, contains(TransitMode.carDropoff));
+      await _quiet(tester);
+    });
+
+    testWidgets('a section heading switches its section too', (tester) async {
+      final host = await _pumpSpine(tester);
+      await _open(tester, 'TO THE STATION');
+      await tester.tap(find.text('All options').hitTestable());
+      await tester.pumpAndSettle();
+
+      final heading = tester.getRect(
+        find.byWidgetPredicate((w) => w is LegHeading && w.title == 'Car'),
+      );
+      // Near the far end of the row, clear of the word itself: the whole row
+      // is the target.
+      await tester.tapAt(Offset(heading.right - 20, heading.center.dy));
+      await tester.pump();
+
+      expect(host.options.firstMileModes, containsAll(StreetSection.car.modes));
+      expect(
+        host.options.firstMileRentalFormFactors,
+        contains(RentalFormFactor.car),
+      );
+      await _quiet(tester);
+    });
+
+    testWidgets('the budget slider is open in the full view', (tester) async {
+      final host = await _pumpSpine(tester);
+      await _open(tester, 'TO THE STATION');
+      expect(find.byType(OptionSlider), findsNothing);
+
+      // The value chip opens the full view, where the slider lives.
+      await tester.tap(_valueChip('Time budget'));
+      await tester.pumpAndSettle();
+
+      final slider = tester.widget<OptionSlider>(find.byType(OptionSlider));
+      slider.onChanged(30);
+      await tester.pump();
+      expect(host.options.maxFirstMileTime, const Duration(minutes: 30));
+      expect(find.text('Walk · 30 min'), findsOneWidget);
+    });
+
+    testWidgets('the stage icon follows the last section on', (tester) async {
+      await _pumpSpine(
+        tester,
+        initial: RoutingOptions.defaults.copyWith(
+          firstMileModes: const [TransitMode.walk, TransitMode.bike],
+        ),
+      );
+
+      expect(find.text('Walk, bike · 15 min'), findsOneWidget);
+      final ring = tester.widget<SpineNode>(find.byType(SpineNode).first);
+      expect(ring.icon, streetSectionIcons[StreetSection.ownBike]);
+    });
   });
 
   group('transport', () {
@@ -401,60 +298,39 @@ void main() {
       await _quiet(tester);
     });
 
-    testWidgets('everything on needs no chips at all', (tester) async {
-      await _pumpSpine(tester);
-      await _open(tester, 'PUBLIC TRANSPORT');
-
-      // Four lit icons and "All transport" already say it; a chip per mode
-      // would be twenty chips saying nothing.
-      expect(find.byType(ModeChip), findsNothing);
-    });
-
-    testWidgets('unticking a mode from the dropdown narrows the search', (
+    testWidgets('the modes no group covers have a section of their own', (
       tester,
     ) async {
       final host = await _pumpSpine(tester);
       await _open(tester, 'PUBLIC TRANSPORT');
 
-      await tester.tap(_pick('More transport'));
+      await tester.tap(_pick('Other'));
+      await tester.pump();
+
+      for (final mode in TransitModeGroup.extras) {
+        expect(host.options.transitModes, isNot(contains(mode)));
+      }
+      await _quiet(tester);
+    });
+
+    testWidgets('unticking a mode in the full view narrows the search', (
+      tester,
+    ) async {
+      final host = await _pumpSpine(tester);
+      await _open(tester, 'PUBLIC TRANSPORT');
+      await tester.tap(find.text('All options').hitTestable());
       await tester.pumpAndSettle();
+
       await tester.tap(find.text('Flights').hitTestable());
       await tester.pump();
 
-      // Flights were on, because an absent transitModes means every mode.
       expect(host.options.transitModes, isNotEmpty);
       expect(host.options.transitModes, isNot(contains(TransitMode.airplane)));
       expect(find.text('All transport · unlimited changes'), findsNothing);
       await _quiet(tester);
     });
 
-    testWidgets('the row names a mode the four icons cannot show', (
-      tester,
-    ) async {
-      final host = await _pumpSpine(
-        tester,
-        initial: RoutingOptions.defaults.withTransitSelection(
-          TransitSelection({
-            ...TransitModeGroup.rail.modes,
-            TransitMode.airplane,
-          }),
-        ),
-      );
-      await _open(tester, 'PUBLIC TRANSPORT');
-
-      // Rail is lit; nothing on screen otherwise says flights are in.
-      expect(_modeChip('Flights'), findsOneWidget);
-      expect(find.text('Rail, Flights · unlimited changes'), findsOneWidget);
-
-      await tester.tap(_modeChip('Flights'));
-      await tester.pump();
-
-      expect(host.options.transitModes, isNot(contains(TransitMode.airplane)));
-      expect(_modeChip('Flights'), findsNothing);
-      await _quiet(tester);
-    });
-
-    testWidgets('a half-picked group is marked as such', (tester) async {
+    testWidgets('a half-picked group is drawn as partly on', (tester) async {
       await _pumpSpine(
         tester,
         initial: RoutingOptions.defaults.withTransitSelection(
@@ -463,19 +339,44 @@ void main() {
       );
       await _open(tester, 'PUBLIC TRANSPORT');
 
-      final rail = tester.widget<IconPick>(
-        find.byWidgetPredicate((w) => w is IconPick && w.label == 'Rail'),
-      );
+      final rail = tester.widget<IconPick>(_pick('Rail'));
       expect(rail.selected, isFalse);
-      expect(rail.subdued, isTrue, reason: 'a partial group should say so');
-      expect(_modeChip('Intercity rail'), findsOneWidget);
+      expect(rail.partial, isTrue);
     });
 
-    testWidgets('the transfer limit reads as a number then as unlimited', (
+    testWidgets('regional only drops every long-distance service', (
       tester,
     ) async {
       final host = await _pumpSpine(tester);
       await _open(tester, 'PUBLIC TRANSPORT');
+
+      await tester.tap(_pick('Regional only'));
+      await tester.pump();
+
+      for (final mode in TransitModeGroup.longDistance) {
+        expect(host.options.transitModes, isNot(contains(mode)));
+      }
+      expect(host.options.transitModes, contains(TransitMode.regionalRail));
+      expect(host.options.transitModes, contains(TransitMode.bus));
+      expect(find.text('Regional only · unlimited changes'), findsOneWidget);
+      expect(tester.widget<IconPick>(_pick('Regional only')).selected, isTrue);
+      expect(tester.widget<IconPick>(_pick('Rail')).partial, isTrue);
+
+      await tester.tap(_pick('Regional only'));
+      await tester.pump();
+      expect(host.options.transitModes, isEmpty);
+      await _quiet(tester);
+    });
+
+    testWidgets('the transfer limit reads as a number, else infinity', (
+      tester,
+    ) async {
+      final host = await _pumpSpine(tester);
+      await _open(tester, 'PUBLIC TRANSPORT');
+      expect(
+        tester.widget<ValueChip>(_valueChip('Maximum changes')).valueIcon,
+        LucideIcons.infinity,
+      );
 
       await tester.tap(_valueChip('Maximum changes'));
       await tester.pumpAndSettle();
@@ -505,19 +406,19 @@ void main() {
       await _open(tester, 'PUBLIC TRANSPORT');
       // Offered from the start, so asking for a service that carries bikes is
       // possible whatever the street legs say.
-      expect(_pick('Bike not carried'), findsOneWidget);
+      expect(tester.widget<IconPick>(_pick('Bike on board')).selected, false);
 
       await _open(tester, 'TO THE STATION');
-      await tester.tap(_pick('Bike'));
+      await tester.tap(_pick('Own bike'));
       await tester.pumpAndSettle();
       // One end is not enough: the bike is being left at the station.
-      expect(_pick('Bike not carried'), findsOneWidget);
+      expect(tester.widget<IconPick>(_pick('Bike on board')).selected, false);
 
       await _open(tester, 'FROM THE STATION');
-      await tester.tap(_pick('Bike').last);
+      await tester.tap(_pick('Own bike').last);
       await tester.pumpAndSettle();
 
-      expect(_pick('Bike carried on board'), findsOneWidget);
+      expect(tester.widget<IconPick>(_pick('Bike on board')).selected, true);
       expect(host.options.requireBikeTransport, isTrue);
       expect(host.options.bikeCarriageIsManual, isFalse);
       await _quiet(tester);
@@ -527,7 +428,7 @@ void main() {
       final host = await _pumpSpine(tester);
       await _open(tester, 'PUBLIC TRANSPORT');
 
-      await tester.tap(_pick('Bike not carried'));
+      await tester.tap(_pick('Bike on board'));
       await tester.pump();
 
       expect(host.options.bikeAtBothEnds, isFalse);
@@ -545,36 +446,12 @@ void main() {
       );
       await _open(tester, 'PUBLIC TRANSPORT');
 
-      await tester.tap(_pick('Bike carried on board'));
+      await tester.tap(_pick('Bike on board'));
       await tester.pump();
 
       expect(host.options.requireBikeTransport, isFalse);
       expect(host.options.bikeCarriageIsManual, isTrue);
       expect(find.text('Bike not carried'), findsOneWidget);
-      expect(_pick('Bike not carried'), findsOneWidget);
-      await _quiet(tester);
-    });
-
-    testWidgets('outlives a change of mile mode', (tester) async {
-      // The icon no longer comes and goes with the street legs, so the
-      // decision has somewhere to live and something on screen to undo it.
-      final host = await _pumpSpine(
-        tester,
-        initial: RoutingOptions.defaults.copyWith(
-          firstMileModes: const [TransitMode.bike],
-          lastMileModes: const [TransitMode.bike],
-          bikeCarriageOverride: false,
-        ),
-      );
-      await _open(tester, 'FROM THE STATION');
-      await tester.tap(_pick('Bike'));
-      await tester.pumpAndSettle();
-
-      expect(host.options.bikeCarriageIsManual, isTrue);
-      expect(host.options.requireBikeTransport, isFalse);
-
-      await _open(tester, 'PUBLIC TRANSPORT');
-      expect(_pick('Bike not carried'), findsOneWidget);
       await _quiet(tester);
     });
   });
@@ -608,7 +485,7 @@ void main() {
       expect(find.text('Cycling'), findsNothing);
 
       await _open(tester, 'TO THE STATION');
-      await tester.tap(_pick('Bike'));
+      await tester.tap(_pick('Own bike'));
       await tester.pumpAndSettle();
 
       expect(find.text('Cycling'), findsOneWidget);
@@ -621,8 +498,12 @@ void main() {
   ) async {
     final host = await _pumpSpine(tester);
     await _open(tester, 'PUBLIC TRANSPORT');
+    // An action, not a switch: only in the full view.
+    expect(find.text('TRAVEL THROUGH A STOP'), findsNothing);
 
-    await tester.tap(_pick('Travel through a stop'));
+    await tester.tap(find.text('All options').hitTestable());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('TRAVEL THROUGH A STOP'));
     await tester.pump();
 
     expect(host.viaTaps, 1);
@@ -636,16 +517,18 @@ void main() {
 
     // Held rather than tester.longPress, which lifts the finger and so
     // dismisses the tooltip on its way out.
-    final held = await tester.startGesture(tester.getCenter(_pick('Rental')));
+    final held = await tester.startGesture(
+      tester.getCenter(_pick('Shared bikes & scooters')),
+    );
     await tester.pump(kLongPressTimeout + const Duration(milliseconds: 100));
     // The picks carry no text of their own, so this is the bubble.
-    expect(find.text('Rental'), findsOneWidget);
+    expect(find.text('Shared bikes & scooters'), findsOneWidget);
 
     // Picking a mode moves the row out from under the finger, so no exit
     // gesture ever fires and the bubble would otherwise strand itself.
-    await tester.tap(_pick('Bike'));
+    await tester.tap(_pick('Own bike'));
     await tester.pump();
-    expect(find.text('Rental'), findsNothing);
+    expect(find.text('Shared bikes & scooters'), findsNothing);
 
     await held.up();
     await _quiet(tester);
@@ -717,14 +600,14 @@ void main() {
       // The hit area used to be the width of the two lines of text, so most
       // of a row looked pressable and did nothing.
       await _pumpSpine(tester);
-      expect(_pick('Bike'), findsNothing);
+      expect(_pick('Own bike'), findsNothing);
 
       final row = tester.getRect(find.byType(JourneySegment).first);
       // Right-hand end of the row, past where any of the text reaches.
       await tester.tapAt(Offset(row.right - 30, row.top + 12));
       await tester.pumpAndSettle();
 
-      expect(_pick('Bike'), findsOneWidget);
+      expect(_pick('Own bike'), findsOneWidget);
     });
 
     testWidgets('the ring opens it too', (tester) async {
@@ -732,7 +615,7 @@ void main() {
       await tester.tap(find.byType(SpineNode).first);
       await tester.pumpAndSettle();
 
-      expect(_pick('Bike'), findsOneWidget);
+      expect(_pick('Own bike'), findsOneWidget);
     });
 
     testWidgets('a miss inside the controls does not fold it away', (
@@ -741,7 +624,7 @@ void main() {
       await _pumpSpine(tester);
       await tester.tap(find.byType(SpineNode).first);
       await tester.pumpAndSettle();
-      expect(_pick('Bike'), findsOneWidget);
+      expect(_pick('Own bike'), findsOneWidget);
 
       // Just under the row of icon controls: inside the expanded area, on no
       // control in particular.
@@ -749,7 +632,7 @@ void main() {
       await tester.tapAt(Offset(walk.right + 4, walk.center.dy));
       await tester.pumpAndSettle();
 
-      expect(_pick('Bike'), findsOneWidget);
+      expect(_pick('Own bike'), findsOneWidget);
     });
   });
 
@@ -791,11 +674,11 @@ void main() {
   });
 
   group('limit to my providers', () {
-    Finder tick() => find.text('Limit to my providers').hitTestable();
+    Finder tick() => find.text('Only my providers').hitTestable();
 
     Future<void> openShared(WidgetTester tester, String stage) async {
       await _open(tester, stage);
-      await tester.tap(_pick('More ways to travel'));
+      await tester.tap(find.text('All options').hitTestable());
       await tester.pumpAndSettle();
     }
 
@@ -838,6 +721,21 @@ void main() {
       await tester.tap(tick());
       await tester.pump();
       expect(host.limitToMyProviders, isFalse);
+      await _quiet(tester);
+    });
+
+    testWidgets('switching the section leaves it as it is', (tester) async {
+      // It says which providers, not which vehicles, so the section icon has
+      // no business turning it on or off.
+      final host = await _pumpSpine(tester, hasRentalProviders: true);
+      await openShared(tester, 'TO THE STATION');
+      await tester.tap(tick());
+      await tester.pump();
+
+      await tester.tap(find.text('SHARED BIKES & SCOOTERS'));
+      await tester.pump();
+      expect(host.options.firstMileRentalFormFactors, isNotEmpty);
+      expect(host.limitToMyProviders, isTrue);
       await _quiet(tester);
     });
 

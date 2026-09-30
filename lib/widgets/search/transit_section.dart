@@ -5,246 +5,153 @@ import '../../models/routing_options.dart';
 import '../../models/transit_mode_group.dart';
 import '../../models/transitous/enums.dart';
 import '../options/icon_controls.dart';
-import '../options/selectable_tick.dart';
+import 'leg_panel.dart';
 
 /// The icon each transport group shows.
-const Map<TransitModeGroup, IconData> transitGroupIcons = {
+const Map<TransitModeGroup, IconData> _groupIcons = {
   TransitModeGroup.rail: LucideIcons.trainFront,
   TransitModeGroup.metro: LucideIcons.trainFrontTunnel,
   TransitModeGroup.bus: LucideIcons.bus,
   TransitModeGroup.boat: LucideIcons.ship,
 };
 
-/// Which transport to use, how many changes to accept, and the qualifiers
-/// that belong to the vehicle rather than to a street leg.
+/// The modes no group covers, as a section of their own so every mode has a
+/// switch on the compact row.
+const IconData _otherIcon = LucideIcons.shapes;
+
+/// The ride: which transport it may use, and the settings that belong to the
+/// vehicle rather than to either street leg.
 class TransitSection extends StatelessWidget {
   const TransitSection({
     super.key,
     required this.options,
+    required this.expanded,
+    required this.onExpandedChanged,
     required this.tooltips,
-    required this.modesOpen,
-    required this.changesOpen,
     required this.onChanged,
-    required this.onModesPressed,
-    required this.onChangesPressed,
     required this.onViaPressed,
   });
 
   final RoutingOptions options;
+  final bool expanded;
+  final ValueChanged<bool> onExpandedChanged;
   final OptionTooltipController tooltips;
-
-  /// The full mode list, open on request.
-  final bool modesOpen;
-
-  /// The transfer-limit slider, open on request.
-  final bool changesOpen;
-
   final ValueChanged<RoutingOptions> onChanged;
-  final VoidCallback onModesPressed;
-  final VoidCallback onChangesPressed;
   final VoidCallback onViaPressed;
 
   TransitSelection get _selection => options.transitSelection;
 
-  static const int _maxChips = 4;
-
-  List<TransitMode> get _chippedModes =>
-      _selection.uncoveredModes.take(_maxChips).toList();
-
-  int get _hiddenChipCount =>
-      _selection.uncoveredModes.length - _chippedModes.length;
+  void _select(TransitSelection next) =>
+      onChanged(options.withTransitSelection(next));
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildModeCloud(context),
-        if (modesOpen) ...[const SizedBox(height: 10), _buildModeList(context)],
-        const SizedBox(height: 8),
-        _buildMetaRow(context),
-        if (changesOpen) ...[
-          const SizedBox(height: 4),
-          _buildChangesSlider(context),
-        ],
-      ],
-    );
-  }
-
-  /// Four group icons, the button that opens the rest, and a named chip for
-  /// every selected mode the icons cannot be showing — so the row always
-  /// carries the whole selection rather than hiding part of it behind a
-  /// dropdown.
-  Widget _buildModeCloud(BuildContext context) {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
+    return LegPanel(
+      tooltips: tooltips,
+      expanded: expanded,
+      onExpandedChanged: onExpandedChanged,
+      sections: [
         for (final group in TransitModeGroup.values)
-          SizedBox(
-            width: 42,
-            child: IconPick(
-              icon: transitGroupIcons[group]!,
-              label: group.label,
-              selected: _selection.stateOf(group) == GroupState.all,
-              // Half-lit: some of this group is on, and the chips beside the
-              // icons name which.
-              subdued: _selection.stateOf(group) == GroupState.some,
-              tooltips: tooltips,
-              onPressed: () => onChanged(
-                options.withTransitSelection(_selection.toggleGroup(group)),
-              ),
-            ),
+          _section(
+            icon: _groupIcons[group]!,
+            title: group.label,
+            modes: group.modes,
           ),
-        SizedBox(
-          width: 42,
-          child: IconPick(
-            icon: modesOpen ? LucideIcons.chevronUp : LucideIcons.chevronDown,
-            label: 'More transport',
-            selected: false,
-            subdued: true,
-            size: 16,
-            tooltips: tooltips,
-            onPressed: onModesPressed,
-          ),
+        _section(
+          icon: _otherIcon,
+          title: 'Other',
+          modes: TransitModeGroup.extras,
         ),
-        // Capped: a deliberately narrow selection can name a dozen modes, and
-        // a row of a dozen chips stops being a summary.
-        for (final mode in _chippedModes)
-          ModeChip(
-            label: TransitModeGroup.modeLabel(mode),
-            onRemove: () => onChanged(
-              options.withTransitSelection(_selection.toggleMode(mode)),
-            ),
-          ),
-        if (_hiddenChipCount > 0)
-          ModeChip(label: '+$_hiddenChipCount', onRemove: onModesPressed),
       ],
+      options: _options(),
     );
   }
 
-  /// Every mode the server can route, under the group it belongs to.
-  ///
-  /// The reference web client lists them flat; twenty unheaded ticks are hard
-  /// to scan, and the headings also say which icon above covers what.
-  Widget _buildModeList(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final group in TransitModeGroup.values) ...[
-          OptionGroupHeading(group.label),
-          const SizedBox(height: 6),
-          _tickWrap(group.modes),
-          const SizedBox(height: 10),
-        ],
-        OptionGroupHeading('Other'),
-        const SizedBox(height: 6),
-        _tickWrap(TransitModeGroup.extras),
-      ],
-    );
-  }
-
-  Widget _tickWrap(List<TransitMode> modes) => Wrap(
-    spacing: 6,
-    runSpacing: 6,
-    children: [
+  LegSection _section({
+    required IconData icon,
+    required String title,
+    required List<TransitMode> modes,
+  }) => LegSection(
+    mark: Icon(icon),
+    title: title,
+    state: _selection.stateOfModes(modes),
+    onToggle: () => _select(_selection.toggleModes(modes)),
+    choices: [
       for (final mode in modes)
-        SelectableTick(
+        LegChoice(
           label: TransitModeGroup.modeLabel(mode),
           selected: _selection.has(mode),
-          onPressed: () => onChanged(
-            options.withTransitSelection(_selection.toggleMode(mode)),
-          ),
+          onPressed: () => _select(_selection.toggleMode(mode)),
         ),
     ],
   );
 
-  /// Transfer limit, carriage, reservation and via — the qualifiers that
-  /// belong to the vehicle rather than to either street leg.
-  Widget _buildMetaRow(BuildContext context) {
-    final unlimited = options.maxTransfers == null;
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        ValueChip(
-          icon: LucideIcons.waypoints,
-          label: 'Maximum changes',
-          value: unlimited ? null : '${options.maxTransfers}',
-          valueIcon: unlimited ? LucideIcons.infinity : null,
-          tooltips: tooltips,
-          expanded: changesOpen,
-          onPressed: onChangesPressed,
+  List<LegOption> _options() => [
+    LegOption.toggle(
+      mark: const RegionalGlyph(),
+      title: 'Regional only',
+      on: _selection.isRegionalOnly,
+      onToggle: () => _select(_selection.toggleRegionalOnly()),
+    ),
+    LegOption.value(
+      icon: LucideIcons.waypoints,
+      title: 'Maximum changes',
+      value: options.maxTransfers?.toString(),
+      slider: _ChangesSlider(options: options, onChanged: onChanged),
+    ),
+    // Always offered, and already on when the same vehicle is at both ends —
+    // that is when it is travelling with you rather than being left at the
+    // station. The derivation is a starting point, not a gate: turning it
+    // off there, or on elsewhere, is a real request.
+    LegOption.toggle(
+      mark: const Icon(LucideIcons.bike),
+      title: 'Bike on board',
+      on: options.requireBikeTransport,
+      onToggle: () => onChanged(
+        options.copyWith(bikeCarriageOverride: !options.requireBikeTransport),
+      ),
+    ),
+    LegOption.toggle(
+      mark: const Icon(LucideIcons.car),
+      title: 'Car on board',
+      on: options.requireCarTransport,
+      onToggle: () => onChanged(
+        options.copyWith(carCarriageOverride: !options.requireCarTransport),
+      ),
+    ),
+    LegOption.toggle(
+      mark: const Icon(LucideIcons.ticketX),
+      title: 'No reservation needed',
+      on: options.noCompulsoryReservation,
+      onToggle: () => onChanged(
+        options.copyWith(
+          noCompulsoryReservation: !options.noCompulsoryReservation,
         ),
-        // Always offered, and already on when the same vehicle is at both
-        // ends — that is when it is travelling with you rather than being
-        // left at the station. The derivation is a starting point, not a
-        // gate: turning it off there, or on elsewhere, is a real request.
-        SizedBox(
-          width: 42,
-          child: IconPick(
-            icon: LucideIcons.bike,
-            label: options.requireBikeTransport
-                ? 'Bike carried on board'
-                : 'Bike not carried',
-            selected: options.requireBikeTransport,
-            tooltips: tooltips,
-            onPressed: () => onChanged(
-              options.copyWith(
-                bikeCarriageOverride: !options.requireBikeTransport,
-              ),
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 42,
-          child: IconPick(
-            icon: LucideIcons.car,
-            label: options.requireCarTransport
-                ? 'Car carried on board'
-                : 'Car not carried',
-            selected: options.requireCarTransport,
-            tooltips: tooltips,
-            onPressed: () => onChanged(
-              options.copyWith(
-                carCarriageOverride: !options.requireCarTransport,
-              ),
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 42,
-          child: IconPick(
-            icon: LucideIcons.ticketX,
-            label: 'No reservation needed',
-            selected: options.noCompulsoryReservation,
-            tooltips: tooltips,
-            onPressed: () => onChanged(
-              options.copyWith(
-                noCompulsoryReservation: !options.noCompulsoryReservation,
-              ),
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 42,
-          child: IconPick(
-            icon: LucideIcons.mapPin,
-            label: options.via.isEmpty
-                ? 'Travel through a stop'
-                : 'Travelling through ${options.via.length} '
-                      '${options.via.length == 1 ? "stop" : "stops"}',
-            selected: options.via.isNotEmpty,
-            tooltips: tooltips,
-            onPressed: onViaPressed,
-          ),
-        ),
-      ],
-    );
-  }
+      ),
+    ),
+    // An action — it opens the stop picker — so not on the compact row of
+    // switches.
+    LegOption.toggle(
+      mark: const Icon(LucideIcons.mapPin),
+      title: options.via.isEmpty
+          ? 'Travel through a stop'
+          : 'Travelling through ${options.via.length} '
+                '${options.via.length == 1 ? "stop" : "stops"}',
+      on: options.via.isNotEmpty,
+      onToggle: onViaPressed,
+      inCompactRow: false,
+    ),
+  ];
+}
 
-  Widget _buildChangesSlider(BuildContext context) {
+class _ChangesSlider extends StatelessWidget {
+  const _ChangesSlider({required this.options, required this.onChanged});
+
+  final RoutingOptions options;
+  final ValueChanged<RoutingOptions> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -257,7 +164,7 @@ class TransitSection extends StatelessWidget {
               onChanged(options.withTransfersSliderValue(value.round())),
         ),
         SliderScaleLabels(
-          labels: ['0', '${RoutingOptions.maxTransferChoice}', 'Unlimited'],
+          labels: ['0', '${RoutingOptions.maxTransferChoice}', '∞'],
         ),
       ],
     );

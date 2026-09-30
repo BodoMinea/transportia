@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:transportia/models/street_leg_choice.dart';
 import 'package:transportia/models/transitous/enums.dart';
 import 'package:transportia/widgets/options/icon_controls.dart';
 import 'package:transportia/widgets/search/street_leg_section.dart';
@@ -21,17 +22,17 @@ Future<void> _pumpLeg(
           child: SizedBox(
             width: 380,
             child: StreetLegSection(
-              modes: const [TransitMode.walk],
+              choice: const StreetLegChoice(
+                modes: [TransitMode.walk],
+                formFactors: [],
+              ),
               budget: budget,
               maxBudget: maxBudget,
-              formFactors: const [],
               tooltips: OptionTooltipController(),
-              budgetOpen: budgetOpen,
-              modesOpen: false,
+              expanded: budgetOpen,
+              onExpandedChanged: (_) {},
               onChanged: (_) {},
               onBudgetChanged: onBudgetChanged ?? (_) {},
-              onBudgetPressed: () {},
-              onModesPressed: () {},
               limitToMyProviders: false,
               onLimitToMyProvidersPressed: () {},
             ),
@@ -45,19 +46,14 @@ Future<void> _pumpLeg(
 void main() {
   group('budget text', () {
     test('counts in minutes below an hour', () {
-      expect(budgetChipText(const Duration(minutes: 15)), '15');
-      expect(budgetChipText(const Duration(minutes: 45)), '45');
+      expect(budgetSummaryText(const Duration(minutes: 15)), '15 min');
+      expect(budgetSummaryText(const Duration(minutes: 45)), '45 min');
     });
 
     test('switches to hours past the first one', () {
       // A raw 90 beside a clock reads as a bug when the summary line above
       // it says an hour and a half.
-      expect(budgetChipText(const Duration(minutes: 90)), '1h30');
-      expect(budgetChipText(const Duration(minutes: 120)), '2h');
-    });
-
-    test('spells the same value out for the summary line', () {
-      expect(budgetSummaryText(const Duration(minutes: 15)), '15 min');
+      expect(budgetSummaryText(const Duration(minutes: 90)), '1 h 30');
       expect(budgetSummaryText(const Duration(minutes: 120)), '2 h');
     });
   });
@@ -67,7 +63,7 @@ void main() {
   ) async {
     await _pumpLeg(tester, budget: const Duration(minutes: 90));
 
-    expect(find.text('1h30'), findsOneWidget);
+    expect(find.text('1 h 30'), findsOneWidget);
     // The slider is what you occasionally move; the number is what you read.
     expect(find.byType(OptionSlider), findsNothing);
   });
@@ -102,6 +98,6 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('2h'), findsOneWidget);
+    expect(find.text('2 h'), findsOneWidget);
   });
 }
