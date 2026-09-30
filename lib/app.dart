@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:oktoast/oktoast.dart';
 import 'package:provider/provider.dart';
@@ -14,8 +15,10 @@ import 'providers/theme_provider.dart';
 import 'screens/itinerary_list_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'screens/welcome_screen.dart';
+import 'services/backend_reload_service.dart';
 import 'services/location_service.dart';
 import 'services/transitous_geocode_service.dart';
+import 'theme/system_bars.dart';
 import 'widgets/offline_banner_shell.dart';
 
 class Transportia extends StatelessWidget {
@@ -26,7 +29,13 @@ class Transportia extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => BackendProvider()),
+        ChangeNotifierProvider(
+          create: (_) {
+            final backend = BackendProvider();
+            BackendReloadService.watch(backend);
+            return backend;
+          },
+        ),
       ],
       child: OKToast(
         child: Consumer<ThemeProvider>(
@@ -58,11 +67,16 @@ class Transportia extends StatelessWidget {
               textStyle: baseTextStyle,
               builder: (context, child) {
                 final content = child ?? const SizedBox.shrink();
-                return ColoredBox(
-                  color: themeProvider.backgroundColor,
-                  child: IconTheme(
-                    data: IconThemeData(color: themeProvider.textColor),
-                    child: OfflineBannerShell(child: content),
+                // Above every route, so each screen gets bars that match the
+                // theme without having to ask for them.
+                return AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: systemBarsFor(isDark: themeProvider.isDark),
+                  child: ColoredBox(
+                    color: themeProvider.backgroundColor,
+                    child: IconTheme(
+                      data: IconThemeData(color: themeProvider.textColor),
+                      child: OfflineBannerShell(child: content),
+                    ),
                   ),
                 );
               },

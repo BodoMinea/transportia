@@ -65,8 +65,6 @@ class RoutingOptions {
     this.maxFirstMileTime = const Duration(minutes: 15),
     this.lastMileModes = const [TransitMode.walk],
     this.maxLastMileTime = const Duration(minutes: 15),
-    this.directModes = const [TransitMode.walk],
-    this.maxDirectTime = const Duration(minutes: 30),
     this.firstMileRentalFormFactors = const [],
     this.lastMileRentalFormFactors = const [],
     this.walkingSpeedKmh = _defaultWalkingSpeedKmh,
@@ -152,9 +150,28 @@ class RoutingOptions {
   final List<TransitMode> lastMileModes;
   final Duration maxLastMileTime;
 
-  /// Modes and budget for a transit-free itinerary.
-  final List<TransitMode> directModes;
-  final Duration maxDirectTime;
+  /// How a journey with no transit at all may travel: however the rider
+  /// would reach the station, plus walking.
+  ///
+  /// Taken from the way there rather than set on its own, because it is the
+  /// same question — a rider with their bike can ride it all the way. Park
+  /// & ride means a car to hand, so it becomes driving; being dropped off
+  /// does not carry over, since whoever drives is only going to the station.
+  List<TransitMode> get directModes => [
+    for (final mode in RoutingOptions.streetModeChoices)
+      if (mode == TransitMode.walk ||
+          (_directCapable(mode) && firstMileModes.contains(mode)) ||
+          (mode == TransitMode.car &&
+              firstMileModes.contains(TransitMode.carParking)))
+        mode,
+  ];
+
+  static bool _directCapable(TransitMode mode) =>
+      mode != TransitMode.carParking && mode != TransitMode.carDropoff;
+
+  /// Budget for a journey with no transit: as long as the two street legs of
+  /// a transit journey together. The server clamps it to its own limit.
+  Duration get maxDirectTime => maxFirstMileTime + maxLastMileTime;
 
   /// Which shared vehicles each mile's rental leg may use.
   ///
@@ -214,8 +231,7 @@ class RoutingOptions {
   /// Every mode a street leg may use, in the order the pickers read.
   ///
   /// The search screen gives the first five an icon each and puts the rest
-  /// behind a chevron; the defaults editor lists them all. Both read this, so
-  /// neither can offer a mode the other cannot show.
+  /// behind a chevron; a journey without transit picks from the same list.
   static const List<TransitMode> streetModeChoices = [
     TransitMode.walk,
     TransitMode.bike,
@@ -230,39 +246,29 @@ class RoutingOptions {
 
   /// What a plain "rentals, please" means, with no vehicle named.
   ///
-  /// Rentals are the vehicles picked for them, so a control that offers the
-  /// mode without offering vehicles needs a set to stand for. These three are
-  /// the ones you would actually grab for a mile; anything larger has to be
-  /// asked for by name.
+  /// Rentals are the vehicles picked for them, so the Rental icon, which
+  /// offers the mode without naming vehicles, needs a set to stand for.
+  /// These three are the ones you would actually grab for a mile; anything
+  /// larger has to be asked for by name.
   static const List<RentalFormFactor> defaultRentalFormFactors = [
     RentalFormFactor.bicycle,
     RentalFormFactor.scooterStanding,
     RentalFormFactor.other,
   ];
 
-  /// Sets one mile's modes, keeping its rentals in step.
+  /// These options with the settings-screen-only fields taken from [stored].
   ///
-  /// For screens that offer the rental mode but no vehicle picker. Ticking
-  /// Rental takes [defaultRentalFormFactors]; unticking it hands them back,
-  /// so no saved default can carry rentals over a mile with nothing to rent.
-  /// The search screen picks vehicles directly and has no use for this.
-  RoutingOptions withFirstMileModes(List<TransitMode> modes) => copyWith(
-    firstMileModes: modes,
-    firstMileRentalFormFactors: _rentalsFor(modes, firstMileRentalFormFactors),
+  /// The search screen keeps its own copy of the options, and once the rider
+  /// changes something there it stops following the stored defaults. These
+  /// fields cannot be changed on the search screen, so a change to them in
+  /// the settings must still reach a search in progress — otherwise "Save as
+  /// default" would quietly write the old values back. A field belongs here
+  /// exactly when the search screen does not offer it.
+  RoutingOptions withSettingsFrom(RoutingOptions stored) => copyWith(
+    useRoutedTransfers: stored.useRoutedTransfers,
+    additionalTransferTime: stored.additionalTransferTime,
+    elevationCosts: stored.elevationCosts,
   );
-
-  RoutingOptions withLastMileModes(List<TransitMode> modes) => copyWith(
-    lastMileModes: modes,
-    lastMileRentalFormFactors: _rentalsFor(modes, lastMileRentalFormFactors),
-  );
-
-  static List<RentalFormFactor> _rentalsFor(
-    List<TransitMode> modes,
-    List<RentalFormFactor> current,
-  ) {
-    if (!modes.contains(TransitMode.rental)) return const [];
-    return current.isEmpty ? defaultRentalFormFactors : current;
-  }
 
   RoutingOptions copyWith({
     List<TransitMode>? transitModes,
@@ -280,8 +286,6 @@ class RoutingOptions {
     Duration? maxFirstMileTime,
     List<TransitMode>? lastMileModes,
     Duration? maxLastMileTime,
-    List<TransitMode>? directModes,
-    Duration? maxDirectTime,
     List<RentalFormFactor>? firstMileRentalFormFactors,
     List<RentalFormFactor>? lastMileRentalFormFactors,
     double? walkingSpeedKmh,
@@ -316,8 +320,6 @@ class RoutingOptions {
       maxFirstMileTime: maxFirstMileTime ?? this.maxFirstMileTime,
       lastMileModes: nextLast,
       maxLastMileTime: maxLastMileTime ?? this.maxLastMileTime,
-      directModes: _atLeastWalking(directModes ?? this.directModes),
-      maxDirectTime: maxDirectTime ?? this.maxDirectTime,
       firstMileRentalFormFactors:
           firstMileRentalFormFactors ?? this.firstMileRentalFormFactors,
       lastMileRentalFormFactors:
@@ -338,6 +340,7 @@ class RoutingOptions {
     DateTime? time,
     bool? arriveBy,
     String? pageCursor,
+    List<String> rentalProviderGroups = const [],
   }) {
     return PlanParams(
       fromPlace: fromPlace,
@@ -368,8 +371,18 @@ class RoutingOptions {
       maxPostTransitTime: maxLastMileTime,
       directModes: directModes,
       maxDirectTime: maxDirectTime,
-      preTransitRentals: _rentalFilters(firstMileRentalFormFactors),
-      postTransitRentals: _rentalFilters(lastMileRentalFormFactors),
+      directRentals: _rentalFilters(
+        firstMileRentalFormFactors,
+        rentalProviderGroups,
+      ),
+      preTransitRentals: _rentalFilters(
+        firstMileRentalFormFactors,
+        rentalProviderGroups,
+      ),
+      postTransitRentals: _rentalFilters(
+        lastMileRentalFormFactors,
+        rentalProviderGroups,
+      ),
       pedestrianSpeed: _msFrom(walkingSpeedKmh, _defaultWalkingSpeedKmh),
       cyclingSpeed: _msFrom(cyclingSpeedKmh, _defaultCyclingSpeedKmh),
       elevationCosts: elevationCosts == ElevationCosts.none
@@ -390,7 +403,9 @@ class RoutingOptions {
   /// `requireDisplayNameMatch` is the other half: it makes the server refuse
   /// to substitute a different journey, rather than handing back a re-plan
   /// that happens to have the same number of legs.
-  RefreshItineraryOptions toRefreshParams() => RefreshItineraryOptions(
+  RefreshItineraryOptions toRefreshParams({
+    List<String> rentalProviderGroups = const [],
+  }) => RefreshItineraryOptions(
     requireDisplayNameMatch: true,
     detailedTransfers: true,
     detailedLegs: true,
@@ -407,6 +422,14 @@ class RoutingOptions {
     maxPreTransitTime: maxFirstMileTime,
     postTransitModes: lastMileModes,
     maxPostTransitTime: maxLastMileTime,
+    preTransitRentals: _rentalFilters(
+      firstMileRentalFormFactors,
+      rentalProviderGroups,
+    ),
+    postTransitRentals: _rentalFilters(
+      lastMileRentalFormFactors,
+      rentalProviderGroups,
+    ),
     pedestrianSpeed: _msFrom(walkingSpeedKmh, _defaultWalkingSpeedKmh),
     cyclingSpeed: _msFrom(cyclingSpeedKmh, _defaultCyclingSpeedKmh),
     elevationCosts: elevationCosts == ElevationCosts.none
@@ -414,9 +437,15 @@ class RoutingOptions {
         : elevationCosts,
   );
 
-  /// One mile's form-factor filter, or none when that mile has no rentals.
-  static RentalFilters _rentalFilters(List<RentalFormFactor> factors) =>
-      RentalFilters(formFactors: factors);
+  /// One mile's rental filter: the vehicles picked for it, and the
+  /// provider groups the rider limited rentals to (empty for any). A mile
+  /// with nothing to rent gets no filter at all.
+  static RentalFilters _rentalFilters(
+    List<RentalFormFactor> factors,
+    List<String> providerGroups,
+  ) => factors.isEmpty
+      ? const RentalFilters()
+      : RentalFilters(formFactors: factors, providerGroups: providerGroups);
 
   /// A mile always has somewhere to start from.
   static List<TransitMode> _atLeastWalking(List<TransitMode> modes) =>
@@ -454,8 +483,6 @@ class RoutingOptions {
     'maxFirstMileTimeMinutes': maxFirstMileTime.inMinutes,
     'lastMileModes': [for (final mode in lastMileModes) mode.wireName],
     'maxLastMileTimeMinutes': maxLastMileTime.inMinutes,
-    'directModes': [for (final mode in directModes) mode.wireName],
-    'maxDirectTimeMinutes': maxDirectTime.inMinutes,
     'firstMileRentalFormFactors': [
       for (final f in firstMileRentalFormFactors) f.wireName,
     ],
@@ -501,11 +528,6 @@ class RoutingOptions {
       maxLastMileTime: _minutes(
         json['maxLastMileTimeMinutes'],
         fallback.maxLastMileTime,
-      ),
-      directModes: _mileModes(json['directModes'], fallback.directModes),
-      maxDirectTime: _minutes(
-        json['maxDirectTimeMinutes'],
-        fallback.maxDirectTime,
       ),
       walkingSpeedKmh:
           (json['walkingSpeedKmh'] as num?)?.toDouble() ??

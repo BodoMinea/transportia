@@ -97,6 +97,7 @@ class TripDetailsView extends StatelessWidget {
                 const SizedBox(height: 12),
                 _TripJourneyCard(
                   stops: stops,
+                  isLive: leg.realTime,
                   routeColor: routeColor,
                   routeTextColor: routeTextColor,
                   modeIcon: getLegIcon(leg.mode),
@@ -275,6 +276,7 @@ class _TripJourneyCard extends StatelessWidget {
     required this.routeTextColor,
     required this.modeIcon,
     required this.onStopTap,
+    required this.isLive,
   });
 
   final List<JourneyStop> stops;
@@ -282,6 +284,7 @@ class _TripJourneyCard extends StatelessWidget {
   final Color routeTextColor;
   final IconData modeIcon;
   final StopTapCallback onStopTap;
+  final bool isLive;
 
   @override
   Widget build(BuildContext context) {
@@ -309,6 +312,7 @@ class _TripJourneyCard extends StatelessWidget {
               routeTextColor: routeTextColor,
               modeIcon: modeIcon,
               onStopTap: onStopTap,
+              isLive: isLive,
             ),
         ],
       ),

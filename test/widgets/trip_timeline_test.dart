@@ -74,6 +74,7 @@ Future<List<String>> _pumpAt(
               routeColor: const Color(0xFF1E88E5),
               routeTextColor: const Color(0xFFFFFFFF),
               modeIcon: LucideIcons.trainFront,
+              isLive: true,
               onStopTap:
                   ({
                     required String? stopId,

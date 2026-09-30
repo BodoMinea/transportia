@@ -18,9 +18,10 @@ import '../services/transitous_geocode_service.dart';
 import '../utils/color_utils.dart';
 import '../utils/custom_page_route.dart';
 import '../utils/leg_helper.dart' show getLegIcon;
+import '../utils/reported_time.dart';
 import '../utils/stop_time_utils.dart';
-import '../utils/time_utils.dart';
 import '../widgets/buttons/pill_button.dart';
+import '../widgets/delayed_time.dart';
 import '../widgets/error_notice.dart';
 import '../widgets/route_badge_pill.dart';
 import '../widgets/buttons/primary_button.dart';
@@ -823,73 +824,29 @@ class _StopTimeCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _TimeWithDelayText(
+                DelayedTime.end(
+                  ReportedTime.from(
+                    stopTime.place.arrival,
+                    stopTime.place.scheduledArrival,
+                    isLive: stopTime.realTime,
+                  ),
                   label: 'Arr',
-                  scheduled: stopTime.place.scheduledArrival,
-                  actual: stopTime.place.arrival,
+                  isArrival: true,
                 ),
                 const SizedBox(height: 4),
-                _TimeWithDelayText(
+                DelayedTime.end(
+                  ReportedTime.from(
+                    stopTime.place.departure,
+                    stopTime.place.scheduledDeparture,
+                    isLive: stopTime.realTime,
+                  ),
                   label: 'Dep',
-                  scheduled: stopTime.place.scheduledDeparture,
-                  actual: stopTime.place.departure,
-                  subdued: true,
                 ),
               ],
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _TimeWithDelayText extends StatelessWidget {
-  const _TimeWithDelayText({
-    required this.label,
-    required this.scheduled,
-    required this.actual,
-    this.subdued = false,
-  });
-
-  final String label;
-  final DateTime? scheduled;
-  final DateTime? actual;
-  final bool subdued;
-
-  @override
-  Widget build(BuildContext context) {
-    final display = formatTime(scheduled ?? actual, nullPlaceholder: '--:--');
-    final delay = (scheduled != null && actual != null)
-        ? computeDelay(scheduled!, actual!)
-        : null;
-    final baseColor = subdued
-        ? AppColors.black.withValues(alpha: 0.6)
-        : AppColors.black;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '$label $display',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: subdued ? FontWeight.w500 : FontWeight.w600,
-            color: baseColor,
-          ),
-        ),
-        if (delay != null) ...[
-          const SizedBox(width: 6),
-          Text(
-            formatDelay(delay),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: delayColor(delay),
-            ),
-          ),
-        ],
-      ],
     );
   }
 }

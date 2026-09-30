@@ -17,9 +17,10 @@ import 'package:transportia/widgets/search/street_leg_section.dart';
 /// Holds the options the way the search screen will, so a tap on a control
 /// comes back as a rebuilt spine rather than only as a callback.
 class _Host extends StatefulWidget {
-  const _Host({required this.initial});
+  const _Host({required this.initial, this.hasRentalProviders = false});
 
   final RoutingOptions initial;
+  final bool hasRentalProviders;
 
   @override
   State<_Host> createState() => _HostState();
@@ -28,6 +29,7 @@ class _Host extends StatefulWidget {
 class _HostState extends State<_Host> {
   late RoutingOptions options = widget.initial;
   int viaTaps = 0;
+  bool limitToMyProviders = false;
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +46,10 @@ class _HostState extends State<_Host> {
               capabilities: ServerConfig.fallback,
               onChanged: (next) => setState(() => options = next),
               onAddViaStop: () => viaTaps++,
+              limitToMyProviders: limitToMyProviders,
+              hasRentalProviders: widget.hasRentalProviders,
+              onLimitToMyProvidersChanged: (value) =>
+                  setState(() => limitToMyProviders = value),
             ),
           ),
         ),
@@ -55,6 +61,7 @@ class _HostState extends State<_Host> {
 Future<_HostState> _pumpSpine(
   WidgetTester tester, {
   RoutingOptions initial = RoutingOptions.defaults,
+  bool hasRentalProviders = false,
 }) async {
   // Tall enough that an expanded stage is on screen and so tappable; the
   // default 800x600 surface would push the last stage past the bottom.
@@ -63,7 +70,9 @@ Future<_HostState> _pumpSpine(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  await tester.pumpWidget(_Host(initial: initial));
+  await tester.pumpWidget(
+    _Host(initial: initial, hasRentalProviders: hasRentalProviders),
+  );
   return tester.state<_HostState>(find.byType(_Host));
 }
 
@@ -778,6 +787,69 @@ void main() {
       for (var i = 1; i < rows.length; i++) {
         expect(rows[i].top, closeTo(rows[i - 1].bottom, 0.5));
       }
+    });
+  });
+
+  group('limit to my providers', () {
+    Finder tick() => find.text('Limit to my providers').hitTestable();
+
+    Future<void> openShared(WidgetTester tester, String stage) async {
+      await _open(tester, stage);
+      await tester.tap(_pick('More ways to travel'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('sits with the shared vehicles on both legs', (tester) async {
+      await _pumpSpine(tester);
+      expect(tick(), findsNothing);
+
+      await openShared(tester, 'TO THE STATION');
+      expect(tick(), findsOneWidget);
+
+      await _open(tester, 'TO THE STATION');
+      await openShared(tester, 'FROM THE STATION');
+      expect(tick(), findsOneWidget);
+    });
+
+    testWidgets('with no providers set, says so and stays off', (tester) async {
+      final host = await _pumpSpine(tester);
+      await openShared(tester, 'TO THE STATION');
+
+      await tester.tap(tick());
+      await tester.pump();
+
+      expect(host.limitToMyProviders, isFalse);
+      expect(
+        find.text('No providers set. Add yours in Search and routing options'),
+        findsOneWidget,
+      );
+      await _quiet(tester);
+    });
+
+    testWidgets('with providers set, turns on and off', (tester) async {
+      final host = await _pumpSpine(tester, hasRentalProviders: true);
+      await openShared(tester, 'TO THE STATION');
+
+      await tester.tap(tick());
+      await tester.pump();
+      expect(host.limitToMyProviders, isTrue);
+      expect(find.text('Only your providers'), findsOneWidget);
+
+      await tester.tap(tick());
+      await tester.pump();
+      expect(host.limitToMyProviders, isFalse);
+      await _quiet(tester);
+    });
+
+    testWidgets('does not count as changing the search', (tester) async {
+      final host = await _pumpSpine(tester, hasRentalProviders: true);
+      await openShared(tester, 'TO THE STATION');
+
+      await tester.tap(tick());
+      await tester.pump();
+
+      expect(host.options, RoutingOptions.defaults);
+      await _quiet(tester);
     });
   });
 }

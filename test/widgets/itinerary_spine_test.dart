@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
+import 'package:transportia/utils/leg_notices.dart';
 import 'package:transportia/models/itinerary.dart';
 import 'package:transportia/providers/theme_provider.dart';
 import 'package:transportia/screens/itinerary_detail_screen.dart';
@@ -323,7 +324,8 @@ void main() {
       expect(find.text('Deutsche Bahn'), findsOneWidget);
       expect(find.text('Intercity-Express 599'), findsOneWidget);
       expect(find.text('Interlined'), findsOneWidget);
-      expect(find.text('Delayed'), findsOneWidget);
+      // Not a chip: the red time and the grey minutes already say it.
+      expect(find.text('Delayed'), findsNothing);
     });
 
     testWidgets('each stop between, with both its times and its platform', (
@@ -578,7 +580,8 @@ void main() {
 
       expect(find.text(kMissedChangeMessage), findsOneWidget);
       final node = tester.widget<SpineNode>(find.byType(SpineNode));
-      expect(node.icon, LucideIcons.triangleAlert);
+      // The problem notice's shape, so node and notice read as one.
+      expect(node.icon, LucideIcons.octagonAlert);
       expect(node.color, kMissedChangeColor);
     });
 

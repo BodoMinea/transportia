@@ -35,9 +35,6 @@ const Map<TransitMode, String> mileModeExtras = {
 ///
 /// The icon sets these directly rather than only switching rentals on: an icon
 /// that enables other buttons and nothing else says nothing about what it did.
-///
-/// The same set the defaults editor gives a mile when Rental is ticked there,
-/// so Rental means one thing across both screens.
 const List<RentalFormFactor> kRentalIconFactors =
     RoutingOptions.defaultRentalFormFactors;
 
@@ -129,6 +126,8 @@ class StreetLegSection extends StatelessWidget {
     required this.onBudgetChanged,
     required this.onBudgetPressed,
     required this.onModesPressed,
+    required this.limitToMyProviders,
+    required this.onLimitToMyProvidersPressed,
   });
 
   final List<TransitMode> modes;
@@ -152,6 +151,12 @@ class StreetLegSection extends StatelessWidget {
   final ValueChanged<Duration> onBudgetChanged;
   final VoidCallback onBudgetPressed;
   final VoidCallback onModesPressed;
+
+  /// Whether rentals keep to the providers named in the settings. One
+  /// setting for the whole journey, shown on both legs because it sits with
+  /// the rest of the rental choices.
+  final bool limitToMyProviders;
+  final VoidCallback onLimitToMyProvidersPressed;
 
   /// Adds or removes a mode, keeping the list in pick order.
   void _toggleMode(TransitMode mode) {
@@ -345,6 +350,12 @@ class StreetLegSection extends StatelessWidget {
                 onPressed: () => _toggleFormFactor(entry.key),
               ),
           ],
+        ),
+        const SizedBox(height: 10),
+        SelectableTick(
+          label: 'Limit to my providers',
+          selected: limitToMyProviders,
+          onPressed: onLimitToMyProvidersPressed,
         ),
       ],
     );

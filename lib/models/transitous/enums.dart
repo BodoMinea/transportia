@@ -87,6 +87,26 @@ enum TransitMode with WireEnum {
     carParking,
     carDropoff,
   }.contains(this);
+
+  /// Mainline trains from regional services up, and the generic `RAIL` a
+  /// feed uses when it does not say which. They call at stations large
+  /// enough that changing between them is a walk between platforms.
+  bool get isRegionalOrLongerRail => const {
+    rail,
+    highspeedRail,
+    longDistance,
+    nightRail,
+    regionalRail,
+    regionalFastRail,
+  }.contains(this);
+
+  /// Any train, the suburban ones included.
+  bool get isTrain => isRegionalOrLongerRail || this == suburban;
+
+  /// Modes that run to numbered platforms, where a missing platform is a gap
+  /// in the data rather than the mode simply having none.
+  bool get runsToNumberedPlatforms =>
+      isTrain || const {subway, metro, tram}.contains(this);
 }
 
 /// Penalty applied to inclines when routing street legs.

@@ -80,6 +80,19 @@ What it costs, honestly:
   not worth 5 to fix it, because that brings back the `Paris` problem. The
   spelling with the apostrophe is fine at every strength.
 
+## The rider's own setting
+
+1.5 is the default, not a fixed value: *Search and routing options* has a
+slider from 0.5 to 5 in steps of 0.5 (`PlaceBias` in
+`lib/utils/place_bias.dart`), stored as `place_bias` and left unstored at
+the default so a better-measured default still reaches everyone who never
+moved it. Moving off 1.5 shows a one-line reason for it on the screen.
+
+The slider's first stop is off. Then no `place` is sent with a search at
+all, only the text; `TransitousGeocodeService.fetchSuggestionPage` enforces
+this for every caller. "Search in this area" is not affected: its point is
+the map's centre, picked by the rider, not their position.
+
 ## "Search in this area": `placeBias=20`
 
 The map picker's "Search in this area" asks again from the map's centre,

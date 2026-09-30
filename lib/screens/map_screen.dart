@@ -32,6 +32,8 @@ import '../screens/via_stops_screen.dart';
 import '../services/location_service.dart';
 import '../services/plan_request.dart';
 import '../services/recent_trips_service.dart';
+import '../services/backend_reload_service.dart';
+import '../services/rental_providers_service.dart';
 import '../services/routing_options_service.dart';
 import '../services/saved_places_service.dart';
 import '../services/server_capabilities_service.dart';
@@ -263,6 +265,10 @@ class _MapScreenState extends State<MapScreen>
     // same frame the request is made, so the listener can miss it.
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyPlanRequest());
     ServerCapabilitiesService.capabilities.addListener(_onCapabilitiesChanged);
+    RoutingOptionsService.optionsListenable.addListener(
+      _onStoredOptionsChanged,
+    );
+    BackendReloadService.generation.addListener(_onBackendSwitched);
     _snapCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 220),
@@ -323,6 +329,7 @@ class _MapScreenState extends State<MapScreen>
 
   Future<void> _initStartup() async {
     unawaited(_loadRoutingOptions());
+    unawaited(RentalProvidersService.loadPrefs());
     unawaited(ServerCapabilitiesService.ensureLoaded());
     await _loadShowStopsPreference();
     await _loadQuickSettingsPreferences();
@@ -352,6 +359,40 @@ class _MapScreenState extends State<MapScreen>
       _storedOptions = stored;
       if (!_optionsTouched) _options = stored;
     });
+  }
+
+  /// Follows defaults changed elsewhere — the settings screen, while this
+  /// one stays alive behind the navigation bar.
+  ///
+  /// An untouched search takes them whole. A touched one keeps the rider's
+  /// changes and takes only what the search screen cannot change.
+  void _onStoredOptionsChanged() {
+    if (!mounted) return;
+    final stored = RoutingOptionsService.optionsListenable.value;
+    if (stored == _storedOptions) return;
+    setState(() {
+      _storedOptions = stored;
+      _options = _optionsTouched ? _options.withSettingsFrom(stored) : stored;
+    });
+  }
+
+  /// Another server, or another API version: what the map shows came from
+  /// the old one, so it is cleared and fetched again rather than left until
+  /// the camera next moves.
+  void _onBackendSwitched() {
+    if (!mounted) return;
+    _lastTripsRequestKey = null;
+    _lastStopsRequestKey = null;
+    _dismissStopOverlay();
+    unawaited(_reloadMapData());
+  }
+
+  Future<void> _reloadMapData() async {
+    await _clearVehicleMarkers();
+    await _clearStopMarkers();
+    if (!mounted) return;
+    unawaited(_refreshStops());
+    unawaited(_refreshTrips(force: true));
   }
 
   /// Via stops need a search of their own, so they get a screen.
@@ -403,6 +444,10 @@ class _MapScreenState extends State<MapScreen>
   @override
   void dispose() {
     PlanRequests.pending.removeListener(_applyPlanRequest);
+    RoutingOptionsService.optionsListenable.removeListener(
+      _onStoredOptionsChanged,
+    );
+    BackendReloadService.generation.removeListener(_onBackendSwitched);
     ServerCapabilitiesService.capabilities.removeListener(
       _onCapabilitiesChanged,
     );

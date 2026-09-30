@@ -93,6 +93,75 @@ Leg _onward({
 Changeover _single(List<Leg> legs) =>
     changeoversOf(buildDisplayLegs(legs)).single;
 
+/// A ride into or out of the change at Mannheim, with its platform there
+/// given or left out. [platformAtChange] is the arriving train's arrival
+/// platform or the departing train's departure one.
+Leg _mainline({
+  required String mode,
+  required bool arriving,
+  String? platformAtChange,
+  String? scheduledPlatformAtChange,
+}) {
+  final atChange = {
+    'name': 'Mannheim Hbf',
+    'lat': 49.48,
+    'lon': 8.47,
+    'stopId': 'stop-mannheim',
+    'track': ?platformAtChange,
+    'scheduledTrack': ?scheduledPlatformAtChange,
+    if (arriving) 'arrival': _at(Duration.zero),
+    if (!arriving) 'departure': _at(const Duration(minutes: 10)),
+  };
+  final elsewhere = {
+    'name': arriving ? 'Stuttgart Hbf' : 'Heidelberg Hbf',
+    'lat': 49.0,
+    'lon': 8.6,
+    'stopId': 'stop-elsewhere',
+    'track': '1',
+  };
+  return Leg.fromJson({
+    'mode': mode,
+    'startTime': _at(
+      arriving ? const Duration(minutes: -40) : const Duration(minutes: 10),
+    ),
+    'endTime': _at(arriving ? Duration.zero : const Duration(minutes: 30)),
+    'duration': 1800,
+    'realTime': true,
+    'from': arriving ? elsewhere : atChange,
+    'to': arriving ? atChange : elsewhere,
+  });
+}
+
+Leg _walkAcrossMannheim() => Leg.fromJson({
+  'mode': 'WALK',
+  'startTime': _at(Duration.zero),
+  'endTime': _at(const Duration(minutes: 5)),
+  'duration': 300,
+  'from': {'name': 'Mannheim Hbf', 'lat': 49.48, 'lon': 8.47},
+  'to': {'name': 'Mannheim Hbf', 'lat': 49.4801, 'lon': 8.4701},
+});
+
+Changeover _changeAtMannheim({
+  String arrivingMode = 'HIGHSPEED_RAIL',
+  String? arrivalPlatform = '3',
+  String? scheduledArrivalPlatform,
+  String departingMode = 'REGIONAL_RAIL',
+  String? departurePlatform = '4',
+}) => _single([
+  _mainline(
+    mode: arrivingMode,
+    arriving: true,
+    platformAtChange: arrivalPlatform,
+    scheduledPlatformAtChange: scheduledArrivalPlatform,
+  ),
+  _walkAcrossMannheim(),
+  _mainline(
+    mode: departingMode,
+    arriving: false,
+    platformAtChange: departurePlatform,
+  ),
+]);
+
 void main() {
   group('whether a change can be made', () {
     test('a service that leaves before you arrive cannot be caught', () {
@@ -368,6 +437,115 @@ void main() {
 
     test('a journey with no legs has nothing to offer', () {
       expect(replanFor(const [], _t0), isNull);
+    });
+  });
+
+  group('whether the walk between platforms is a guess', () {
+    test('both platforms known: nothing to say', () {
+      expect(_changeAtMannheim().platformUnknown, isFalse);
+    });
+
+    test('the arriving train has no platform', () {
+      expect(_changeAtMannheim(arrivalPlatform: null).platformUnknown, isTrue);
+    });
+
+    test('the departing train has no platform', () {
+      expect(
+        _changeAtMannheim(departurePlatform: null).platformUnknown,
+        isTrue,
+      );
+    });
+
+    test('neither has one', () {
+      expect(
+        _changeAtMannheim(
+          arrivalPlatform: null,
+          departurePlatform: null,
+        ).platformUnknown,
+        isTrue,
+      );
+    });
+
+    test('a blank platform is no platform', () {
+      expect(_changeAtMannheim(arrivalPlatform: '  ').platformUnknown, isTrue);
+    });
+
+    test('the timetabled platform is enough', () {
+      // Without a live one the planner still routed to the booked platform.
+      expect(
+        _changeAtMannheim(
+          arrivalPlatform: null,
+          scheduledArrivalPlatform: '3',
+        ).platformUnknown,
+        isFalse,
+      );
+    });
+
+    test('between suburban trains it is not a mainline station', () {
+      expect(
+        _changeAtMannheim(
+          arrivingMode: 'SUBURBAN',
+          departingMode: 'SUBURBAN',
+          arrivalPlatform: null,
+          departurePlatform: null,
+        ).platformUnknown,
+        isFalse,
+      );
+    });
+
+    test('a suburban train at a mainline station is still asked', () {
+      expect(
+        _changeAtMannheim(
+          arrivingMode: 'SUBURBAN',
+          arrivalPlatform: null,
+        ).platformUnknown,
+        isTrue,
+      );
+    });
+
+    test('a tram with no platform is no news', () {
+      // Trams rarely have one in the feed; only the train is asked.
+      expect(
+        _changeAtMannheim(
+          arrivingMode: 'TRAM',
+          arrivalPlatform: null,
+        ).platformUnknown,
+        isFalse,
+      );
+    });
+
+    test('but the train beside the tram is', () {
+      expect(
+        _changeAtMannheim(
+          arrivingMode: 'TRAM',
+          arrivalPlatform: null,
+          departurePlatform: null,
+        ).platformUnknown,
+        isTrue,
+      );
+    });
+
+    test('a generic RAIL counts as mainline', () {
+      expect(
+        _changeAtMannheim(
+          arrivingMode: 'RAIL',
+          departingMode: 'SUBURBAN',
+          departurePlatform: null,
+        ).platformUnknown,
+        isTrue,
+      );
+    });
+
+    test('buses on both sides are never asked', () {
+      expect(
+        _changeAtMannheim(
+          arrivingMode: 'BUS',
+          departingMode: 'BUS',
+          arrivalPlatform: null,
+          departurePlatform: null,
+        ).platformUnknown,
+        isFalse,
+      );
     });
   });
 }
