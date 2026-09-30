@@ -29,6 +29,7 @@ import '../utils/itinerary_leg_utils.dart';
 import '../utils/journey_colors.dart';
 import '../utils/journey_progress.dart';
 import '../utils/leg_helper.dart';
+import '../utils/reported_time.dart';
 import '../utils/time_utils.dart';
 import '../widgets/alert_notice.dart';
 import '../widgets/custom_app_bar.dart';
@@ -95,8 +96,8 @@ const String kMissedChangeMessage = 'You will not make this change.';
 /// all. Without that agreement a row with an arrival *time* but no arrival
 /// *platform* would print its two columns one line out of step.
 class SpinePoint {
-  final _StopTime? arrival;
-  final _StopTime? departure;
+  final ReportedTime? arrival;
+  final ReportedTime? departure;
 
   const SpinePoint._(this.arrival, this.departure);
 
@@ -108,12 +109,12 @@ class SpinePoint {
     bool arrivalIsLive = false,
     bool departureIsLive = false,
   }) {
-    final gotHere = _StopTime.from(
+    final gotHere = ReportedTime.from(
       arrival,
       scheduledArrival,
       isLive: arrivalIsLive,
     );
-    final leaves = _StopTime.from(
+    final leaves = ReportedTime.from(
       departure,
       scheduledDeparture,
       isLive: departureIsLive,
@@ -213,7 +214,7 @@ class SpineTimes extends StatelessWidget {
   }
 
   Widget _time(
-    _StopTime time, {
+    ReportedTime time, {
     required bool isArrival,
     required double lineHeight,
   }) {
@@ -238,12 +239,8 @@ class SpineTimes extends StatelessWidget {
   }
 }
 
-/// How late the service is, under the name of the station it is late at.
-///
-/// Grey, always — never the red or green of the time above it. That time is
-/// already the real one, so a coloured "+5 min" reads as five minutes still to
-/// add to a number that has had them added. Grey makes it what it is: why the
-/// time moved, not a correction to apply to it.
+/// How late the service is, under the name of the station it is late at, in
+/// [delayNoteColor].
 ///
 /// One line, and the departure's whenever there is one: a station with an
 /// arrival delay, a departure delay and both of their times stacked against it
@@ -262,7 +259,7 @@ Widget? buildSpineDelay(SpinePoint point, {bool compact = false}) {
         fontSize: size,
         fontWeight: FontWeight.w600,
         height: kSpineDelayLineHeight / size,
-        color: AppColors.black.withValues(alpha: 0.45),
+        color: delayNoteColor(),
       ),
     ),
   );
@@ -2045,46 +2042,4 @@ class _TimelineStop {
   /// The one time that matters at this stop: when the vehicle leaves, or
   /// when it arrives if it never leaves again.
   DateTime? get timeAtStop => departure ?? arrival;
-}
-
-/// One printable time: what the timetable promised, and how far off it is.
-/// One printable moment on the spine.
-///
-/// [shown] is what the rider reads: the real time when the operator is
-/// reporting one, the timetable's otherwise. The planned time is never
-/// printed alongside it — a rider wants the time the train is at the
-/// platform, not two numbers and a subtraction.
-class _StopTime {
-  final DateTime shown;
-  final Duration? delay;
-
-  /// True when the operator is actually reporting this leg, so [shown] is an
-  /// observation rather than a promise. Drives the colour.
-  ///
-  /// It comes from the leg's own `realTime` flag rather than from a time
-  /// merely existing — the planner always fills a start and an end in, so
-  /// "we have a number" says nothing about where the number came from.
-  final bool isLive;
-
-  const _StopTime({
-    required this.shown,
-    required this.delay,
-    required this.isLive,
-  });
-
-  /// Null when the feed gave neither a real-time nor a scheduled value.
-  static _StopTime? from(
-    DateTime? actual,
-    DateTime? scheduled, {
-    required bool isLive,
-  }) {
-    if (actual == null && scheduled == null) return null;
-    // Real-time wins outright. Where only one exists it is both the promise
-    // and the fact, so there is nothing to be late against.
-    final shown = actual ?? scheduled!;
-    final delay = (actual != null && scheduled != null)
-        ? computeDelay(scheduled, actual)
-        : null;
-    return _StopTime(shown: shown, delay: delay, isLive: isLive);
-  }
 }

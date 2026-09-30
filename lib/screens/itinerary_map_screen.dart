@@ -8,16 +8,19 @@ import 'package:provider/provider.dart';
 import '../models/itinerary.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_colors.dart';
+import '../utils/changeover.dart';
 import '../utils/color_utils.dart';
 import '../utils/duration_formatter.dart';
 import '../utils/geo_utils.dart';
 import '../utils/map_framing.dart';
 import '../utils/itinerary_leg_utils.dart';
+import '../utils/journey_colors.dart' show isStreetLeg;
 import '../utils/leg_helper.dart';
 import '../utils/map_marker_utils.dart';
 import '../utils/polyline_utils.dart';
-import '../utils/time_utils.dart';
+import '../utils/reported_time.dart';
 import '../widgets/custom_app_bar.dart';
+import '../widgets/delayed_time.dart';
 import '../widgets/stop_departures_sheet.dart';
 import '../theme/app_text.dart';
 
@@ -55,6 +58,7 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
   int _currentPage = 0;
   List<List<LatLng>> _legGeometries = [];
   late final List<DisplayLegInfo> _displayLegs;
+  late final List<Changeover> _changeovers;
 
   static const double _transferZoomLevel = 16.5;
   static const double _transferDistanceThresholdMeters = 80.0;
@@ -81,6 +85,7 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
   void initState() {
     super.initState();
     _displayLegs = buildDisplayLegs(widget.itinerary.legs);
+    _changeovers = changeoversOf(_displayLegs);
     // Page 0 is the whole journey, so leg N is page N + 1. _onStyleLoaded
     // already focuses whatever page it opens on.
     final requested = widget.initialLegIndex;
@@ -211,8 +216,11 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
       final entry = _displayLegs[legIndex];
       final leg = entry.leg;
       final accentColor = _getLegColorFromLeg(leg, entry.originalIndex);
-      child = entry.isTransfer
-          ? _TransferCarouselCard(leg: leg)
+      final changeover = entry.isTransfer
+          ? _changeovers.where((c) => identical(c.transfer, leg)).firstOrNull
+          : null;
+      child = changeover != null
+          ? _TransferCarouselCard(changeover: changeover)
           : _LegCarouselCard(
               leg: leg,
               legIndex: legIndex,
@@ -439,6 +447,7 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
       DateTime? departure,
       DateTime? scheduledArrival,
       DateTime? scheduledDeparture,
+      bool isLive = false,
     }) {
       final key = '${lat.toStringAsFixed(5)},${lon.toStringAsFixed(5)}';
       final existing = deduped[key];
@@ -455,6 +464,8 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
           departure: departure,
           scheduledArrival: scheduledArrival,
           scheduledDeparture: scheduledDeparture,
+          arrivalIsLive: isLive,
+          departureIsLive: isLive,
         );
         return;
       }
@@ -470,6 +481,14 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
         departure: existing.departure ?? departure,
         scheduledArrival: existing.scheduledArrival ?? scheduledArrival,
         scheduledDeparture: existing.scheduledDeparture ?? scheduledDeparture,
+        // Each flag travels with the time it describes, from whichever leg
+        // supplied that time.
+        arrivalIsLive: existing.arrival != null
+            ? existing.arrivalIsLive
+            : isLive,
+        departureIsLive: existing.departure != null
+            ? existing.departureIsLive
+            : isLive,
       );
     }
 
@@ -487,6 +506,7 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
         stopId: leg.fromStopId,
         departure: leg.startTime,
         scheduledDeparture: leg.scheduledStartTime,
+        isLive: leg.realTime,
       );
       for (final stop in leg.intermediateStops) {
         addStop(
@@ -501,6 +521,7 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
           departure: stop.departure,
           scheduledArrival: stop.scheduledArrival,
           scheduledDeparture: stop.scheduledDeparture,
+          isLive: leg.realTime,
         );
       }
       addStop(
@@ -513,6 +534,7 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
         stopId: leg.toStopId,
         arrival: leg.endTime,
         scheduledArrival: leg.scheduledEndTime,
+        isLive: leg.realTime,
       );
     }
 
@@ -753,6 +775,9 @@ class _JourneySummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final firstLeg = itinerary.legs.isNotEmpty ? itinerary.legs.first : null;
     final lastLeg = itinerary.legs.isNotEmpty ? itinerary.legs.last : null;
+    // A walk at either end has no real-time of its own; its times move with
+    // the ride next to it, so that ride says whether they are reported.
+    final rides = itinerary.legs.where((leg) => !isStreetLeg(leg.mode));
     return _CarouselCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -764,8 +789,11 @@ class _JourneySummaryCard extends StatelessWidget {
               Expanded(
                 child: _JourneyTimeTile(
                   label: 'Departure',
-                  actualTime: firstLeg?.startTime ?? itinerary.startTime,
-                  scheduledTime: firstLeg?.scheduledStartTime,
+                  time: ReportedTime.from(
+                    firstLeg?.startTime ?? itinerary.startTime,
+                    firstLeg?.scheduledStartTime,
+                    isLive: rides.firstOrNull?.realTime ?? false,
+                  ),
                 ),
               ),
               Expanded(
@@ -785,8 +813,11 @@ class _JourneySummaryCard extends StatelessWidget {
                   alignment: Alignment.centerRight,
                   child: _JourneyTimeTile(
                     label: 'Arrival',
-                    actualTime: lastLeg?.endTime ?? itinerary.endTime,
-                    scheduledTime: lastLeg?.scheduledEndTime,
+                    time: ReportedTime.from(
+                      lastLeg?.endTime ?? itinerary.endTime,
+                      lastLeg?.scheduledEndTime,
+                      isLive: rides.lastOrNull?.realTime ?? false,
+                    ),
                     alignEnd: true,
                   ),
                 ),
@@ -850,17 +881,18 @@ class _StopInfoPopup extends StatelessWidget {
                 if (hasArrival || hasDeparture) ...[
                   const SizedBox(height: 6),
                   if (hasArrival)
-                    _StopTimeRow(
+                    DelayedTime.inline(
+                      stop.arrivalTime,
                       label: 'Arrival',
-                      scheduled: stop.scheduledArrival,
-                      actual: stop.arrival,
+                      isArrival: hasDeparture,
+                      fontSize: 13,
                     ),
                   if (hasArrival && hasDeparture) const SizedBox(height: 2),
                   if (hasDeparture)
-                    _StopTimeRow(
+                    DelayedTime.inline(
+                      stop.departureTime,
                       label: 'Departure',
-                      scheduled: stop.scheduledDeparture,
-                      actual: stop.departure,
+                      fontSize: 13,
                     ),
                 ] else ...[
                   const SizedBox(height: 4),
@@ -914,49 +946,6 @@ class _StopInfoPopup extends StatelessWidget {
   }
 }
 
-class _StopTimeRow extends StatelessWidget {
-  const _StopTimeRow({
-    required this.label,
-    required this.scheduled,
-    required this.actual,
-  });
-
-  final String label;
-  final DateTime? scheduled;
-  final DateTime? actual;
-
-  @override
-  Widget build(BuildContext context) {
-    final display = formatTime(scheduled ?? actual, nullPlaceholder: '--:--');
-    final delay = (scheduled != null && actual != null)
-        ? computeDelay(scheduled, actual!)
-        : null;
-    return Row(
-      children: [
-        Text(
-          '$label $display',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.black.withValues(alpha: 0.8),
-          ),
-        ),
-        if (delay != null) ...[
-          const SizedBox(width: 6),
-          Text(
-            formatDelay(delay),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: delayColor(delay),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
 class _RouteStop {
   const _RouteStop({
     required this.point,
@@ -970,6 +959,8 @@ class _RouteStop {
     this.departure,
     this.scheduledArrival,
     this.scheduledDeparture,
+    this.arrivalIsLive = false,
+    this.departureIsLive = false,
   });
 
   final LatLng point;
@@ -983,6 +974,13 @@ class _RouteStop {
   final DateTime? departure;
   final DateTime? scheduledArrival;
   final DateTime? scheduledDeparture;
+  final bool arrivalIsLive;
+  final bool departureIsLive;
+
+  ReportedTime? get arrivalTime =>
+      ReportedTime.from(arrival, scheduledArrival, isLive: arrivalIsLive);
+  ReportedTime? get departureTime =>
+      ReportedTime.from(departure, scheduledDeparture, isLive: departureIsLive);
 
   /// The one time that matters at this stop: when the vehicle leaves, or
   /// when it arrives if it never leaves again.
@@ -1030,15 +1028,21 @@ class _LegCarouselCard extends StatelessWidget {
           const SizedBox(height: 12),
           _LegStopRow(
             icon: LucideIcons.circleDot,
-            actualTime: leg.startTime,
-            scheduledTime: leg.scheduledStartTime,
+            time: ReportedTime.from(
+              leg.startTime,
+              leg.scheduledStartTime,
+              isLive: leg.realTime,
+            ),
             label: leg.fromName,
           ),
           const SizedBox(height: 6),
           _LegStopRow(
             icon: LucideIcons.flag,
-            actualTime: leg.endTime,
-            scheduledTime: leg.scheduledEndTime,
+            time: ReportedTime.from(
+              leg.endTime,
+              leg.scheduledEndTime,
+              isLive: leg.realTime,
+            ),
             label: leg.toName,
           ),
         ],
@@ -1081,16 +1085,29 @@ class _LegCarouselCard extends StatelessWidget {
 }
 
 class _TransferCarouselCard extends StatelessWidget {
-  const _TransferCarouselCard({required this.leg});
+  const _TransferCarouselCard({required this.changeover});
 
-  final Leg leg;
+  final Changeover changeover;
+
+  Leg get leg => changeover.transfer;
 
   @override
   Widget build(BuildContext context) {
-    final depDelay = computeDelay(leg.scheduledStartTime, leg.startTime);
-    final arrDelay = computeDelay(leg.scheduledEndTime, leg.endTime);
-    final depTime = formatTime(leg.scheduledStartTime ?? leg.startTime);
-    final arrTime = formatTime(leg.scheduledEndTime ?? leg.endTime);
+    // The walk's own start carries none of the arriving train's real-time,
+    // so getting here is read off the place, as the itinerary's spine does.
+    // Both times move with that train, so its flag says whether they are
+    // reported.
+    final isLive = changeover.arriving?.realTime ?? false;
+    final arrives = ReportedTime.from(
+      changeover.arrivesAt,
+      leg.from.scheduledArrival ?? changeover.arriving?.scheduledEndTime,
+      isLive: isLive,
+    );
+    final walked = ReportedTime.from(
+      leg.endTime,
+      leg.scheduledEndTime,
+      isLive: isLive,
+    );
     return _CarouselCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1112,41 +1129,10 @@ class _TransferCarouselCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(LucideIcons.arrowRight, size: 16),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Row(
-                  children: [
-                    Text(depTime, style: AppText.bodyMuted),
-                    if (depDelay != null) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        formatDelay(depDelay),
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: delayColor(depDelay),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        leg.fromName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.black.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          _LegStopRow(
+            icon: LucideIcons.arrowRight,
+            time: arrives,
+            label: leg.fromName,
           ),
           if (leg.distance != null && leg.distance! > 0) ...[
             const SizedBox(height: 4),
@@ -1159,41 +1145,10 @@ class _TransferCarouselCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 6),
-          Row(
-            children: [
-              const Icon(LucideIcons.arrowDown, size: 16),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Row(
-                  children: [
-                    Text(arrTime, style: AppText.bodyMuted),
-                    if (arrDelay != null) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        formatDelay(arrDelay),
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: delayColor(arrDelay),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        leg.toName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.black.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          _LegStopRow(
+            icon: LucideIcons.arrowDown,
+            time: walked,
+            label: leg.toName,
           ),
         ],
       ),
@@ -1204,20 +1159,16 @@ class _TransferCarouselCard extends StatelessWidget {
 class _JourneyTimeTile extends StatelessWidget {
   const _JourneyTimeTile({
     required this.label,
-    required this.actualTime,
-    this.scheduledTime,
+    required this.time,
     this.alignEnd = false,
   });
 
   final String label;
-  final DateTime actualTime;
-  final DateTime? scheduledTime;
+  final ReportedTime? time;
   final bool alignEnd;
 
   @override
   Widget build(BuildContext context) {
-    final displayTime = formatTime(scheduledTime ?? actualTime);
-    final delay = computeDelay(scheduledTime, actualTime);
     return Column(
       crossAxisAlignment: alignEnd
           ? CrossAxisAlignment.end
@@ -1232,30 +1183,7 @@ class _JourneyTimeTile extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              displayTime,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: AppColors.black,
-              ),
-            ),
-            if (delay != null) ...[
-              const SizedBox(width: 6),
-              Text(
-                formatDelay(delay),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: delayColor(delay),
-                ),
-              ),
-            ],
-          ],
-        ),
+        DelayedTime.inline(time, fontSize: 20, fontWeight: FontWeight.w700),
       ],
     );
   }
@@ -1264,41 +1192,22 @@ class _JourneyTimeTile extends StatelessWidget {
 class _LegStopRow extends StatelessWidget {
   const _LegStopRow({
     required this.icon,
-    required this.actualTime,
+    required this.time,
     required this.label,
-    this.scheduledTime,
   });
 
   final IconData icon;
-  final DateTime actualTime;
-  final DateTime? scheduledTime;
+  final ReportedTime? time;
   final String label;
 
   @override
   Widget build(BuildContext context) {
-    final displayTime = formatTime(scheduledTime ?? actualTime);
-    final delay = computeDelay(scheduledTime, actualTime);
     return Row(
       children: [
         Icon(icon, size: 16, color: AppColors.black.withValues(alpha: 0.4)),
         const SizedBox(width: 8),
-        Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(text: displayTime, style: AppText.bodyStrong),
-              if (delay != null)
-                TextSpan(
-                  text: ' ${formatDelay(delay)}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: delayColor(delay),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
+        DelayedTime.inline(time),
+        const SizedBox(width: 8),
         Expanded(
           child: Text(
             label,

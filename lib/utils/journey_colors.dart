@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../models/itinerary.dart';
+import '../theme/app_colors.dart';
 import 'color_utils.dart';
 
 /// What a street leg is drawn in.
@@ -11,9 +12,11 @@ import 'color_utils.dart';
 /// white and on the app's near-black alike.
 const Color kStreetLegColor = Color(0xFF8A9299);
 
-/// A time nobody is reporting on: the plan, and only the plan.
-const Color _kPlannedDeparture = Color(0xE6000000);
-const Color _kPlannedArrival = Color(0x73000000);
+/// A time nobody is reporting on: the plan, and only the plan. The text
+/// colour at two strengths rather than a fixed black, which vanished against
+/// the dark theme.
+const double _kPlannedDepartureAlpha = 0.9;
+const double _kPlannedArrivalAlpha = 0.45;
 
 /// Running late, and running to time or early — the strong pair for a
 /// departure, the light pair for an arrival.
@@ -38,18 +41,32 @@ const Color kMissedChangeColor = Color(0xFFD32F2F);
 /// be indistinguishable from having no information at all, which is the more
 /// useful of the two things to know.
 ///
-/// The delay itself is never coloured — see the note where it is drawn.
+/// The delay itself is never coloured — see [delayNoteColor].
 Color spineTimeColor({
   required bool isLive,
   required Duration? delay,
   required bool isArrival,
 }) {
-  if (!isLive) return isArrival ? _kPlannedArrival : _kPlannedDeparture;
+  if (!isLive) {
+    return AppColors.black.withValues(
+      alpha: isArrival ? _kPlannedArrivalAlpha : _kPlannedDepartureAlpha,
+    );
+  }
   // A delay under the threshold comes back null, which is "to the minute".
   final late = delay != null && !delay.isNegative;
   if (late) return isArrival ? kLateArrival : kLateDeparture;
   return isArrival ? kOnTimeArrival : kOnTimeDeparture;
 }
+
+/// What the delay beside a time is printed in: grey, always.
+///
+/// Never the red or green of the time it belongs to. That time is already
+/// the real one, so a coloured "+5m" reads as five minutes still to add to a
+/// number that has had them added. Grey makes it what it is: why the time
+/// moved, not a correction to apply to it.
+Color delayNoteColor() => AppColors.black.withValues(alpha: _kDelayNoteAlpha);
+
+const double _kDelayNoteAlpha = 0.45;
 
 /// Contrast ratio between two opaque colours, per WCAG.
 double contrastRatio(Color a, Color b) {
