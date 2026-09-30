@@ -60,6 +60,27 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     await themeProvider.setSearchMapEnabled(enabled);
   }
 
+  Future<void> _saveSearchOptionsOpening(SearchOptionsOpening opening) async {
+    final themeProvider = context.read<ThemeProvider>();
+    await themeProvider.setSearchOptionsOpening(opening);
+  }
+
+  Future<void> _saveShowCalories(bool show) async {
+    final themeProvider = context.read<ThemeProvider>();
+    await themeProvider.setShowCalories(show);
+  }
+
+  /// What each choice shows, in the words the search card itself uses.
+  static String _openingDescription(SearchOptionsOpening opening) =>
+      switch (opening) {
+        SearchOptionsOpening.closed =>
+          'Each part of the trip is one line. Tap it to see its options.',
+        SearchOptionsOpening.stagesOpen =>
+          'Each part of the trip shows its row of icons.',
+        SearchOptionsOpening.everything =>
+          'Each part of the trip shows every option, sliders included.',
+      };
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
@@ -67,6 +88,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     final selectedAppThemeMode = themeProvider.appThemeMode;
     final vibrationsEnabled = themeProvider.vibrationsEnabled;
     final searchMapEnabled = themeProvider.searchMapEnabled;
+    final searchOptionsOpening = themeProvider.searchOptionsOpening;
+    final showCalories = themeProvider.showCalories;
 
     return AppPageScaffold(
       title: 'Appearance',
@@ -278,6 +301,67 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                 onChanged: _saveSearchMapEnabled,
               ),
               const SizedBox(height: 32),
+              const SectionTitle(text: 'Search Options'),
+              const SizedBox(height: 8),
+              Text(
+                'How much is open when you start a search. You can still '
+                'open and close each part yourself.',
+                style: AppText.bodyFaint,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildOpeningOption(
+                      'Summaries',
+                      SearchOptionsOpening.closed,
+                      LucideIcons.chevronsDownUp,
+                      searchOptionsOpening,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildOpeningOption(
+                      'Quick icons',
+                      SearchOptionsOpening.stagesOpen,
+                      LucideIcons.layoutGrid,
+                      searchOptionsOpening,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildOpeningOption(
+                      'All options',
+                      SearchOptionsOpening.everything,
+                      LucideIcons.slidersHorizontal,
+                      searchOptionsOpening,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _openingDescription(searchOptionsOpening),
+                style: AppText.bodyFaint,
+              ),
+              const SizedBox(height: 32),
+              const SectionTitle(text: 'Trips'),
+              const SizedBox(height: 8),
+              Text(
+                'Choose what a trip tells you besides the way',
+                style: AppText.bodyFaint,
+              ),
+              const SizedBox(height: 16),
+              ToggleCard(
+                icon: LucideIcons.flame,
+                title: 'Show calories',
+                subtitle: showCalories
+                    ? 'An estimate for the walking on each trip'
+                    : 'Hidden on trip lists and trip details',
+                value: showCalories,
+                onChanged: _saveShowCalories,
+              ),
+              const SizedBox(height: 32),
               const SectionTitle(text: 'Interaction'),
               const SizedBox(height: 8),
               Text(
@@ -379,6 +463,60 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// A search-options choice, drawn like the theme choices above it but
+  /// without a preview gradient: there is no colour to show.
+  Widget _buildOpeningOption(
+    String title,
+    SearchOptionsOpening value,
+    IconData icon,
+    SearchOptionsOpening selected,
+  ) {
+    final accent = context.watch<ThemeProvider>().accentColor;
+    final isSelected = selected == value;
+
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      child: GestureDetector(
+        onTap: () => _saveSearchOptionsOpening(value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.accentWash(accent)
+                : AppColors.black.withValues(alpha: 0.02),
+            borderRadius: BorderRadius.circular(isSelected ? 15 : 14),
+            border: Border.all(
+              color: isSelected ? accent : AppColors.hairline,
+              width: isSelected ? 2.5 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 22,
+                color: isSelected
+                    ? accent
+                    : AppColors.black.withValues(alpha: 0.55),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? accent : AppColors.black,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -12,6 +12,8 @@ class PrefsKeys {
   static const String appTheme = 'app_theme';
   static const String vibrationsEnabled = 'vibrations_enabled';
   static const String searchMapEnabled = 'search_map_enabled';
+  static const String searchOptionsOpening = 'search_options_opening';
+  static const String showCalories = 'show_calories';
 
   static const String mapShowStops = 'map_show_stops';
   static const String mapQuickButton = 'map_quick_button';

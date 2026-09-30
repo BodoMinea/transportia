@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:transportia/models/street_leg_choice.dart';
 import 'package:transportia/models/transitous/enums.dart';
 import 'package:transportia/widgets/options/icon_controls.dart';
+import 'package:transportia/widgets/search/leg_panel.dart';
 import 'package:transportia/widgets/search/street_leg_section.dart';
 
 Future<void> _pumpLeg(
@@ -29,8 +30,8 @@ Future<void> _pumpLeg(
               budget: budget,
               maxBudget: maxBudget,
               tooltips: OptionTooltipController(),
-              expanded: budgetOpen,
-              onExpandedChanged: (_) {},
+              view: budgetOpen ? LegView.full : LegView.compact,
+              onViewChanged: (_) {},
               onChanged: (_) {},
               onBudgetChanged: onBudgetChanged ?? (_) {},
               limitToMyProviders: false,

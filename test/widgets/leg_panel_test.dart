@@ -9,11 +9,21 @@ class _Taps {
   final List<String> log = [];
   VoidCallback tap(String what) =>
       () => log.add(what);
+
+  /// What the panel handed its slider to call when the rider lets go.
+  VoidCallback? sliderDone;
+  int slidersBuilt = 0;
+}
+
+String _describe(LegView view) {
+  if (view.isFull) return 'full';
+  if (view.revealed case final title?) return 'reveal $title';
+  return 'compact';
 }
 
 Future<_Taps> _pump(
   WidgetTester tester, {
-  bool expanded = false,
+  LegView view = LegView.compact,
   GroupState railState = GroupState.some,
   String? changes,
 }) async {
@@ -29,8 +39,8 @@ Future<_Taps> _pump(
             width: 360,
             child: LegPanel(
               tooltips: OptionTooltipController(),
-              expanded: expanded,
-              onExpandedChanged: (full) => taps.log.add('expand $full'),
+              view: view,
+              onViewChanged: (next) => taps.log.add(_describe(next)),
               sections: [
                 LegSection(
                   mark: const Icon(LucideIcons.trainFront),
@@ -57,7 +67,12 @@ Future<_Taps> _pump(
                   icon: LucideIcons.waypoints,
                   title: 'Maximum changes',
                   value: changes,
-                  slider: const SizedBox(height: 10, key: Key('slider')),
+                  slider: (onChangeEnd) {
+                    taps
+                      ..sliderDone = onChangeEnd
+                      ..slidersBuilt += 1;
+                    return const SizedBox(height: 10, key: Key('slider'));
+                  },
                 ),
                 LegOption.toggle(
                   mark: const Icon(LucideIcons.mapPin),
@@ -113,19 +128,50 @@ void main() {
       expect(limited.valueIcon, isNull);
     });
 
-    testWidgets('a value chip opens the full view, where its slider is', (
-      tester,
-    ) async {
+    testWidgets('a value chip opens its slider under the rows', (tester) async {
       final taps = await _pump(tester);
       expect(find.byKey(const Key('slider')), findsNothing);
       await tester.tap(find.byType(ValueChip));
-      expect(taps.log, ['expand true']);
+      expect(taps.log, ['reveal Maximum changes']);
+    });
+
+    testWidgets('an opened slider sits in the compact view, chip marked', (
+      tester,
+    ) async {
+      await _pump(tester, view: const LegView.revealing('Maximum changes'));
+      expect(find.byKey(const Key('slider')), findsOneWidget);
+      expect(_pick('Rail'), findsOneWidget);
+      expect(tester.widget<ValueChip>(find.byType(ValueChip)).expanded, true);
+    });
+
+    testWidgets('letting go of the slider closes it', (tester) async {
+      final taps = await _pump(
+        tester,
+        view: const LegView.revealing('Maximum changes'),
+      );
+      taps.sliderDone!();
+      expect(taps.log, ['compact']);
+    });
+
+    testWidgets('tapping the chip again closes it', (tester) async {
+      final taps = await _pump(
+        tester,
+        view: const LegView.revealing('Maximum changes'),
+      );
+      await tester.tap(find.byType(ValueChip));
+      expect(taps.log, ['compact']);
+    });
+
+    testWidgets('an unknown revealed title opens nothing', (tester) async {
+      final taps = await _pump(tester, view: const LegView.revealing('Gone'));
+      expect(find.byKey(const Key('slider')), findsNothing);
+      expect(taps.slidersBuilt, 0);
     });
 
     testWidgets('the link opens the full view', (tester) async {
       final taps = await _pump(tester);
       await tester.tap(find.text('All options'));
-      expect(taps.log, ['expand true']);
+      expect(taps.log, ['full']);
     });
   });
 
@@ -133,7 +179,7 @@ void main() {
     testWidgets('each section is a heading with its choices under it', (
       tester,
     ) async {
-      final taps = await _pump(tester, expanded: true);
+      final taps = await _pump(tester, view: LegView.full);
       expect(find.byType(IconPick), findsNothing);
       expect(find.text('RAIL'), findsOneWidget);
 
@@ -142,7 +188,7 @@ void main() {
     });
 
     testWidgets('the whole heading switches its section', (tester) async {
-      final taps = await _pump(tester, expanded: true);
+      final taps = await _pump(tester, view: LegView.full);
       final row = tester.getRect(
         find.byWidgetPredicate((w) => w is LegHeading && w.title == 'Rail'),
       );
@@ -154,7 +200,7 @@ void main() {
     testWidgets('choices and sliders start where the headings\' text does', (
       tester,
     ) async {
-      await _pump(tester, expanded: true);
+      await _pump(tester, view: LegView.full);
       final title = tester.getTopLeft(find.text('RAIL'));
       final choice = tester.getTopLeft(find.byType(Wrap));
       expect(choice.dx, title.dx);
@@ -163,8 +209,10 @@ void main() {
     testWidgets('every option is there, slider open and action included', (
       tester,
     ) async {
-      final taps = await _pump(tester, expanded: true);
+      final taps = await _pump(tester, view: LegView.full);
       expect(find.byKey(const Key('slider')), findsOneWidget);
+      // Open for good here: letting go must not close anything.
+      expect(taps.sliderDone, isNull);
       expect(find.byIcon(LucideIcons.infinity), findsOneWidget);
 
       await tester.tap(find.text('TRAVEL THROUGH A STOP'));
@@ -175,15 +223,24 @@ void main() {
     testWidgets('a value is not a switch: its heading does nothing', (
       tester,
     ) async {
-      final taps = await _pump(tester, expanded: true);
+      final taps = await _pump(tester, view: LegView.full);
       await tester.tap(find.text('MAXIMUM CHANGES'));
       expect(taps.log, isEmpty);
     });
 
     testWidgets('the link closes it again', (tester) async {
-      final taps = await _pump(tester, expanded: true);
+      final taps = await _pump(tester, view: LegView.full);
       await tester.tap(find.text('Fewer options'));
-      expect(taps.log, ['expand false']);
+      expect(taps.log, ['compact']);
+    });
+
+    testWidgets('a letter mark is centred like the icons above it', (
+      tester,
+    ) async {
+      await _pump(tester, view: LegView.full);
+      final letter = tester.getCenter(find.text('R')).dx;
+      final icon = tester.getCenter(find.byIcon(LucideIcons.trainFront)).dx;
+      expect(letter, closeTo(icon, 0.5));
     });
   });
 }

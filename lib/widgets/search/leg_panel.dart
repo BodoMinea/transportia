@@ -54,13 +54,13 @@ class LegOption {
        value = null,
        slider = null;
 
-  /// A number, set with [slider]. [value] null means no limit, shown as the
-  /// infinity sign.
+  /// A number, set with the slider [slider] builds. [value] null means no
+  /// limit, shown as the infinity sign.
   const LegOption.value({
     required IconData this.icon,
     required this.title,
     required this.value,
-    required Widget this.slider,
+    required SliderBuilder this.slider,
   }) : mark = null,
        on = null,
        onToggle = null,
@@ -72,13 +72,44 @@ class LegOption {
   final bool? on;
   final VoidCallback? onToggle;
   final String? value;
-  final Widget? slider;
+  final SliderBuilder? slider;
 
   /// False for an action rather than a switch, such as picking a stop to
   /// travel through: it lives in the full view only.
   final bool inCompactRow;
 
   bool get isValue => slider != null;
+}
+
+/// Builds a value option's slider. [onChangeEnd] is called when the rider
+/// lets go, so a slider opened for one adjustment can close itself.
+typedef SliderBuilder = Widget Function(VoidCallback? onChangeEnd);
+
+/// What a [LegPanel] shows: the compact rows, the compact rows with one
+/// value's slider open under them, or everything.
+@immutable
+class LegView {
+  const LegView._({required this.isFull, this.revealed});
+
+  static const LegView compact = LegView._(isFull: false);
+  static const LegView full = LegView._(isFull: true);
+
+  /// The compact rows with the slider of the value titled [title] open: a
+  /// quick adjustment that should not cost the rider the rest of the card.
+  const LegView.revealing(String title)
+    : this._(isFull: false, revealed: title);
+
+  final bool isFull;
+
+  /// The title of the value option whose slider is open in the compact view.
+  final String? revealed;
+
+  @override
+  bool operator ==(Object other) =>
+      other is LegView && other.isFull == isFull && other.revealed == revealed;
+
+  @override
+  int get hashCode => Object.hash(isFull, revealed);
 }
 
 /// A leg's sections and options, in one of two views.
@@ -92,40 +123,53 @@ class LegPanel extends StatelessWidget {
     super.key,
     required this.sections,
     required this.options,
-    required this.expanded,
-    required this.onExpandedChanged,
+    required this.view,
+    required this.onViewChanged,
     required this.tooltips,
   });
 
   final List<LegSection> sections;
   final List<LegOption> options;
-  final bool expanded;
-  final ValueChanged<bool> onExpandedChanged;
+  final LegView view;
+  final ValueChanged<LegView> onViewChanged;
   final OptionTooltipController tooltips;
 
   @override
   Widget build(BuildContext context) {
+    final full = view.isFull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (expanded) ..._full() else ..._compact(),
+        if (full) ..._full() else ..._compact(),
         const SizedBox(height: 10),
         Align(
           alignment: Alignment.centerLeft,
           child: _MoreLink(
-            expanded: expanded,
-            onPressed: () => onExpandedChanged(!expanded),
+            expanded: full,
+            onPressed: () =>
+                onViewChanged(full ? LegView.compact : LegView.full),
           ),
         ),
       ],
     );
   }
 
+  /// Opens a value's slider under the compact rows, or closes it again when
+  /// its chip is tapped a second time.
+  void _toggleRevealed(LegOption option) => onViewChanged(
+    view.revealed == option.title
+        ? LegView.compact
+        : LegView.revealing(option.title),
+  );
+
   List<Widget> _compact() {
     final compactOptions = [
       for (final option in options)
         if (option.inCompactRow) option,
     ];
+    final revealed = compactOptions
+        .where((option) => option.isValue && option.title == view.revealed)
+        .firstOrNull;
     return [
       Wrap(
         spacing: 6,
@@ -159,9 +203,8 @@ class LegPanel extends StatelessWidget {
                   value: option.value,
                   valueIcon: option.value == null ? LucideIcons.infinity : null,
                   tooltips: tooltips,
-                  expanded: false,
-                  // The slider lives in the full view.
-                  onPressed: () => onExpandedChanged(true),
+                  expanded: option == revealed,
+                  onPressed: () => _toggleRevealed(option),
                 )
               else
                 SizedBox(
@@ -176,6 +219,12 @@ class LegPanel extends StatelessWidget {
                 ),
           ],
         ),
+      ],
+      if (revealed != null) ...[
+        const SizedBox(height: 4),
+        // Closes once the rider lets go: it was opened for one adjustment,
+        // and the chip above already shows the value it was set to.
+        revealed.slider!(() => onViewChanged(LegView.compact)),
       ],
     ];
   }
@@ -237,7 +286,7 @@ class LegPanel extends StatelessWidget {
             padding: const EdgeInsets.only(
               left: LegHeading.textIndent - _sliderInset,
             ),
-            child: option.slider,
+            child: option.slider!(null),
           ),
         ] else
           LegHeading(
@@ -299,11 +348,17 @@ class LegHeading extends StatelessWidget {
         children: [
           SizedBox(
             width: _markColumn,
-            child: IconTheme(
-              data: IconThemeData(size: 19, color: color),
-              child: DefaultTextStyle.merge(
-                style: TextStyle(color: color),
-                child: mark,
+            // Centred, not started: an icon fills its box and so centres
+            // itself, but a letter such as the regional R is only as wide
+            // as it is and would sit at the left, as if indented under the
+            // heading above.
+            child: Center(
+              child: IconTheme(
+                data: IconThemeData(size: 19, color: color),
+                child: DefaultTextStyle.merge(
+                  style: TextStyle(color: color),
+                  child: mark,
+                ),
               ),
             ),
           ),

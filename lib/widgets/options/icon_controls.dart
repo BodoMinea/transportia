@@ -523,6 +523,7 @@ class OptionSlider extends StatelessWidget {
     this.min = 0,
     this.divisions,
     this.semanticLabel,
+    this.onChangeEnd,
   });
 
   final double value;
@@ -531,6 +532,9 @@ class OptionSlider extends StatelessWidget {
   final int? divisions;
   final ValueChanged<double> onChanged;
   final String? semanticLabel;
+
+  /// Called once the rider lets go.
+  final VoidCallback? onChangeEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -545,6 +549,7 @@ class OptionSlider extends StatelessWidget {
         divisions: divisions,
         activeColor: AppColors.accentOf(context),
         onChanged: onChanged,
+        onChangeEnd: onChangeEnd == null ? null : (_) => onChangeEnd!(),
       ),
     );
   }

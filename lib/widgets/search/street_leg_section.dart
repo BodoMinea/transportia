@@ -45,8 +45,8 @@ class StreetLegSection extends StatelessWidget {
     required this.choice,
     required this.budget,
     required this.maxBudget,
-    required this.expanded,
-    required this.onExpandedChanged,
+    required this.view,
+    required this.onViewChanged,
     required this.tooltips,
     required this.onChanged,
     required this.onBudgetChanged,
@@ -61,8 +61,8 @@ class StreetLegSection extends StatelessWidget {
   /// clamped away.
   final Duration maxBudget;
 
-  final bool expanded;
-  final ValueChanged<bool> onExpandedChanged;
+  final LegView view;
+  final ValueChanged<LegView> onViewChanged;
   final OptionTooltipController tooltips;
   final ValueChanged<StreetLegChoice> onChanged;
   final ValueChanged<Duration> onBudgetChanged;
@@ -77,18 +77,19 @@ class StreetLegSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return LegPanel(
       tooltips: tooltips,
-      expanded: expanded,
-      onExpandedChanged: onExpandedChanged,
+      view: view,
+      onViewChanged: onViewChanged,
       sections: [for (final section in StreetSection.values) _section(section)],
       options: [
         LegOption.value(
           icon: LucideIcons.clock,
           title: 'Time budget',
           value: budgetSummaryText(budget),
-          slider: _BudgetSlider(
+          slider: (onChangeEnd) => _BudgetSlider(
             budget: budget,
             maxBudget: maxBudget,
             onChanged: onBudgetChanged,
+            onChangeEnd: onChangeEnd,
           ),
         ),
       ],
@@ -133,11 +134,13 @@ class _BudgetSlider extends StatelessWidget {
     required this.budget,
     required this.maxBudget,
     required this.onChanged,
+    required this.onChangeEnd,
   });
 
   final Duration budget;
   final Duration maxBudget;
   final ValueChanged<Duration> onChanged;
+  final VoidCallback? onChangeEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -151,6 +154,7 @@ class _BudgetSlider extends StatelessWidget {
           max: maxMinutes,
           divisions: (maxMinutes / step).round(),
           semanticLabel: 'Minutes',
+          onChangeEnd: onChangeEnd,
           onChanged: (value) =>
               onChanged(Duration(minutes: (value / step).round() * step)),
         ),

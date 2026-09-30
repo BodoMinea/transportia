@@ -336,6 +336,9 @@ class _ItineraryCardState extends State<ItineraryCard>
   @override
   Widget build(BuildContext context) {
     final itinerary = widget.itinerary;
+    final showCalories = context.select<ThemeProvider, bool>(
+      (theme) => theme.showCalories,
+    );
     final delaySummary = _delaySummaryLabel();
     final hasDeparted = _hasDeparted();
     final departureText = _departureText();
@@ -458,7 +461,7 @@ class _ItineraryCardState extends State<ItineraryCard>
                     ),
                   ),
                   const SizedBox(width: 12),
-                  if (itinerary.walkingDistance > 0) ...[
+                  if (showCalories && itinerary.walkingDistance > 0) ...[
                     Icon(
                       LucideIcons.flame,
                       size: 16,

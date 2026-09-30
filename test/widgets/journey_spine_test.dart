@@ -7,6 +7,7 @@ import 'package:transportia/models/street_leg_choice.dart';
 import 'package:transportia/models/transit_mode_group.dart';
 import 'package:transportia/models/transitous/enums.dart';
 import 'package:transportia/models/transitous/server_config.dart';
+import 'package:transportia/providers/theme_provider.dart';
 import 'package:transportia/widgets/options/icon_controls.dart';
 import 'package:transportia/theme/journey_metrics.dart';
 import 'package:transportia/widgets/journey/spine_node.dart';
@@ -20,10 +21,15 @@ import 'package:transportia/widgets/search/street_leg_section.dart';
 /// Holds the options the way the search screen will, so a tap on a control
 /// comes back as a rebuilt spine rather than only as a callback.
 class _Host extends StatefulWidget {
-  const _Host({required this.initial, this.hasRentalProviders = false});
+  const _Host({
+    required this.initial,
+    this.hasRentalProviders = false,
+    this.opening = SearchOptionsOpening.closed,
+  });
 
   final RoutingOptions initial;
   final bool hasRentalProviders;
+  final SearchOptionsOpening opening;
 
   @override
   State<_Host> createState() => _HostState();
@@ -33,6 +39,10 @@ class _HostState extends State<_Host> {
   late RoutingOptions options = widget.initial;
   int viaTaps = 0;
   bool limitToMyProviders = false;
+  late SearchOptionsOpening opening = widget.opening;
+
+  /// The setting arriving, or changing, while the card is up.
+  void setOpening(SearchOptionsOpening next) => setState(() => opening = next);
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +63,7 @@ class _HostState extends State<_Host> {
               hasRentalProviders: widget.hasRentalProviders,
               onLimitToMyProvidersChanged: (value) =>
                   setState(() => limitToMyProviders = value),
+              opening: opening,
             ),
           ),
         ),
@@ -65,6 +76,7 @@ Future<_HostState> _pumpSpine(
   WidgetTester tester, {
   RoutingOptions initial = RoutingOptions.defaults,
   bool hasRentalProviders = false,
+  SearchOptionsOpening opening = SearchOptionsOpening.closed,
 }) async {
   // Tall enough that an expanded stage is on screen and so tappable; the
   // default 800x600 surface would push the last stage past the bottom.
@@ -74,7 +86,11 @@ Future<_HostState> _pumpSpine(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   await tester.pumpWidget(
-    _Host(initial: initial, hasRentalProviders: hasRentalProviders),
+    _Host(
+      initial: initial,
+      hasRentalProviders: hasRentalProviders,
+      opening: opening,
+    ),
   );
   return tester.state<_HostState>(find.byType(_Host));
 }
@@ -244,20 +260,39 @@ void main() {
       await _quiet(tester);
     });
 
-    testWidgets('the budget slider is open in the full view', (tester) async {
+    testWidgets('the budget chip opens its slider in place for one change', (
+      tester,
+    ) async {
       final host = await _pumpSpine(tester);
       await _open(tester, 'TO THE STATION');
       expect(find.byType(OptionSlider), findsNothing);
 
-      // The value chip opens the full view, where the slider lives.
       await tester.tap(_valueChip('Time budget'));
       await tester.pumpAndSettle();
+      // Under the compact rows, not in the full view.
+      expect(find.text('All options').hitTestable(), findsOneWidget);
 
       final slider = tester.widget<OptionSlider>(find.byType(OptionSlider));
       slider.onChanged(30);
       await tester.pump();
       expect(host.options.maxFirstMileTime, const Duration(minutes: 30));
       expect(find.text('Walk · 30 min'), findsOneWidget);
+
+      slider.onChangeEnd!();
+      await tester.pumpAndSettle();
+      expect(find.byType(OptionSlider), findsNothing);
+    });
+
+    testWidgets('the budget slider stays open in the full view', (
+      tester,
+    ) async {
+      await _pumpSpine(tester);
+      await _open(tester, 'TO THE STATION');
+      await tester.tap(find.text('All options').hitTestable());
+      await tester.pumpAndSettle();
+
+      final slider = tester.widget<OptionSlider>(find.byType(OptionSlider));
+      expect(slider.onChangeEnd, isNull);
     });
 
     testWidgets('the stage icon follows the last section on', (tester) async {
@@ -395,6 +430,94 @@ void main() {
       expect(host.options.maxTransfers, isNull);
       expect(find.text('All transport · unlimited changes'), findsOneWidget);
       await _quiet(tester);
+    });
+  });
+
+  group('opening', () {
+    Finder visible(String text) => find.text(text).hitTestable();
+
+    testWidgets('closing a stage forgets that it showed everything', (
+      tester,
+    ) async {
+      await _pumpSpine(tester);
+      await _open(tester, 'TO THE STATION');
+      await tester.tap(visible('All options'));
+      await tester.pumpAndSettle();
+      expect(visible('Fewer options'), findsOneWidget);
+
+      await _open(tester, 'TO THE STATION');
+      await _open(tester, 'TO THE STATION');
+      expect(visible('Fewer options'), findsNothing);
+      expect(visible('All options'), findsOneWidget);
+    });
+
+    testWidgets('closing a stage closes a slider opened from its chip', (
+      tester,
+    ) async {
+      await _pumpSpine(tester);
+      await _open(tester, 'PUBLIC TRANSPORT');
+      await tester.tap(_valueChip('Maximum changes'));
+      await tester.pumpAndSettle();
+      expect(find.byType(OptionSlider), findsOneWidget);
+
+      await _open(tester, 'PUBLIC TRANSPORT');
+      await _open(tester, 'PUBLIC TRANSPORT');
+      expect(find.byType(OptionSlider), findsNothing);
+    });
+
+    testWidgets('closed by default', (tester) async {
+      await _pumpSpine(tester);
+      expect(visible('All options'), findsNothing);
+    });
+
+    testWidgets('stages open shows every stage\'s quick picks', (tester) async {
+      await _pumpSpine(tester, opening: SearchOptionsOpening.stagesOpen);
+      await tester.pumpAndSettle();
+      expect(visible('All options'), findsNWidgets(3));
+      expect(visible('Fewer options'), findsNothing);
+    });
+
+    testWidgets('everything open shows every option, still closable', (
+      tester,
+    ) async {
+      await _pumpSpine(tester, opening: SearchOptionsOpening.everything);
+      await tester.pumpAndSettle();
+      expect(visible('Fewer options'), findsNWidgets(3));
+
+      await tester.tap(visible('Fewer options').first);
+      await tester.pumpAndSettle();
+      expect(visible('Fewer options'), findsNWidgets(2));
+
+      await _open(tester, 'PUBLIC TRANSPORT');
+      expect(visible('Fewer options'), findsNWidgets(1));
+    });
+
+    testWidgets('a stage reopened under "everything" shows everything again', (
+      tester,
+    ) async {
+      await _pumpSpine(tester, opening: SearchOptionsOpening.everything);
+      await tester.pumpAndSettle();
+      await tester.tap(visible('Fewer options').first);
+      await tester.pumpAndSettle();
+
+      await _open(tester, 'TO THE STATION');
+      await _open(tester, 'TO THE STATION');
+      expect(visible('Fewer options'), findsNWidgets(3));
+    });
+
+    testWidgets('a setting read late still applies until the rider acts', (
+      tester,
+    ) async {
+      final host = await _pumpSpine(tester);
+      host.setOpening(SearchOptionsOpening.stagesOpen);
+      await tester.pumpAndSettle();
+      expect(visible('All options'), findsNWidgets(3));
+
+      await _open(tester, 'TO THE STATION');
+      host.setOpening(SearchOptionsOpening.closed);
+      await tester.pumpAndSettle();
+      // Taken as the rider's own arrangement: left alone.
+      expect(visible('All options'), findsNWidgets(2));
     });
   });
 
