@@ -280,4 +280,49 @@ void main() {
       ]);
     });
   });
+
+  group('what the journey\'s summary counts', () {
+    Leg walk({
+      required int from,
+      required int to,
+      double lat = 49.0,
+      List<Map<String, dynamic>> alerts = const [],
+    }) => Leg.fromJson({
+      'mode': 'WALK',
+      'startTime': _at(from),
+      'endTime': _at(to),
+      'duration': (to - from) * 60,
+      'alerts': alerts,
+      'from': {'name': 'x', 'lat': lat, 'lon': 8.0},
+      'to': {'name': 'y', 'lat': lat, 'lon': 8.0},
+    });
+
+    test('the blocks shown, not the feed\'s raw alerts', () {
+      final lift = _alert('Lift out');
+      final notices = journeyNotices([
+        _leg(
+          alerts: [lift],
+          to: _place('B', alerts: [lift]),
+          stops: [_place('X', cancelled: true)],
+        ),
+      ]);
+      // One lift alert said twice is one block; the skipped stop is a block
+      // though the feed sent no alert for it.
+      expect(_titles(notices), ['One stop on the way is skipped.', 'Lift out']);
+    });
+
+    test('a walk the itinerary leaves out is not counted', () {
+      // A few metres to the first stop is dropped from the screen, so an
+      // alert on it is never a block.
+      final notices = journeyNotices([
+        walk(from: -1, to: 0, alerts: [_alert('Hidden')]),
+        _leg(),
+      ]);
+      expect(notices, isEmpty);
+    });
+
+    test('an empty journey has nothing to count', () {
+      expect(journeyNotices(const []), isEmpty);
+    });
+  });
 }

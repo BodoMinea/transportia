@@ -995,11 +995,14 @@ class JourneyOverviewWidget extends StatelessWidget {
                       '${itinerary.fare!.amount.toStringAsFixed(2)}',
                       itinerary.fare!.currency,
                     ),
-                  if (itinerary.alertsCount > 0)
+                  // The blocks below, counted: an alert said on two stops is
+                  // one block, and a missed change is one too.
+                  if (journeyNotices(itinerary.legs).length case final count
+                      when count > 0)
                     _buildStatChip(
                       LucideIcons.triangleAlert,
-                      '${itinerary.alertsCount}',
-                      itinerary.alertsCount == 1 ? 'alert' : 'alerts',
+                      '$count',
+                      count == 1 ? 'alert' : 'alerts',
                     ),
                 ],
               ),

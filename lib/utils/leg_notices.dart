@@ -1,5 +1,6 @@
 import '../models/itinerary.dart';
 import 'changeover.dart';
+import 'itinerary_leg_utils.dart';
 
 /// Said on the change itself and, naming the station, at the head of the
 /// journey, so the banner and the row it points at read as one statement.
@@ -67,6 +68,23 @@ List<LegNotice> legNotices(Leg leg, {Changeover? changeover}) {
       return bySeverity != 0 ? bySeverity : a.$1.compareTo(b.$1);
     });
   return [for (final (_, notice) in indexed) notice];
+}
+
+/// Every notice the itinerary shows, leg by leg: the legs as it lays them
+/// out, each change with its changeover. Counting these gives the number of
+/// blocks the rider will actually see, which is what a summary should say.
+List<LegNotice> journeyNotices(List<Leg> legs) {
+  final displayLegs = buildDisplayLegs(legs);
+  final changeovers = changeoversOf(displayLegs);
+  return [
+    for (final entry in displayLegs)
+      ...legNotices(
+        entry.leg,
+        changeover: entry.isTransfer
+            ? changeovers.where((c) => identical(c.transfer, entry.leg)).first
+            : null,
+      ),
+  ];
 }
 
 int _skippedStops(Leg leg) {
