@@ -45,6 +45,10 @@ class ItineraryMapScreen extends StatefulWidget {
   State<ItineraryMapScreen> createState() => _ItineraryMapScreenState();
 }
 
+/// How much of the screen's width one carousel card takes; the rest shows
+/// the edges of its neighbours.
+const double _kCarouselPageFraction = 0.86;
+
 class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
   MapLibreMapController? _controller;
   final List<Line> _lines = [];
@@ -95,7 +99,7 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
         : 0;
     _pageController = PageController(
       initialPage: _currentPage,
-      viewportFraction: widget.showCarousel ? 0.86 : 1.0,
+      viewportFraction: widget.showCarousel ? _kCarouselPageFraction : 1.0,
     );
   }
 
@@ -184,18 +188,35 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          height: 124,
-          child: PageView.builder(
-            controller: _pageController,
-            physics: const BouncingScrollPhysics(),
-            onPageChanged: _handlePageChanged,
-            clipBehavior: Clip.none,
-            padEnds: true,
-            itemCount: totalItems,
-            itemBuilder: (context, index) {
-              return _buildCarouselItem(index, totalItems);
-            },
+        LayoutBuilder(
+          builder: (context, constraints) => Stack(
+            children: [
+              // A PageView needs a height before it builds its pages, so
+              // every card is laid out here once, unseen, at a page's width,
+              // and the carousel takes the tallest. A fixed height could not
+              // hold a delay line, a warning or larger text in every case.
+              SizedBox(width: constraints.maxWidth),
+              for (var i = 0; i < totalItems; i++)
+                _unseen(
+                  SizedBox(
+                    width: constraints.maxWidth * _kCarouselPageFraction,
+                    child: _buildCarouselItem(i, totalItems),
+                  ),
+                ),
+              Positioned.fill(
+                child: PageView.builder(
+                  controller: _pageController,
+                  physics: const BouncingScrollPhysics(),
+                  onPageChanged: _handlePageChanged,
+                  clipBehavior: Clip.none,
+                  padEnds: true,
+                  itemCount: totalItems,
+                  itemBuilder: (context, index) {
+                    return _buildCarouselItem(index, totalItems);
+                  },
+                ),
+              ),
+            ],
           ),
         ),
         if (totalItems > 1) ...[
@@ -205,6 +226,20 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
       ],
     );
   }
+
+  /// Takes up its room and nothing else: not drawn, not tappable, not read
+  /// out.
+  static Widget _unseen(Widget child) => ExcludeSemantics(
+    child: IgnorePointer(
+      child: Visibility(
+        visible: false,
+        maintainSize: true,
+        maintainAnimation: true,
+        maintainState: true,
+        child: child,
+      ),
+    ),
+  );
 
   Widget _buildCarouselItem(int index, int totalItems) {
     final padding = const EdgeInsets.symmetric(horizontal: 12);
@@ -785,7 +820,10 @@ class _JourneySummaryCard extends StatelessWidget {
         children: [
           Text('Journey overview', style: AppText.bodyStrong),
           const SizedBox(height: 12),
+          // Top-aligned: a delay under one of the times makes its column
+          // taller, and centring would pull the labels out of line.
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: _JourneyTimeTile(
@@ -882,7 +920,7 @@ class _StopInfoPopup extends StatelessWidget {
                 if (hasArrival || hasDeparture) ...[
                   const SizedBox(height: 6),
                   if (hasArrival)
-                    DelayedTime.inline(
+                    DelayedTime.start(
                       stop.arrivalTime,
                       label: 'Arrival',
                       isArrival: hasDeparture,
@@ -890,7 +928,7 @@ class _StopInfoPopup extends StatelessWidget {
                     ),
                   if (hasArrival && hasDeparture) const SizedBox(height: 2),
                   if (hasDeparture)
-                    DelayedTime.inline(
+                    DelayedTime.start(
                       stop.departureTime,
                       label: 'Departure',
                       fontSize: 13,
@@ -1125,18 +1163,7 @@ class _TransferCarouselCard extends StatelessWidget {
                   color: AppColors.black,
                 ),
               ),
-              // In the heading: the card's height is fixed and already full.
-              Expanded(
-                child: changeover.platformUnknown
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: PlatformUnknownNotice.compact(),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
+              const Spacer(),
               Text(formatDuration(leg.duration), style: AppText.bodyStrong),
             ],
           ),
@@ -1162,6 +1189,10 @@ class _TransferCarouselCard extends StatelessWidget {
             time: walked,
             label: leg.toName,
           ),
+          if (changeover.platformUnknown) ...[
+            const SizedBox(height: 10),
+            const PlatformUnknownNotice(),
+          ],
         ],
       ),
     );
@@ -1195,7 +1226,13 @@ class _JourneyTimeTile extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        DelayedTime.inline(time, fontSize: 20, fontWeight: FontWeight.w700),
+        alignEnd
+            ? DelayedTime.end(time, fontSize: 20, fontWeight: FontWeight.w700)
+            : DelayedTime.start(
+                time,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
       ],
     );
   }
@@ -1214,11 +1251,14 @@ class _LegStopRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Held to the time's line, so a delay under it pushes the row down
+    // rather than drifting the icon and the name off centre.
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, size: 16, color: AppColors.black.withValues(alpha: 0.4)),
         const SizedBox(width: 8),
-        DelayedTime.inline(time),
+        DelayedTime.start(time),
         const SizedBox(width: 8),
         Expanded(
           child: Text(

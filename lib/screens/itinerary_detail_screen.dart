@@ -1912,7 +1912,7 @@ class TransferLegCard extends StatelessWidget {
             ],
             // A change that will not work outranks one whose walk is a guess.
             if (!missed && (changeover?.platformUnknown ?? false)) ...[
-              const SizedBox(height: 5),
+              const SizedBox(height: PlatformUnknownNotice.lineHeight),
               const PlatformUnknownNotice(),
             ],
           ],

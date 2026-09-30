@@ -43,14 +43,14 @@ void main() {
   testWidgets('a late time is printed as it really is, not as planned', (
     tester,
   ) async {
-    await _pump(tester, DelayedTime.inline(_late(3)));
-    expect(find.textContaining('09:38'), findsOne);
+    await _pump(tester, DelayedTime.start(_late(3)));
+    expect(find.text('09:38'), findsOne);
     expect(find.textContaining('09:35'), findsNothing);
     expect(find.text('+3m'), findsOne);
   });
 
-  testWidgets('the time is red and the delay beside it grey', (tester) async {
-    await _pump(tester, DelayedTime.inline(_late(3)));
+  testWidgets('the time is red and the delay under it grey', (tester) async {
+    await _pump(tester, DelayedTime.start(_late(3)));
     expect(_colourOf(tester, '09:38'), kLateDeparture);
     expect(_colourOf(tester, '+3m'), delayNoteColor());
   });
@@ -58,18 +58,18 @@ void main() {
   testWidgets('beside a departure, an arrival takes the lighter red', (
     tester,
   ) async {
-    await _pump(tester, DelayedTime.inline(_late(3), isArrival: true));
+    await _pump(tester, DelayedTime.start(_late(3), isArrival: true));
     expect(_colourOf(tester, '09:38'), kLateArrival);
   });
 
   testWidgets('on time and reported is green, with no delay', (tester) async {
-    await _pump(tester, DelayedTime.inline(_late(0)));
+    await _pump(tester, DelayedTime.start(_late(0)));
     expect(_colourOf(tester, '09:35'), kOnTimeDeparture);
     expect(find.textContaining('+'), findsNothing);
   });
 
   testWidgets('the label stays out of the time\'s colour', (tester) async {
-    await _pump(tester, DelayedTime.inline(_late(3), label: 'Arr'));
+    await _pump(tester, DelayedTime.start(_late(3), label: 'Arr'));
     expect(_colourOf(tester, 'Arr '), isNot(kLateDeparture));
     expect(_colourOf(tester, '09:38'), kLateDeparture);
   });
@@ -77,22 +77,48 @@ void main() {
   testWidgets('no time at all keeps the row with a placeholder', (
     tester,
   ) async {
-    await _pump(tester, const DelayedTime.inline(null, label: 'Arr'));
+    await _pump(tester, const DelayedTime.start(null, label: 'Arr'));
     expect(find.textContaining('--:--'), findsOne);
   });
 
-  testWidgets('stacked puts the delay under the time', (tester) async {
-    await _pump(tester, DelayedTime.stacked(_late(3)));
-    final time = tester.getTopLeft(find.textContaining('09:38'));
-    final delay = tester.getTopLeft(find.text('+3m'));
-    expect(delay.dy, greaterThan(time.dy));
+  testWidgets('the delay sits under the time, starting where it starts', (
+    tester,
+  ) async {
+    await _pump(tester, DelayedTime.start(_late(3)));
+    final time = tester.getRect(find.text('09:38'));
+    final delay = tester.getRect(find.text('+3m'));
+    expect(delay.top, greaterThanOrEqualTo(time.bottom));
+    expect(delay.left, time.left);
   });
 
-  testWidgets('inline puts it after the time on the same line', (tester) async {
-    await _pump(tester, DelayedTime.inline(_late(3)));
-    final time = tester.getRect(find.textContaining('09:38'));
+  testWidgets('.end lines the delay up with the end of the time', (
+    tester,
+  ) async {
+    await _pump(tester, DelayedTime.end(_late(3)));
+    final time = tester.getRect(find.text('09:38'));
     final delay = tester.getRect(find.text('+3m'));
-    expect(delay.left, greaterThan(time.right));
-    expect(delay.bottom, closeTo(time.bottom, 4));
+    expect(delay.top, greaterThanOrEqualTo(time.bottom));
+    expect(delay.right, time.right);
+  });
+
+  testWidgets('with a label, the delay is under the time, not the label', (
+    tester,
+  ) async {
+    await _pump(tester, DelayedTime.start(_late(3), label: 'Arr'));
+    final label = tester.getRect(find.text('Arr '));
+    final time = tester.getRect(find.text('09:38'));
+    final delay = tester.getRect(find.text('+3m'));
+    expect(delay.left, time.left);
+    expect(delay.left, greaterThanOrEqualTo(label.right));
+  });
+
+  testWidgets('a delay makes the time taller, so its row grows with it', (
+    tester,
+  ) async {
+    await _pump(tester, DelayedTime.start(_late(0)));
+    final onTime = tester.getSize(find.byType(DelayedTime)).height;
+    await _pump(tester, DelayedTime.start(_late(3)));
+    final late = tester.getSize(find.byType(DelayedTime)).height;
+    expect(late, greaterThan(onTime));
   });
 }

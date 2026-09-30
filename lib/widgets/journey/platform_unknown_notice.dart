@@ -10,49 +10,37 @@ import '../../theme/app_colors.dart';
 /// numbers for the walk are just a guess. The icon carries the colour; the
 /// words stay in the text colour, since amber text is hard to read on white.
 class PlatformUnknownNotice extends StatelessWidget {
-  /// The whole sentence, on a line of its own under the change.
-  const PlatformUnknownNotice({super.key}) : _compact = false;
-
-  /// Two words, to sit beside a heading where there is no room for a line.
-  const PlatformUnknownNotice.compact({super.key}) : _compact = true;
-
-  final bool _compact;
+  const PlatformUnknownNotice({super.key});
 
   static const String message =
       'Platform unknown: walking route and time may be off.';
-  static const String _short = 'Platform unknown';
+
+  /// One line of the notice. The itinerary leaves this much space above it,
+  /// so the warning stands apart from the facts about the walk.
+  static const double lineHeight = 18;
+  static const double _fontSize = 13;
 
   @override
   Widget build(BuildContext context) {
-    final text = Text(
-      _compact ? _short : message,
-      maxLines: _compact ? 1 : null,
-      overflow: _compact ? TextOverflow.ellipsis : null,
-      style: TextStyle(
-        fontSize: _compact ? 12 : 13,
-        fontWeight: FontWeight.w600,
-        color: AppColors.black.withValues(alpha: 0.75),
-      ),
-    );
     return Semantics(
       container: true,
-      // The short form still says the whole thing to a screen reader.
-      label: _compact ? message : null,
-      excludeSemantics: _compact,
       child: Row(
-        mainAxisSize: _compact ? MainAxisSize.min : MainAxisSize.max,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        // Centred on the whole of the text, one line or two.
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 1),
-            child: Icon(
-              LucideIcons.triangleAlert,
-              size: 14,
-              color: AppColors.alertIcon,
+          Icon(LucideIcons.triangleAlert, size: 18, color: AppColors.alertIcon),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: _fontSize,
+                height: lineHeight / _fontSize,
+                fontWeight: FontWeight.w600,
+                color: AppColors.black.withValues(alpha: 0.75),
+              ),
             ),
           ),
-          const SizedBox(width: 6),
-          if (_compact) Flexible(child: text) else Expanded(child: text),
         ],
       ),
     );

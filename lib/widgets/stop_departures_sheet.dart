@@ -286,7 +286,7 @@ class _DepartureTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            DelayedTime.stacked(departure),
+            DelayedTime.end(departure),
           ],
         ),
       ),

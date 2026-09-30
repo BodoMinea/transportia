@@ -6,31 +6,34 @@ import '../utils/reported_time.dart';
 import '../utils/time_utils.dart';
 
 /// A time at a stop, printed the way the journey spine prints it: the real
-/// time, coloured by who is reporting it, and the delay beside it in grey.
+/// time, coloured by who is reporting it, and the delay right beneath it in
+/// grey.
 ///
 /// Every list of times goes through this, so no screen can go back to
-/// printing the plan with a "+5m" for the rider to add up.
+/// printing the plan with a "+5m" for the rider to add up. The delay is a
+/// line of its own in the layout rather than something drawn over it, so
+/// whatever holds a delayed time grows to fit it.
 class DelayedTime extends StatelessWidget {
-  /// The delay on the same line, after the time.
-  const DelayedTime.inline(
+  /// The delay under the time's first digit — for times read left to right.
+  const DelayedTime.start(
     this.time, {
     super.key,
     this.label,
     this.isArrival = false,
     this.fontSize = 14,
     this.fontWeight = FontWeight.w600,
-  }) : _stacked = false;
+  }) : _alignment = CrossAxisAlignment.start;
 
-  /// The delay on its own line under the time, both aligned to the end — for
-  /// a column of times at the end of a row.
-  const DelayedTime.stacked(
+  /// The delay under the time's last digit — for a column of times against
+  /// the end of a row.
+  const DelayedTime.end(
     this.time, {
     super.key,
     this.label,
     this.isArrival = false,
     this.fontSize = 14,
     this.fontWeight = FontWeight.w600,
-  }) : _stacked = true;
+  }) : _alignment = CrossAxisAlignment.end;
 
   /// Null prints a placeholder, so a row of arrivals and departures keeps its
   /// shape where the feed has no time for one of them.
@@ -46,7 +49,7 @@ class DelayedTime extends StatelessWidget {
 
   final double fontSize;
   final FontWeight fontWeight;
-  final bool _stacked;
+  final CrossAxisAlignment _alignment;
 
   static const String _placeholder = '--:--';
 
@@ -61,21 +64,33 @@ class DelayedTime extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final clock = _clock();
     final delay = _delay();
-    if (delay == null) return clock;
-    if (_stacked) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [clock, delay],
-      );
-    }
+    final column = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: _alignment,
+      children: [_clock(), ?delay],
+    );
+    final label = this.label;
+    if (label == null) return column;
+    // Beside the column rather than in it, so the delay lines up under the
+    // time it belongs to, not under the word naming it.
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.baseline,
       textBaseline: TextBaseline.alphabetic,
-      children: [clock, const SizedBox(width: 6), delay],
+      children: [
+        Text(
+          '$label ',
+          maxLines: 1,
+          softWrap: false,
+          style: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w500,
+            color: AppColors.black.withValues(alpha: 0.6),
+          ),
+        ),
+        column,
+      ],
     );
   }
 
@@ -88,26 +103,15 @@ class DelayedTime extends StatelessWidget {
             delay: time.delay,
             isArrival: isArrival,
           );
-    return Text.rich(
-      TextSpan(
-        children: [
-          if (label case final label?)
-            TextSpan(
-              text: '$label ',
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                color: AppColors.black.withValues(alpha: 0.6),
-              ),
-            ),
-          TextSpan(
-            text: time == null ? _placeholder : formatTime(time.shown),
-            style: TextStyle(color: timeColor),
-          ),
-        ],
-      ),
+    return Text(
+      time == null ? _placeholder : formatTime(time.shown),
       maxLines: 1,
       softWrap: false,
-      style: TextStyle(fontSize: fontSize, fontWeight: fontWeight),
+      style: TextStyle(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: timeColor,
+      ),
     );
   }
 

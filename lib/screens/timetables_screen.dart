@@ -824,7 +824,7 @@ class _StopTimeCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                DelayedTime.inline(
+                DelayedTime.end(
                   ReportedTime.from(
                     stopTime.place.arrival,
                     stopTime.place.scheduledArrival,
@@ -834,7 +834,7 @@ class _StopTimeCard extends StatelessWidget {
                   isArrival: true,
                 ),
                 const SizedBox(height: 4),
-                DelayedTime.inline(
+                DelayedTime.end(
                   ReportedTime.from(
                     stopTime.place.departure,
                     stopTime.place.scheduledDeparture,
