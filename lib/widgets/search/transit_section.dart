@@ -25,16 +25,16 @@ class TransitSection extends StatelessWidget {
   const TransitSection({
     super.key,
     required this.options,
-    required this.expanded,
-    required this.onExpandedChanged,
+    required this.view,
+    required this.onViewChanged,
     required this.tooltips,
     required this.onChanged,
     required this.onViaPressed,
   });
 
   final RoutingOptions options;
-  final bool expanded;
-  final ValueChanged<bool> onExpandedChanged;
+  final LegView view;
+  final ValueChanged<LegView> onViewChanged;
   final OptionTooltipController tooltips;
   final ValueChanged<RoutingOptions> onChanged;
   final VoidCallback onViaPressed;
@@ -48,8 +48,8 @@ class TransitSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return LegPanel(
       tooltips: tooltips,
-      expanded: expanded,
-      onExpandedChanged: onExpandedChanged,
+      view: view,
+      onViewChanged: onViewChanged,
       sections: [
         for (final group in TransitModeGroup.values)
           _section(
@@ -97,7 +97,11 @@ class TransitSection extends StatelessWidget {
       icon: LucideIcons.waypoints,
       title: 'Maximum changes',
       value: options.maxTransfers?.toString(),
-      slider: _ChangesSlider(options: options, onChanged: onChanged),
+      slider: (onChangeEnd) => _ChangesSlider(
+        options: options,
+        onChanged: onChanged,
+        onChangeEnd: onChangeEnd,
+      ),
     ),
     // Always offered, and already on when the same vehicle is at both ends —
     // that is when it is travelling with you rather than being left at the
@@ -145,10 +149,15 @@ class TransitSection extends StatelessWidget {
 }
 
 class _ChangesSlider extends StatelessWidget {
-  const _ChangesSlider({required this.options, required this.onChanged});
+  const _ChangesSlider({
+    required this.options,
+    required this.onChanged,
+    required this.onChangeEnd,
+  });
 
   final RoutingOptions options;
   final ValueChanged<RoutingOptions> onChanged;
+  final VoidCallback? onChangeEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -160,6 +169,7 @@ class _ChangesSlider extends StatelessWidget {
           max: RoutingOptions.unlimitedTransfersSliderValue.toDouble(),
           divisions: RoutingOptions.unlimitedTransfersSliderValue,
           semanticLabel: 'Maximum changes',
+          onChangeEnd: onChangeEnd,
           onChanged: (value) =>
               onChanged(options.withTransfersSliderValue(value.round())),
         ),

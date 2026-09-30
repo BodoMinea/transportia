@@ -902,6 +902,29 @@ void main() {
   });
 
   group('the journey header', () {
+    testWidgets('shows calories only while the setting allows', (tester) async {
+      await _pump(
+        tester,
+        JourneyOverviewWidget(
+          itinerary: Itinerary(
+            duration: 3600,
+            startTime: _t0,
+            endTime: _t0.add(const Duration(minutes: 60)),
+            transfers: 0,
+            legs: [_change(), _ride()],
+          ),
+        ),
+      );
+      expect(find.byIcon(LucideIcons.flame), findsOneWidget);
+
+      await Provider.of<ThemeProvider>(
+        tester.element(find.byType(JourneyOverviewWidget)),
+        listen: false,
+      ).setShowCalories(false);
+      await tester.pumpAndSettle();
+      expect(find.byIcon(LucideIcons.flame), findsNothing);
+    });
+
     testWidgets('has no box, and a rule under it instead', (tester) async {
       await _pump(
         tester,

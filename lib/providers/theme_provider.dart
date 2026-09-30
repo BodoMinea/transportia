@@ -4,18 +4,36 @@ import '../constants/prefs_keys.dart';
 
 enum AppThemeMode { light, dark, system }
 
+/// How far the search card's options are open when the card appears. The
+/// rider can open or close any of it from there.
+enum SearchOptionsOpening {
+  /// Each stage as its one-line summary.
+  closed,
+
+  /// Each stage open on its quick picks.
+  stagesOpen,
+
+  /// Each stage open on every option it has.
+  everything,
+}
+
 class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const String _accentColorKey = PrefsKeys.accentColor;
   static const String _mapStyleKey = PrefsKeys.mapStyle;
   static const String _appThemeKey = PrefsKeys.appTheme;
   static const String _vibrationsEnabledKey = PrefsKeys.vibrationsEnabled;
   static const String _searchMapEnabledKey = PrefsKeys.searchMapEnabled;
+  static const String _searchOptionsOpeningKey = PrefsKeys.searchOptionsOpening;
+  static const String _showCaloriesKey = PrefsKeys.showCalories;
 
   static const Color defaultAccentColor = Color.fromARGB(255, 0, 113, 133);
   static const String defaultMapStyle = 'default';
   static const AppThemeMode defaultAppThemeMode = AppThemeMode.light;
   static const bool defaultVibrationsEnabled = true;
   static const bool defaultSearchMapEnabled = true;
+  static const SearchOptionsOpening defaultSearchOptionsOpening =
+      SearchOptionsOpening.closed;
+  static const bool defaultShowCalories = true;
 
   static const Color lightBackground = Color(0xFFFFFFFF);
   static const Color darkBackground = Color(0xFF161616);
@@ -36,6 +54,8 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   AppThemeMode _appThemeMode = defaultAppThemeMode;
   bool _vibrationsEnabled = defaultVibrationsEnabled;
   bool _searchMapEnabled = defaultSearchMapEnabled;
+  SearchOptionsOpening _searchOptionsOpening = defaultSearchOptionsOpening;
+  bool _showCalories = defaultShowCalories;
   bool _isInitialized = false;
 
   static ThemeProvider? get instance => _instance;
@@ -46,6 +66,8 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
       mapStyleUrls[_mapStyle] ?? mapStyleUrls[defaultMapStyle]!;
   AppThemeMode get appThemeMode => _appThemeMode;
   bool get vibrationsEnabled => _vibrationsEnabled;
+  SearchOptionsOpening get searchOptionsOpening => _searchOptionsOpening;
+  bool get showCalories => _showCalories;
 
   /// The rider's choice, as the appearance toggle shows it.
   bool get searchMapEnabled => _searchMapEnabled;
@@ -105,6 +127,15 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     _searchMapEnabled =
         await prefs.getBool(_searchMapEnabledKey) ?? defaultSearchMapEnabled;
+
+    final savedOpening = await prefs.getString(_searchOptionsOpeningKey);
+    _searchOptionsOpening = SearchOptionsOpening.values.firstWhere(
+      (opening) => opening.name == savedOpening,
+      orElse: () => defaultSearchOptionsOpening,
+    );
+
+    _showCalories =
+        await prefs.getBool(_showCaloriesKey) ?? defaultShowCalories;
 
     _isInitialized = true;
     notifyListeners();
@@ -169,6 +200,26 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     final prefs = SharedPreferencesAsync();
     await prefs.setBool(_searchMapEnabledKey, enabled);
+  }
+
+  Future<void> setSearchOptionsOpening(SearchOptionsOpening opening) async {
+    if (_searchOptionsOpening == opening) return;
+
+    _searchOptionsOpening = opening;
+    notifyListeners();
+
+    final prefs = SharedPreferencesAsync();
+    await prefs.setString(_searchOptionsOpeningKey, opening.name);
+  }
+
+  Future<void> setShowCalories(bool show) async {
+    if (_showCalories == show) return;
+
+    _showCalories = show;
+    notifyListeners();
+
+    final prefs = SharedPreferencesAsync();
+    await prefs.setBool(_showCaloriesKey, show);
   }
 
   @override

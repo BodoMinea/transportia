@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:provider/provider.dart';
+
 import '../models/rental_provider_prefs.dart';
+import '../providers/theme_provider.dart';
 import '../models/routing_options.dart';
 import '../models/time_selection.dart';
 import '../models/transitous/server_config.dart';
@@ -151,6 +154,9 @@ class _BottomCardState extends State<BottomCard> {
         limitToMyProviders: providers.isActive,
         hasRentalProviders: providers.groups.isNotEmpty,
         onLimitToMyProvidersChanged: RentalProvidersService.setLimit,
+        opening: context.select<ThemeProvider, SearchOptionsOpening>(
+          (theme) => theme.searchOptionsOpening,
+        ),
       ),
     );
   }

@@ -10,8 +10,10 @@ import '../../theme/app_colors.dart';
 import '../../utils/journey_colors.dart';
 import '../journey/spine_row.dart';
 import '../../models/transitous/server_config.dart';
+import '../../providers/theme_provider.dart';
 import '../options/icon_controls.dart';
 import 'journey_segment.dart';
+import 'leg_panel.dart';
 import 'street_leg_section.dart';
 import 'transit_section.dart';
 import 'traveller_strip.dart';
@@ -34,6 +36,7 @@ class JourneySpine extends StatefulWidget {
     required this.limitToMyProviders,
     required this.hasRentalProviders,
     required this.onLimitToMyProvidersChanged,
+    this.opening = SearchOptionsOpening.closed,
   });
 
   final RoutingOptions options;
@@ -57,6 +60,10 @@ class JourneySpine extends StatefulWidget {
 
   final ValueChanged<bool> onLimitToMyProvidersChanged;
 
+  /// How far the stages are open when the card appears, and what a stage
+  /// shows each time it is opened again.
+  final SearchOptionsOpening opening;
+
   @override
   State<JourneySpine> createState() => _JourneySpineState();
 }
@@ -67,8 +74,41 @@ class _JourneySpineState extends State<JourneySpine> {
   final Set<_Stage> _open = {};
   bool _paceOpen = false;
 
-  /// Stages showing all their options rather than the compact rows.
-  final Set<_Stage> _full = {};
+  /// What each open stage shows, where the rider has changed it from
+  /// [_defaultView]. Forgotten when the stage closes: opening it again starts
+  /// from the setting, not from wherever the last visit left it.
+  final Map<_Stage, LegView> _views = {};
+
+  /// Whether the rider has opened or closed anything yet. Until then the
+  /// stages follow the setting, which may arrive after the card is built.
+  bool _touched = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _applyOpening();
+  }
+
+  @override
+  void didUpdateWidget(JourneySpine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.opening != oldWidget.opening && !_touched) _applyOpening();
+  }
+
+  void _applyOpening() {
+    _open
+      ..clear()
+      ..addAll(
+        widget.opening == SearchOptionsOpening.closed ? {} : _Stage.values,
+      );
+    _views.clear();
+  }
+
+  LegView get _defaultView => widget.opening == SearchOptionsOpening.everything
+      ? LegView.full
+      : LegView.compact;
+
+  LegView _viewOf(_Stage stage) => _views[stage] ?? _defaultView;
 
   OptionAnnouncement? _announcement;
   Timer? _announcementTimer;
@@ -104,7 +144,12 @@ class _JourneySpineState extends State<JourneySpine> {
   void _toggleStage(_Stage stage) {
     _tooltips.hide();
     setState(() {
-      if (!_open.remove(stage)) _open.add(stage);
+      _touched = true;
+      if (_open.remove(stage)) {
+        _views.remove(stage);
+      } else {
+        _open.add(stage);
+      }
     });
   }
 
@@ -182,9 +227,12 @@ class _JourneySpineState extends State<JourneySpine> {
     );
   }
 
-  void _setFull(_Stage stage, bool full) {
+  void _setView(_Stage stage, LegView view) {
     _tooltips.hide();
-    setState(() => full ? _full.add(stage) : _full.remove(stage));
+    setState(() {
+      _touched = true;
+      _views[stage] = view;
+    });
   }
 
   Widget _buildStages(RoutingOptions options) {
@@ -224,8 +272,8 @@ class _JourneySpineState extends State<JourneySpine> {
           child: TransitSection(
             options: options,
             tooltips: _tooltips,
-            expanded: _full.contains(_Stage.transport),
-            onExpandedChanged: (full) => _setFull(_Stage.transport, full),
+            view: _viewOf(_Stage.transport),
+            onViewChanged: (view) => _setView(_Stage.transport, view),
             onViaPressed: widget.onAddViaStop,
             onChanged: (next) {
               _apply(next);
@@ -277,8 +325,8 @@ class _JourneySpineState extends State<JourneySpine> {
         budget: budget,
         maxBudget: _mileCeiling,
         tooltips: _tooltips,
-        expanded: _full.contains(stage),
-        onExpandedChanged: (full) => _setFull(stage, full),
+        view: _viewOf(stage),
+        onViewChanged: (view) => _setView(stage, view),
         onChanged: (next) {
           _apply(onChanged(next));
           _announceStreetChange(choice, next, where);

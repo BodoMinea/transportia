@@ -905,6 +905,9 @@ class JourneyOverviewWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final showCalories = context.select<ThemeProvider, bool>(
+      (theme) => theme.showCalories,
+    );
     // No box. It is the head of the journey, not a notice about it, and the
     // spine below it is boxless too — a card here made the screen read as a
     // card followed by a drawing. A rule and some air separate it instead,
@@ -974,39 +977,44 @@ class JourneyOverviewWidget extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              Wrap(
-                spacing: 16,
-                runSpacing: 8,
-                children: [
-                  _buildStatChip(
-                    LucideIcons.repeat,
-                    '${itinerary.transfers}',
-                    itinerary.transfers == 1 ? 'transfer' : 'transfers',
-                  ),
-                  if (itinerary.walkingDistance > 0)
+              // Given the row's width so it can wrap: sized by its chips, a
+              // journey with transfers, calories, a fare and alerts ran off
+              // the right edge of a narrow phone.
+              Expanded(
+                child: Wrap(
+                  spacing: 16,
+                  runSpacing: 8,
+                  children: [
                     _buildStatChip(
-                      LucideIcons.flame,
-                      '${itinerary.calories}',
-                      'cal',
+                      LucideIcons.repeat,
+                      '${itinerary.transfers}',
+                      itinerary.transfers == 1 ? 'transfer' : 'transfers',
                     ),
-                  if (itinerary.fare != null && itinerary.fare!.amount > 0)
-                    _buildStatChip(
-                      LucideIcons.banknote,
-                      '${itinerary.fare!.amount.toStringAsFixed(2)}',
-                      itinerary.fare!.currency,
-                    ),
-                  // The blocks below, counted: an alert said on two stops is
-                  // one block, and a missed change is one too.
-                  if (journeyNotices(itinerary.legs).length case final count
-                      when count > 0)
-                    _buildStatChip(
-                      LucideIcons.triangleAlert,
-                      '$count',
-                      count == 1 ? 'alert' : 'alerts',
-                    ),
-                ],
+                    if (showCalories && itinerary.walkingDistance > 0)
+                      _buildStatChip(
+                        LucideIcons.flame,
+                        '${itinerary.calories}',
+                        'cal',
+                      ),
+                    if (itinerary.fare != null && itinerary.fare!.amount > 0)
+                      _buildStatChip(
+                        LucideIcons.banknote,
+                        '${itinerary.fare!.amount.toStringAsFixed(2)}',
+                        itinerary.fare!.currency,
+                      ),
+                    // The blocks below, counted: an alert said on two stops is
+                    // one block, and a missed change is one too.
+                    if (journeyNotices(itinerary.legs).length case final count
+                        when count > 0)
+                      _buildStatChip(
+                        LucideIcons.triangleAlert,
+                        '$count',
+                        count == 1 ? 'alert' : 'alerts',
+                      ),
+                  ],
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 16),
               GestureDetector(
                 onTap: () {
                   Navigator.of(context).push(
