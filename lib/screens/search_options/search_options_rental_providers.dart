@@ -2,11 +2,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../models/rental_provider_prefs.dart';
+import '../../models/street_leg_choice.dart';
 import '../../models/transitous/rentals_response.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/rental_provider_search.dart';
 import '../../widgets/options/icon_controls.dart';
-import '../../widgets/search/street_leg_section.dart';
 import 'search_options_rows.dart';
 
 /// The rental providers the rider has an account with, picked by name.
@@ -179,7 +179,7 @@ class _SuggestionRow extends StatelessWidget {
     final accent = AppColors.accentOf(context);
     final vehicles = [
       for (final factor in group.formFactors)
-        if (rentalFormFactorLabels[factor] case final label?) label,
+        StreetSection.formFactorLabel(factor),
     ].join(' · ');
     final details = [if (nearby) 'Near you', if (vehicles.isNotEmpty) vehicles];
 

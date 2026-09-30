@@ -187,4 +187,68 @@ void main() {
       expect(_of(const []).summary(), 'No transport');
     });
   });
+
+  group('regional only', () {
+    final everything = TransitSelection.everything;
+
+    test('drops the four long-distance services and nothing else', () {
+      final regional = everything.toggleRegionalOnly();
+      expect(regional.isRegionalOnly, isTrue);
+      for (final mode in TransitModeGroup.longDistance) {
+        expect(regional.has(mode), isFalse, reason: mode.name);
+      }
+      expect(
+        regional.modes.length,
+        TransitModeGroup.allSelectable.length -
+            TransitModeGroup.longDistance.length,
+      );
+    });
+
+    test('turning it off brings all four back', () {
+      final back = everything.toggleRegionalOnly().toggleRegionalOnly();
+      expect(back.isEverything, isTrue);
+    });
+
+    test('unticking them by hand reads as regional only too', () {
+      var selection = everything;
+      for (final mode in TransitModeGroup.longDistance) {
+        selection = selection.toggleMode(mode);
+      }
+      expect(selection.isRegionalOnly, isTrue);
+    });
+
+    test('nothing at all is not regional only', () {
+      expect(const TransitSelection({}).isRegionalOnly, isFalse);
+    });
+
+    test('says so in the summary, but only for the full regional set', () {
+      expect(everything.toggleRegionalOnly().summary(), 'Regional only');
+      final narrower = everything.toggleRegionalOnly().toggleMode(
+        TransitMode.ferry,
+      );
+      expect(narrower.summary(), isNot('Regional only'));
+    });
+  });
+
+  group('any set of modes as a section', () {
+    test('is on, partly on or off', () {
+      const extras = TransitModeGroup.extras;
+      expect(TransitSelection.everything.stateOfModes(extras), GroupState.all);
+      expect(
+        TransitSelection({extras.first}).stateOfModes(extras),
+        GroupState.some,
+      );
+      expect(const TransitSelection({}).stateOfModes(extras), GroupState.none);
+    });
+
+    test('a partly-on section is completed, a full one cleared', () {
+      const extras = TransitModeGroup.extras;
+      final some = TransitSelection({extras.first});
+      expect(some.toggleModes(extras).stateOfModes(extras), GroupState.all);
+      expect(
+        TransitSelection.everything.toggleModes(extras).stateOfModes(extras),
+        GroupState.none,
+      );
+    });
+  });
 }

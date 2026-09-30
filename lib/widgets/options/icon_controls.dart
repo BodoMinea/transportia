@@ -179,31 +179,48 @@ class _Bubble extends StatelessWidget {
 class IconPick extends StatefulWidget {
   const IconPick({
     super.key,
-    required this.icon,
+    required IconData this.icon,
     required this.label,
     required this.selected,
     required this.onPressed,
     required this.tooltips,
-    this.subdued = false,
+    this.partial = false,
     this.size = 17,
-  }) : _height = 40;
+  }) : glyph = null,
+       _height = 40;
 
   /// For the traveller strip, which sits right under the origin and time and
   /// should not outweigh them.
   const IconPick.compact({
     super.key,
-    required this.icon,
+    required IconData this.icon,
     required this.label,
     required this.selected,
     required this.onPressed,
     required this.tooltips,
-    this.subdued = false,
     this.size = 15,
-  }) : _height = 34;
+  }) : glyph = null,
+       partial = false,
+       _height = 34;
+
+  /// A mark that is not an icon, such as a letter. It takes the colour and
+  /// size an icon would.
+  const IconPick.glyph({
+    super.key,
+    required Widget this.glyph,
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+    required this.tooltips,
+    this.partial = false,
+    this.size = 17,
+  }) : icon = null,
+       _height = 40;
 
   final double _height;
 
-  final IconData icon;
+  final IconData? icon;
+  final Widget? glyph;
 
   /// Shown on long press, announced on tap, and read out by screen readers.
   final String label;
@@ -212,9 +229,9 @@ class IconPick extends StatefulWidget {
   final VoidCallback onPressed;
   final OptionTooltipController tooltips;
 
-  /// Marks a control that opens more choices rather than being one, so it
-  /// sits back from the picks beside it.
-  final bool subdued;
+  /// Stands for a set of which only some is on: drawn with a broken border
+  /// and a fainter wash, between off and [selected].
+  final bool partial;
 
   final double size;
 
@@ -224,6 +241,8 @@ class IconPick extends StatefulWidget {
 
 class _IconPickState extends State<IconPick> {
   final GlobalKey _key = GlobalKey();
+
+  static const double _radius = 10;
 
   void _showTooltip() {
     final box = _key.currentContext?.findRenderObject() as RenderBox?;
@@ -237,9 +256,51 @@ class _IconPickState extends State<IconPick> {
   @override
   Widget build(BuildContext context) {
     final accent = AppColors.accentOf(context);
+    final lit = widget.selected || widget.partial;
+    final markColor = lit ? accent : AppColors.black;
+    final mark = IconTheme(
+      data: IconThemeData(size: widget.size, color: markColor),
+      child: DefaultTextStyle.merge(
+        style: TextStyle(color: markColor),
+        child: widget.glyph ?? Icon(widget.icon),
+      ),
+    );
+    final Widget face;
+    if (widget.partial && !widget.selected) {
+      face = CustomPaint(
+        foregroundPainter: _DashedRoundedBorder(color: accent, radius: _radius),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          height: widget._height,
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(_radius),
+          ),
+          child: Center(child: mark),
+        ),
+      );
+    } else {
+      face = AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        height: widget._height,
+        decoration: BoxDecoration(
+          color: widget.selected
+              ? AppColors.accentWash(accent)
+              : const Color(0x00000000),
+          borderRadius: BorderRadius.circular(_radius),
+          border: Border.all(
+            color: widget.selected
+                ? accent
+                : AppColors.black.withValues(alpha: 0.12),
+          ),
+        ),
+        child: Center(child: mark),
+      );
+    }
     return Semantics(
       button: true,
       selected: widget.selected,
+      value: widget.partial && !widget.selected ? 'Partly on' : null,
       label: widget.label,
       child: GestureDetector(
         key: _key,
@@ -255,37 +316,46 @@ class _IconPickState extends State<IconPick> {
         },
         onLongPressEnd: (_) => widget.tooltips.hide(),
         onLongPressCancel: widget.tooltips.hide,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          height: widget._height,
-          decoration: BoxDecoration(
-            color: widget.selected
-                ? AppColors.accentWash(accent)
-                : const Color(0x00000000),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: widget.selected
-                  ? accent
-                  : AppColors.black.withValues(
-                      alpha: widget.subdued ? 0.22 : 0.12,
-                    ),
-            ),
-          ),
-          child: Center(
-            child: Icon(
-              widget.icon,
-              size: widget.size,
-              color: widget.selected
-                  ? accent
-                  : AppColors.black.withValues(
-                      alpha: widget.subdued ? 0.55 : 1,
-                    ),
-            ),
-          ),
-        ),
+        child: face,
       ),
     );
   }
+}
+
+/// A rounded border drawn in dashes.
+class _DashedRoundedBorder extends CustomPainter {
+  const _DashedRoundedBorder({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  static const double _dash = 4;
+  static const double _gap = 3;
+  static const double _stroke = 1.2;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final outline = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Offset.zero & size,
+          Radius.circular(radius),
+        ).deflate(_stroke / 2),
+      );
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _stroke;
+    for (final metric in outline.computeMetrics()) {
+      for (var d = 0.0; d < metric.length; d += _dash + _gap) {
+        canvas.drawPath(metric.extractPath(d, d + _dash), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedRoundedBorder old) =>
+      old.color != color || old.radius != radius;
 }
 
 /// An icon with a value beside it, opening a slider when pressed.
