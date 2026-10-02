@@ -89,15 +89,6 @@
 - For bigger redesignd, send drafts before writing tests or wiring it up; the design usually moves once the user sees it.
 
 ## Branches & Releases
-- `master` is what gets proposed upstream; `dev-build` is `master` plus this
-  fork's release setup (dev-build workflow, F-Droid push, app ID, README,
-  store listing).
-- Start every in-app feature or fix from `master`, and target PRs at
-  `master`. Branching from `dev-build` drags the release setup into the
-  upstream PR.
-- Only release and public-facing work starts from, and targets, `dev-build`.
-- Never merge `dev-build` into `master`. `master` flows into `dev-build`,
-  never the other way.
 - Every push to `dev-build` publishes a release to friends' phones. Never
   push or merge to `dev-build` yourself; open a PR and leave merging to the
   owner.
