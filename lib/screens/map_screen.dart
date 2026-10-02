@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:transportia/widgets/time_selection_overlay.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:geolocator/geolocator.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -42,6 +43,7 @@ import '../services/transitous_map_service.dart';
 import '../services/transitous_geocode_service.dart';
 import '../services/trip_details_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/system_bars.dart';
 import '../utils/color_utils.dart';
 import '../utils/geo_utils.dart';
 import '../utils/map_framing.dart';
@@ -1717,12 +1719,21 @@ class _MapScreenState extends State<MapScreen>
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.watch<ThemeProvider>();
     return PopScope(
       canPop: _canPop,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _stepBack();
       },
-      child: _showsMap ? _buildSplitLayout() : _buildPageLayout(),
+      child: _showsMap
+          ? AnnotatedRegion<SystemUiOverlayStyle>(
+              value: systemBarsOverMap(
+                appIsDark: theme.isDark,
+                mapIsDark: theme.isMapDark,
+              ),
+              child: _buildSplitLayout(),
+            )
+          : _buildPageLayout(),
     );
   }
 
