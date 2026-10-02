@@ -2446,11 +2446,18 @@ class _MapScreenState extends State<MapScreen>
     if (!mounted || PlanRequests.pending.value == null) return;
     final request = PlanRequests.take()!;
 
-    _setControllerText(RouteFieldKind.from, request.from.name);
+    _setControllerText(RouteFieldKind.from, request.from?.name ?? '');
     _setControllerText(RouteFieldKind.to, request.to.name);
     _setSelection(RouteFieldKind.from, request.from);
     _setSelection(RouteFieldKind.to, request.to);
-    setState(() => _timeSelection = request.time);
+    setState(() {
+      _timeSelection = request.time;
+      final options = request.options;
+      if (options != null) {
+        _options = options;
+        _optionsTouched = options != _storedOptions;
+      }
+    });
     // Fields nobody can see are not filled in as far as the rider is
     // concerned, and the card may have been left down over the map.
     _expandSheetToCard();
