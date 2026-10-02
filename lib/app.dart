@@ -104,8 +104,13 @@ class _RootGateState extends State<_RootGate> {
   @override
   void initState() {
     super.initState();
-    _initDeepLinks();
-    _init();
+    // After the welcome flag is read: a link that opens the app has to know
+    // whether there are tabs to land on.
+    unawaited(
+      _init().then((_) {
+        if (mounted) return _initDeepLinks();
+      }),
+    );
   }
 
   Future<void> _initDeepLinks() async {
@@ -166,16 +171,28 @@ class _RootGateState extends State<_RootGate> {
     }
     debugPrint('Received geo link: $uri');
 
-    final currentPosition = LocationService.currentPosition();
-    Navigator.of(context).push(
-      CupertinoPageRoute(
-        builder: (_) => ItineraryListScreen(
-          fromLat: currentPosition.then((position) => position.latitude),
-          fromLon: currentPosition.then((position) => position.longitude),
-          toLat: destination.latitude,
-          toLon: destination.longitude,
-          timeSelection: TimeSelection.now(),
+    if (_seen != true) {
+      // No routing screen behind the welcome flow to land on.
+      final currentPosition = LocationService.currentPosition();
+      Navigator.of(context).push(
+        CupertinoPageRoute(
+          builder: (_) => ItineraryListScreen(
+            fromLat: currentPosition.then((position) => position.latitude),
+            fromLon: currentPosition.then((position) => position.longitude),
+            toLat: destination.latitude,
+            toLon: destination.longitude,
+            timeSelection: TimeSelection.now(),
+          ),
         ),
+      );
+      return;
+    }
+    unawaited(
+      ItineraryListScreen.openOverRoutingScreen(
+        Navigator.of(context),
+        from: null,
+        to: TransitousLocationSuggestion.fromLatLon(destination),
+        time: TimeSelection.now(),
       ),
     );
   }

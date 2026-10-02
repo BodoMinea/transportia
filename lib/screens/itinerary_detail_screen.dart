@@ -501,29 +501,24 @@ class _ItineraryDetailScreenState extends State<ItineraryDetailScreen> {
   /// Re-plans the same journey, so the user has somewhere to go when the
   /// stored connection no longer works.
   void _findAlternatives(SavedTrip trip, {required DateTime departAt}) {
-    Navigator.of(context).push(
-      CustomPageRoute(
-        child: ItineraryListScreen(
-          fromLat: trip.fromLat,
-          fromLon: trip.fromLon,
-          toLat: trip.toLat,
-          toLon: trip.toLon,
-          fromSelection: TransitousLocationSuggestion(
-            id: 'saved-from-${trip.id}',
-            name: trip.fromName,
-            lat: trip.fromLat,
-            lon: trip.fromLon,
-            type: 'PLACE',
-          ),
-          toSelection: TransitousLocationSuggestion(
-            id: 'saved-to-${trip.id}',
-            name: trip.toName,
-            lat: trip.toLat,
-            lon: trip.toLon,
-            type: 'PLACE',
-          ),
-          timeSelection: TimeSelection(dateTime: departAt, isArriveBy: false),
+    unawaited(
+      ItineraryListScreen.openOverRoutingScreen(
+        Navigator.of(context),
+        from: TransitousLocationSuggestion(
+          id: 'saved-from-${trip.id}',
+          name: trip.fromName,
+          lat: trip.fromLat,
+          lon: trip.fromLon,
+          type: 'PLACE',
         ),
+        to: TransitousLocationSuggestion(
+          id: 'saved-to-${trip.id}',
+          name: trip.toName,
+          lat: trip.toLat,
+          lon: trip.toLon,
+          type: 'PLACE',
+        ),
+        time: TimeSelection(dateTime: departAt, isArriveBy: false),
       ),
     );
   }

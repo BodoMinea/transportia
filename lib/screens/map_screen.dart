@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:transportia/widgets/time_selection_overlay.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:geolocator/geolocator.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -42,6 +43,7 @@ import '../services/transitous_map_service.dart';
 import '../services/transitous_geocode_service.dart';
 import '../services/trip_details_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/system_bars.dart';
 import '../utils/color_utils.dart';
 import '../utils/geo_utils.dart';
 import '../utils/map_framing.dart';
@@ -357,7 +359,12 @@ class _MapScreenState extends State<MapScreen>
     if (!mounted) return;
     setState(() {
       _storedOptions = stored;
-      if (!_optionsTouched) _options = stored;
+      // A plan request can arrive before this read, and judges "touched"
+      // against the placeholder; matching what was stored is not an edit.
+      if (!_optionsTouched || _options == stored) {
+        _options = stored;
+        _optionsTouched = false;
+      }
     });
   }
 
@@ -1717,12 +1724,21 @@ class _MapScreenState extends State<MapScreen>
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.watch<ThemeProvider>();
     return PopScope(
       canPop: _canPop,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _stepBack();
       },
-      child: _showsMap ? _buildSplitLayout() : _buildPageLayout(),
+      child: _showsMap
+          ? AnnotatedRegion<SystemUiOverlayStyle>(
+              value: systemBarsOverMap(
+                appIsDark: theme.isDark,
+                mapIsDark: theme.isMapDark,
+              ),
+              child: _buildSplitLayout(),
+            )
+          : _buildPageLayout(),
     );
   }
 
@@ -2446,11 +2462,18 @@ class _MapScreenState extends State<MapScreen>
     if (!mounted || PlanRequests.pending.value == null) return;
     final request = PlanRequests.take()!;
 
-    _setControllerText(RouteFieldKind.from, request.from.name);
+    _setControllerText(RouteFieldKind.from, request.from?.name ?? '');
     _setControllerText(RouteFieldKind.to, request.to.name);
     _setSelection(RouteFieldKind.from, request.from);
     _setSelection(RouteFieldKind.to, request.to);
-    setState(() => _timeSelection = request.time);
+    setState(() {
+      _timeSelection = request.time;
+      final options = request.options;
+      if (options != null) {
+        _options = options;
+        _optionsTouched = options != _storedOptions;
+      }
+    });
     // Fields nobody can see are not filled in as far as the rider is
     // concerned, and the card may have been left down over the map.
     _expandSheetToCard();
@@ -2480,32 +2503,25 @@ class _MapScreenState extends State<MapScreen>
     }
   }
 
-  void _swapSelectionMetadata() {
-    setState(() {
-      final tmp = _fromSelection;
-      _fromSelection = _toSelection;
-      _toSelection = tmp;
-    });
-    unawaited(_refreshRouteMarkers());
-  }
-
   bool _handleSwapRequested() {
-    final fromText = _fromCtrl.text;
-    final toText = _toCtrl.text;
-    if (fromText.isEmpty && toText.isEmpty) {
+    if (_fromCtrl.text.isEmpty && _toCtrl.text.isEmpty) return false;
+    final swapped = swapRouteEnds(
+      from: RouteEnd(_fromCtrl.text, _fromSelection),
+      to: RouteEnd(_toCtrl.text, _toSelection),
+      originIsMyLocation: _hasLocationPermission,
+      position: _lastUserLatLng,
+    );
+    if (swapped == null) {
+      showValidationToast(context, "Couldn't find where you are");
       return false;
     }
-    _suppressFromListener = true;
-    _suppressToListener = true;
-    _fromCtrl
-      ..text = toText
-      ..selection = TextSelection.collapsed(offset: toText.length);
-    _toCtrl
-      ..text = fromText
-      ..selection = TextSelection.collapsed(offset: fromText.length);
-    _suppressFromListener = false;
-    _suppressToListener = false;
-    _swapSelectionMetadata();
+    _setControllerText(RouteFieldKind.from, swapped.from.text);
+    _setControllerText(RouteFieldKind.to, swapped.to.text);
+    setState(() {
+      _fromSelection = swapped.from.selection;
+      _toSelection = swapped.to.selection;
+    });
+    unawaited(_refreshRouteMarkers());
     _maybeFitSelectionsOnCollapsed();
     return true;
   }
