@@ -2480,32 +2480,25 @@ class _MapScreenState extends State<MapScreen>
     }
   }
 
-  void _swapSelectionMetadata() {
-    setState(() {
-      final tmp = _fromSelection;
-      _fromSelection = _toSelection;
-      _toSelection = tmp;
-    });
-    unawaited(_refreshRouteMarkers());
-  }
-
   bool _handleSwapRequested() {
-    final fromText = _fromCtrl.text;
-    final toText = _toCtrl.text;
-    if (fromText.isEmpty && toText.isEmpty) {
+    if (_fromCtrl.text.isEmpty && _toCtrl.text.isEmpty) return false;
+    final swapped = swapRouteEnds(
+      from: RouteEnd(_fromCtrl.text, _fromSelection),
+      to: RouteEnd(_toCtrl.text, _toSelection),
+      originIsMyLocation: _hasLocationPermission,
+      position: _lastUserLatLng,
+    );
+    if (swapped == null) {
+      showValidationToast(context, "Couldn't find where you are");
       return false;
     }
-    _suppressFromListener = true;
-    _suppressToListener = true;
-    _fromCtrl
-      ..text = toText
-      ..selection = TextSelection.collapsed(offset: toText.length);
-    _toCtrl
-      ..text = fromText
-      ..selection = TextSelection.collapsed(offset: fromText.length);
-    _suppressFromListener = false;
-    _suppressToListener = false;
-    _swapSelectionMetadata();
+    _setControllerText(RouteFieldKind.from, swapped.from.text);
+    _setControllerText(RouteFieldKind.to, swapped.to.text);
+    setState(() {
+      _fromSelection = swapped.from.selection;
+      _toSelection = swapped.to.selection;
+    });
+    unawaited(_refreshRouteMarkers());
     _maybeFitSelectionsOnCollapsed();
     return true;
   }
