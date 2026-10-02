@@ -359,7 +359,12 @@ class _MapScreenState extends State<MapScreen>
     if (!mounted) return;
     setState(() {
       _storedOptions = stored;
-      if (!_optionsTouched) _options = stored;
+      // A plan request can arrive before this read, and judges "touched"
+      // against the placeholder; matching what was stored is not an edit.
+      if (!_optionsTouched || _options == stored) {
+        _options = stored;
+        _optionsTouched = false;
+      }
     });
   }
 

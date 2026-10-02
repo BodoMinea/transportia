@@ -23,6 +23,16 @@ final _to = TransitousLocationSuggestion(
   type: 'STOP',
 );
 
+// Not null: My Location would ask the device for a fix, and there is no
+// location plugin in a test.
+final _from = TransitousLocationSuggestion(
+  id: 'from',
+  name: 'Hauptbahnhof',
+  lat: 52.525,
+  lon: 13.369,
+  type: 'STOP',
+);
+
 /// Tabs underneath, a detail page on top: the shape of the app when
 /// "Find alternatives" is tapped.
 Future<NavigatorState> _pumpTabsWithDetail(WidgetTester tester) async {
@@ -83,7 +93,7 @@ void main() {
     await tester.runAsync(
       () => ItineraryListScreen.openOverRoutingScreen(
         navigator,
-        from: null,
+        from: _from,
         to: _to,
         time: time,
       ),
@@ -91,7 +101,7 @@ void main() {
     await tester.pump();
 
     final request = PlanRequests.pending.value!;
-    expect(request.from, isNull);
+    expect(request.from, _from);
     expect(request.to, _to);
     expect(request.time, time);
     expect(request.options, RoutingOptions.defaults);
@@ -106,7 +116,7 @@ void main() {
     await tester.runAsync(
       () => ItineraryListScreen.openOverRoutingScreen(
         navigator,
-        from: null,
+        from: _from,
         to: _to,
         time: TimeSelection.now(),
       ),

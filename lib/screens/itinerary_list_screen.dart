@@ -166,6 +166,8 @@ class _ItineraryListScreenState extends State<ItineraryListScreen> {
         timeSelection: widget.timeSelection,
         options: options,
       );
+      // The rider can go back before the planner answers.
+      if (!mounted) return;
       setState(() {
         _fromLat = fromLat;
         _fromLon = fromLon;
@@ -177,6 +179,7 @@ class _ItineraryListScreenState extends State<ItineraryListScreen> {
       });
       _maybeApplyInitialPreviousOffset();
     } catch (_) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
