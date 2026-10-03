@@ -11,6 +11,7 @@ import '../models/time_selection.dart';
 import '../widgets/custom_card.dart';
 import '../widgets/empty_state.dart';
 import '../models/itinerary.dart';
+import '../models/my_location.dart';
 import '../models/routing_options.dart';
 import '../providers/theme_provider.dart';
 import '../services/location_service.dart';
@@ -68,11 +69,10 @@ class ItineraryListScreen extends StatefulWidget {
   /// the routing screen underneath holding the same journey — so Back lands
   /// where the search can be changed, not on whatever was open before.
   ///
-  /// A null [from] is My Location, left empty on the routing screen and
-  /// resolved to the rider's position here.
+  /// A [from] of My Location is resolved to the rider's position here.
   static Future<void> openOverRoutingScreen(
     NavigatorState navigator, {
-    required TransitousLocationSuggestion? from,
+    required TransitousLocationSuggestion from,
     required TransitousLocationSuggestion to,
     required TimeSelection time,
   }) async {
@@ -88,15 +88,15 @@ class ItineraryListScreen extends StatefulWidget {
     );
     navigator.popUntil((route) => route.isFirst);
 
-    final position = from == null ? LocationService.currentPosition() : null;
     final FutureOr<double> fromLat;
     final FutureOr<double> fromLon;
-    if (from != null) {
+    if (from.isMyLocation) {
+      final position = LocationService.currentPosition();
+      fromLat = position.then((p) => p.latitude);
+      fromLon = position.then((p) => p.longitude);
+    } else {
       fromLat = from.lat;
       fromLon = from.lon;
-    } else {
-      fromLat = position!.then((p) => p.latitude);
-      fromLon = position.then((p) => p.longitude);
     }
     unawaited(
       navigator.push(
@@ -108,7 +108,7 @@ class ItineraryListScreen extends StatefulWidget {
             toLon: to.lon,
             timeSelection: time,
             options: options,
-            fromSelection: from,
+            fromSelection: from.isMyLocation ? null : from,
             toSelection: to,
           ),
         ),

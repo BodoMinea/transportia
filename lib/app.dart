@@ -9,16 +9,19 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'environment.dart';
 import 'constants/prefs_keys.dart';
+import 'models/my_location.dart';
 import 'models/time_selection.dart';
 import 'providers/backend_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/itinerary_list_screen.dart';
 import 'screens/main_navigation_screen.dart';
+import 'screens/shared_trip_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'services/backend_reload_service.dart';
 import 'services/location_service.dart';
 import 'services/transitous_geocode_service.dart';
 import 'theme/system_bars.dart';
+import 'utils/trip_link.dart';
 import 'widgets/offline_banner_shell.dart';
 
 class Transportia extends StatelessWidget {
@@ -156,11 +159,11 @@ class _RootGateState extends State<_RootGate> {
       _handleGeoLink(uri);
       return;
     }
-    if (uri.scheme != 'transportia' || uri.host != 'trip') {
-      return;
-    }
-    debugPrint('Received ${Environment.appName} trip link: ${uri.toString()}');
-    // TODO: this
+    final link = TripLink.tryParse(uri);
+    if (link == null) return;
+    Navigator.of(
+      context,
+    ).push(CupertinoPageRoute(builder: (_) => SharedTripScreen(link: link)));
   }
 
   void _handleGeoLink(Uri uri) {
@@ -190,7 +193,7 @@ class _RootGateState extends State<_RootGate> {
     unawaited(
       ItineraryListScreen.openOverRoutingScreen(
         Navigator.of(context),
-        from: null,
+        from: myLocationSuggestion,
         to: TransitousLocationSuggestion.fromLatLon(destination),
         time: TimeSelection.now(),
       ),

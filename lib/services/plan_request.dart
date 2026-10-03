@@ -18,8 +18,7 @@ class PlanRequest {
     this.options,
   });
 
-  /// Null is My Location: the origin left empty and resolved at search time.
-  final TransitousLocationSuggestion? from;
+  final TransitousLocationSuggestion from;
   final TransitousLocationSuggestion to;
   final TimeSelection time;
 
