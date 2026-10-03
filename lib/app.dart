@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'environment.dart';
 import 'constants/prefs_keys.dart';
+import 'models/my_location.dart';
 import 'models/time_selection.dart';
 import 'providers/backend_provider.dart';
 import 'providers/theme_provider.dart';
@@ -190,7 +191,7 @@ class _RootGateState extends State<_RootGate> {
     unawaited(
       ItineraryListScreen.openOverRoutingScreen(
         Navigator.of(context),
-        from: null,
+        from: myLocationSuggestion,
         to: TransitousLocationSuggestion.fromLatLon(destination),
         time: TimeSelection.now(),
       ),
