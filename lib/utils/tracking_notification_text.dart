@@ -68,10 +68,26 @@ String? waitingLabel(Leg leg, {required double legProgress, DateTime? now}) {
 /// stops and serves the in-app carousel as well: the notification has the leg
 /// on hand, so it can name where the rider is getting off and say when they
 /// will be there.
-String stopsProgressLine(Leg leg, int remainingStops, {DateTime? now}) {
+///
+/// With [virtualRemaining], the rider's own pace in place of the timetable's
+/// time (see `virtualRemaining` in itinerary_navigation.dart), the time left
+/// is an estimate and says so: "~9 min", never a time of day.
+String stopsProgressLine(
+  Leg leg,
+  int remainingStops, {
+  DateTime? now,
+  Duration? virtualRemaining,
+}) {
   if (remainingStops <= 0) return 'Arriving now';
 
   final stopName = leg.toName;
+  if (virtualRemaining != null) {
+    final estimate = estimatedMinutes(virtualRemaining);
+    return remainingStops == 1
+        ? '$stopName is next, in ~$estimate min'
+        : '$remainingStops stops, ~$estimate min until $stopName';
+  }
+
   final arrival = leg.endTime;
   final remaining = arrival.difference(now ?? DateTime.now());
   final isSoon = remaining.inMinutes < _kCountdownWithinMinutes;
@@ -88,6 +104,13 @@ String stopsProgressLine(Leg leg, int remainingStops, {DateTime? now}) {
       : '$remainingStops stops until $stopName (${formatTime(arrival)})';
 }
 
+/// [remaining] in whole minutes, to the nearest, and never less than one: an
+/// estimate that says "~0 min" while the rider is still on board says nothing.
+int estimatedMinutes(Duration remaining) {
+  final minutes = (remaining.inSeconds / Duration.secondsPerMinute).round();
+  return minutes < 1 ? 1 : minutes;
+}
+
 /// The notification's second line: a countdown while waiting to board, the
 /// stops to go on a ride, the distance left on a walk.
 String trackingProgressLine(
@@ -96,12 +119,18 @@ String trackingProgressLine(
   required double? remainingWalkMeters,
   required int? remainingStops,
   DateTime? now,
+  Duration? virtualRemaining,
 }) {
   if (leg != null) {
     final waiting = waitingLabel(leg, legProgress: legProgress, now: now);
     if (waiting != null) return waiting;
     if (leg.mode != 'WALK' && remainingStops != null) {
-      return stopsProgressLine(leg, remainingStops, now: now);
+      return stopsProgressLine(
+        leg,
+        remainingStops,
+        now: now,
+        virtualRemaining: virtualRemaining,
+      );
     }
   }
   return progressLabel(

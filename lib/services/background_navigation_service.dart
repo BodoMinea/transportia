@@ -256,6 +256,7 @@ void _onServiceStart(ServiceInstance service) async {
       legProgress: current.legProgress,
       remainingWalkMeters: current.remainingWalkMeters,
       remainingStops: current.remainingStops,
+      virtualRemaining: current.virtualRemainingNow(),
     );
     final body = current.arrived
         ? "You've arrived"

@@ -169,6 +169,119 @@ void main() {
     });
   });
 
+  group('stops to go at the rider\'s own pace', () {
+    final leg = _ride(departsIn: Duration.zero);
+
+    test('several stops give an estimate in minutes, never a time of day', () {
+      final line = stopsProgressLine(
+        leg,
+        4,
+        now: _now,
+        virtualRemaining: const Duration(minutes: 22),
+      );
+
+      expect(line, '4 stops, ~22 min until Flughafen BER');
+      expect(line, isNot(contains(formatTime(leg.endTime))));
+      expect(line, isNot(contains(':')));
+    });
+
+    test('says it is an estimate even when it is a long way off', () {
+      // The timetable's wording would switch to a time of day here.
+      expect(
+        stopsProgressLine(
+          leg,
+          9,
+          now: _now,
+          virtualRemaining: const Duration(minutes: 55),
+        ),
+        '9 stops, ~55 min until Flughafen BER',
+      );
+    });
+
+    test('the next stop is named, with an estimate', () {
+      expect(
+        stopsProgressLine(
+          leg,
+          1,
+          now: _now,
+          virtualRemaining: const Duration(minutes: 4),
+        ),
+        'Flughafen BER is next, in ~4 min',
+      );
+    });
+
+    test('rounds to the nearest minute, and never says less than one', () {
+      expect(estimatedMinutes(const Duration(seconds: 89)), 1);
+      expect(estimatedMinutes(const Duration(seconds: 90)), 2);
+      expect(estimatedMinutes(const Duration(minutes: 7, seconds: 20)), 7);
+      expect(estimatedMinutes(const Duration(seconds: 10)), 1);
+      expect(estimatedMinutes(Duration.zero), 1);
+    });
+
+    test('arriving now stays as it is', () {
+      expect(
+        stopsProgressLine(
+          leg,
+          0,
+          now: _now,
+          virtualRemaining: const Duration(minutes: 3),
+        ),
+        'Arriving now',
+      );
+    });
+
+    test('without an estimate the timetable is used, as before', () {
+      expect(
+        stopsProgressLine(leg, 4, now: _now),
+        '4 stops until Flughafen BER (${formatTime(leg.endTime)})',
+      );
+    });
+
+    test('the progress line carries it through', () {
+      expect(
+        trackingProgressLine(
+          leg,
+          legProgress: 0.4,
+          remainingWalkMeters: null,
+          remainingStops: 4,
+          now: _now,
+          virtualRemaining: const Duration(minutes: 22),
+        ),
+        '4 stops, ~22 min until Flughafen BER',
+      );
+    });
+
+    test('a ride not yet boarded still counts down to boarding', () {
+      final waiting = _ride(departsIn: const Duration(minutes: 5));
+
+      expect(
+        trackingProgressLine(
+          waiting,
+          legProgress: 0,
+          remainingWalkMeters: null,
+          remainingStops: 4,
+          now: _now,
+          virtualRemaining: const Duration(minutes: 22),
+        ),
+        '🟢 Departs in 5 min',
+      );
+    });
+
+    test('a walk is not given one', () {
+      expect(
+        trackingProgressLine(
+          _walk(),
+          legProgress: 0.5,
+          remainingWalkMeters: 210,
+          remainingStops: null,
+          now: _now,
+          virtualRemaining: const Duration(minutes: 22),
+        ),
+        '210 m to go',
+      );
+    });
+  });
+
   group('the progress line', () {
     test('waits to board when that is what is happening', () {
       expect(
