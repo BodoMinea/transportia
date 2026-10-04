@@ -1,5 +1,7 @@
 import 'dart:developer' as developer;
 
+import 'package:maplibre_gl/maplibre_gl.dart' show LatLng;
+
 import 'transitous/alert.dart';
 import 'transitous/enums.dart';
 import 'transitous/json.dart';
@@ -8,6 +10,7 @@ import 'transitous/place.dart';
 import 'transitous/rental.dart';
 import 'transitous/step_instruction.dart';
 import '../utils/duration_formatter.dart';
+import '../utils/polyline_utils.dart';
 
 export 'transitous/alert.dart' show Alert;
 export 'transitous/enums.dart';
@@ -540,6 +543,16 @@ class Leg {
     );
   }
 
+  /// Every place the leg calls at, origin to terminus.
+  List<TransitPlace> get stopSequence => [from, ...intermediateStops, to];
+
+  /// Where [place] sits in [stopSequence], or null when the leg does not call
+  /// there. Matched the way [sliceBetween] matches its ends.
+  int? indexOfStop(TransitPlace place) {
+    final index = stopSequence.indexWhere((stop) => _samePlace(stop, place));
+    return index < 0 ? null : index;
+  }
+
   /// The part of this leg that [from] → [to] actually travels.
   ///
   /// `/trip` answers with the service end to end — the S7 from Ahrensfelde to
@@ -547,11 +560,14 @@ class Leg {
   /// station on the line into an expanded leg, and moved the leg's own
   /// departure to the start of the line.
   ///
+  /// The route shape is cut down with it, so a map draws the stretch ridden
+  /// and not the whole line.
+  ///
   /// Returns this leg untouched when either endpoint is not on it. A wrong
   /// slice is worse than an unsliced one: the times would then belong to
   /// somewhere the traveller never goes.
   Leg sliceBetween(TransitPlace from, TransitPlace to) {
-    final sequence = [this.from, ...intermediateStops, this.to];
+    final sequence = stopSequence;
 
     final start = sequence.indexWhere((place) => _samePlace(place, from));
     if (start < 0) return this;
@@ -611,7 +627,7 @@ class Leg {
       cancelled: cancelled,
       intermediateStops: sequence.sublist(start + 1, end),
       alerts: alerts,
-      legGeometry: legGeometry,
+      legGeometry: _geometryBetween(origin, destination),
       steps: steps,
       rental: rental,
       alternatives: alternatives,
@@ -623,6 +639,37 @@ class Leg {
       wheelchairAccessible: wheelchairAccessible,
       reservation: reservation,
       ticketUrls: ticketUrls,
+    );
+  }
+
+  /// This leg's route shape between the points nearest [origin] and
+  /// [destination], or null — a straight line on the map, which is true where
+  /// the whole line would not be — when there is no shape to cut or the cut
+  /// cannot be made sense of.
+  EncodedPolyline? _geometryBetween(
+    TransitPlace origin,
+    TransitPlace destination,
+  ) {
+    final geometry = legGeometry;
+    if (geometry == null || geometry.points.isEmpty) return null;
+
+    final List<LatLng> points;
+    try {
+      points = decodePolyline(geometry.points, geometry.precision);
+    } catch (_) {
+      return null;
+    }
+    final sliced = slicePolyline(
+      points,
+      LatLng(origin.lat, origin.lon),
+      LatLng(destination.lat, destination.lon),
+    );
+    if (sliced == null) return null;
+
+    return EncodedPolyline(
+      points: encodePolyline(sliced, geometry.precision),
+      precision: geometry.precision,
+      length: sliced.length,
     );
   }
 
