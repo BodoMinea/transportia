@@ -5,8 +5,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../models/home_section.dart';
+import '../models/recent_search.dart';
 import '../models/rental_provider_prefs.dart';
 import '../providers/theme_provider.dart';
+import '../services/favorites_service.dart';
 import '../models/routing_options.dart';
 import '../models/time_selection.dart';
 import '../models/transitous/server_config.dart';
@@ -18,6 +20,8 @@ import '../theme/app_colors.dart';
 import 'map/bottom_sheet_chrome.dart';
 import 'floating_nav_bar.dart';
 import 'buttons/primary_button.dart';
+import 'favorites_shortcuts.dart';
+import 'recent_searches_list.dart';
 import 'search/journey_spine.dart';
 import 'search/save_default_row.dart';
 import 'search/editable_value.dart';
@@ -53,6 +57,9 @@ class BottomCard extends StatefulWidget {
     required this.recentTrips,
     required this.onRecentTripTap,
     this.nearbyDepartures,
+    this.recentSearches = const [],
+    this.onRecentSearchTap,
+    this.onFavoriteTap,
   });
 
   final bool isCollapsed;
@@ -99,6 +106,14 @@ class BottomCard extends StatefulWidget {
   /// in finished because it looks things up on its own; left out, the section
   /// is not offered however it is set.
   final Widget? nearbyDepartures;
+
+  /// The searches to run again, for the home section of that name.
+  final List<RecentSearch> recentSearches;
+  final ValueChanged<RecentSearch>? onRecentSearchTap;
+
+  /// Goes to a favourite. Left out, the favourites section is not offered
+  /// however it is set.
+  final ValueChanged<FavoritePlace>? onFavoriteTap;
 
   @override
   State<BottomCard> createState() => _BottomCardState();
@@ -294,6 +309,22 @@ class _BottomCardState extends State<BottomCard> {
       for (final config in configs)
         if (config.enabled)
           switch (config.section) {
+            HomeSection.favorites =>
+              widget.onFavoriteTap == null
+                  ? const SizedBox.shrink()
+                  : GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: widget.onUnfocus,
+                      child: FavoritesShortcuts(onTap: widget.onFavoriteTap!),
+                    ),
+            HomeSection.recentSearches => GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: widget.onUnfocus,
+              child: RecentSearchesList(
+                searches: widget.recentSearches,
+                onTap: widget.onRecentSearchTap ?? (_) {},
+              ),
+            ),
             HomeSection.recentTrips => GestureDetector(
               behavior: HitTestBehavior.translucent,
               onTap: widget.onUnfocus,

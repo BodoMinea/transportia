@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
+import 'package:transportia/models/recent_search.dart';
 import 'package:transportia/models/routing_options.dart';
+import 'package:transportia/services/favorites_service.dart';
 import 'package:transportia/models/saved_trip.dart';
 import 'package:transportia/models/time_selection.dart';
 import 'package:transportia/models/transitous/server_config.dart';
@@ -27,10 +29,17 @@ class BottomCardHost extends StatefulWidget {
     this.onSwapRequested,
     this.asPage = false,
     this.nearbyDepartures,
+    this.recentSearches = const [],
+    this.onRecentSearchTap,
+    this.onFavoriteTap,
   });
 
   /// Stands in for the nearby departures, which look things up on their own.
   final Widget? nearbyDepartures;
+
+  final List<RecentSearch> recentSearches;
+  final ValueChanged<RecentSearch>? onRecentSearchTap;
+  final ValueChanged<FavoritePlace>? onFavoriteTap;
 
   /// The card as the whole page, the way it shows with the map turned off.
   final bool asPage;
@@ -104,6 +113,9 @@ class BottomCardHostState extends State<BottomCardHost> {
             recentTrips: widget.recentTrips,
             onRecentTripTap: widget.onRecentTripTap ?? (_) {},
             nearbyDepartures: widget.nearbyDepartures,
+            recentSearches: widget.recentSearches,
+            onRecentSearchTap: widget.onRecentSearchTap,
+            onFavoriteTap: widget.onFavoriteTap,
           ),
         ),
       ),

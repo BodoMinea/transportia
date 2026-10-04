@@ -748,17 +748,25 @@ class _HomeSectionRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              config.section.label,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: config.enabled
-                    ? AppColors.black
-                    : AppColors.black.withValues(alpha: 0.4),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  config.section.label,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: config.enabled
+                        ? AppColors.black
+                        : AppColors.black.withValues(alpha: 0.4),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(config.section.description, style: AppText.subtitle),
+              ],
             ),
           ),
+          const SizedBox(width: 12),
           AppToggleSwitch(value: config.enabled, onChanged: onToggle),
         ],
       ),

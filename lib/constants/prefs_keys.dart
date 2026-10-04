@@ -50,6 +50,10 @@ class PrefsKeys {
 
   static const String favoritePlaces = 'favorite_places';
   static const String recentTrips = 'recent_trips';
+
+  /// The two ends of the searches the rider ran, to run again. Not
+  /// [recentTrips], which since 1.0.4 holds connections that were opened.
+  static const String recentSearches = 'recent_searches';
   static const String savedTrips = 'saved_trips';
   static const String savedPlacesSearch = 'saved_places_search';
   static const String savedPlacesTimetable = 'saved_places_timetable';

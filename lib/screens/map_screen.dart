@@ -21,6 +21,7 @@ import '../models/transitous/server_config.dart';
 import '../models/itinerary.dart';
 import '../models/my_location.dart';
 import '../models/nav_destination.dart';
+import '../models/recent_search.dart';
 import '../models/saved_place.dart';
 import '../models/stop_time.dart';
 import '../models/time_selection.dart';
@@ -33,6 +34,8 @@ import '../screens/location_search_screen.dart';
 import '../screens/via_stops_screen.dart';
 import '../services/location_service.dart';
 import '../services/plan_request.dart';
+import '../services/favorites_service.dart';
+import '../services/recent_searches_service.dart';
 import '../services/recent_trips_service.dart';
 import '../services/backend_reload_service.dart';
 import '../services/rental_providers_service.dart';
@@ -164,6 +167,7 @@ class _MapScreenState extends State<MapScreen>
   bool _optionsTouched = false;
   ServerConfig _capabilities = ServerCapabilitiesService.capabilities.value;
   List<SavedTrip> _recentTrips = [];
+  List<RecentSearch> _recentSearches = [];
   bool _isSearching = false;
   bool _isMapReady = false;
 
@@ -329,6 +333,8 @@ class _MapScreenState extends State<MapScreen>
     _fromCtrl.addListener(_handleFromTextChanged);
     _toCtrl.addListener(_handleToTextChanged);
     unawaited(_loadRecentTrips());
+    unawaited(_loadRecentSearches());
+    unawaited(FavoritesService.getFavorites());
   }
 
   Future<void> _initStartup() async {
@@ -2019,6 +2025,9 @@ class _MapScreenState extends State<MapScreen>
       timeSelection: _timeSelection,
       recentTrips: _recentTrips,
       onRecentTripTap: _onRecentTripTap,
+      recentSearches: _recentSearches,
+      onRecentSearchTap: _onRecentSearchTap,
+      onFavoriteTap: _onFavoriteTap,
       nearbyDepartures: NearbyDeparturesSection(
         center: _hasLocationPermission ? _lastUserLatLng : null,
         onStopTap: _openNearbyStop,
@@ -2094,6 +2103,10 @@ class _MapScreenState extends State<MapScreen>
     final from = resolvedFrom.isMyLocation ? here! : resolvedFrom.latLng;
     final to = resolvedTo.isMyLocation ? here! : resolvedTo.latLng;
 
+    // Kept to run again. The ends as picked, not as positions: a search from
+    // My Location starts from wherever the rider is next time.
+    unawaited(RecentSearchesService.record(from: resolvedFrom, to: resolvedTo));
+
     Navigator.of(context)
         .push(
           CupertinoPageRoute(
@@ -2115,6 +2128,7 @@ class _MapScreenState extends State<MapScreen>
           _unfocusInputs();
           setState(() => _isSearching = false);
           unawaited(_loadRecentTrips());
+          unawaited(_loadRecentSearches());
         });
   }
 
@@ -3985,6 +3999,51 @@ class _MapScreenState extends State<MapScreen>
     setState(() {
       _recentTrips = trips;
     });
+  }
+
+  Future<void> _loadRecentSearches() async {
+    final searches = await RecentSearchesService.getRecentSearches();
+    if (!mounted) return;
+    setState(() => _recentSearches = searches);
+  }
+
+  /// Runs the search again, now: the two ends go back in the fields as they
+  /// were picked, and the answer is today's rather than the one it had.
+  void _onRecentSearchTap(RecentSearch search) {
+    Haptics.lightTick();
+    _fillAndSearch(
+      from: search.from.toSuggestion(),
+      to: search.to.toSuggestion(),
+    );
+  }
+
+  /// Goes to a favourite from where the rider is, now.
+  void _onFavoriteTap(FavoritePlace favorite) {
+    Haptics.lightTick();
+    _fillAndSearch(
+      from: myLocationSuggestion,
+      to: TransitousLocationSuggestion(
+        id: 'favorite-${favorite.id}',
+        name: favorite.displayName,
+        lat: favorite.lat,
+        lon: favorite.lon,
+        type: favorite.type,
+        stopId: favorite.stopId,
+      ),
+    );
+  }
+
+  /// Puts [from] and [to] in the fields and searches, leaving now.
+  void _fillAndSearch({
+    required TransitousLocationSuggestion from,
+    required TransitousLocationSuggestion to,
+  }) {
+    _unfocusInputs();
+    _setControllerText(RouteFieldKind.from, from.name);
+    _setSelection(RouteFieldKind.from, from, notify: true);
+    _setControllerText(RouteFieldKind.to, to.name);
+    _setSelection(RouteFieldKind.to, to, notify: true);
+    unawaited(_search(TimeSelection.now()));
   }
 
   /// Reopens the connection itself, not a new search between its two ends:

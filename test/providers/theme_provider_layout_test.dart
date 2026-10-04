@@ -73,20 +73,29 @@ void main() {
   });
 
   group('the home screen sections', () {
-    test('all are shown, in the default order, until changed', () async {
+    test('what the card always showed is shown until changed', () async {
       final provider = await _loaded();
 
       expect(
         provider.homeSections.map((c) => c.section),
         HomeSectionConfig.defaults.map((c) => c.section),
       );
-      expect(provider.homeSections.every((c) => c.enabled), isTrue);
+      final shown = [
+        for (final c in provider.homeSections)
+          if (c.enabled) c.section,
+      ];
+      expect(shown, [HomeSection.recentTrips, HomeSection.departures]);
     });
 
     test('a stored order and choice are honoured', () async {
       SharedPreferencesAsyncPlatform.instance =
           InMemorySharedPreferencesAsync.withData({
-            _homeSections: ['departures:1', 'recentTrips:0'],
+            _homeSections: [
+              'departures:1',
+              'recentTrips:0',
+              'favorites:1',
+              'recentSearches:1',
+            ],
           });
 
       final provider = await _loaded();
@@ -94,9 +103,39 @@ void main() {
       expect(provider.homeSections.map((c) => c.section), [
         HomeSection.departures,
         HomeSection.recentTrips,
+        HomeSection.favorites,
+        HomeSection.recentSearches,
       ]);
-      expect(provider.homeSections.last.enabled, isFalse);
+      expect(provider.homeSections.map((c) => c.enabled), [
+        true,
+        false,
+        true,
+        true,
+      ]);
     });
+
+    test(
+      'a list stored before favourites and searches gets them off',
+      () async {
+        SharedPreferencesAsyncPlatform.instance =
+            InMemorySharedPreferencesAsync.withData({
+              _homeSections: ['departures:1', 'recentTrips:0'],
+            });
+
+        final provider = await _loaded();
+
+        final enabled = {
+          for (final c in provider.homeSections) c.section: c.enabled,
+        };
+        expect(provider.homeSections.take(2).map((c) => c.section), [
+          HomeSection.departures,
+          HomeSection.recentTrips,
+        ]);
+        expect(enabled[HomeSection.recentTrips], isFalse);
+        expect(enabled[HomeSection.favorites], isFalse);
+        expect(enabled[HomeSection.recentSearches], isFalse);
+      },
+    );
 
     test('a change is stored and announced', () async {
       final provider = await _loaded();
@@ -106,15 +145,15 @@ void main() {
       await provider.setHomeSections([
         const HomeSectionConfig(section: HomeSection.departures, enabled: true),
         const HomeSectionConfig(
-          section: HomeSection.recentTrips,
-          enabled: false,
+          section: HomeSection.recentSearches,
+          enabled: true,
         ),
       ]);
 
       expect(notified, 1);
       expect(await SharedPreferencesAsync().getStringList(_homeSections), [
         'departures:1',
-        'recentTrips:0',
+        'recentSearches:1',
       ]);
     });
   });
