@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../models/home_section.dart';
 import '../models/recent_search.dart';
+import '../models/quick_access_layout.dart';
 import '../models/rental_provider_prefs.dart';
 import '../providers/theme_provider.dart';
 import '../services/favorites_service.dart';
@@ -13,6 +14,7 @@ import '../models/routing_options.dart';
 import '../models/time_selection.dart';
 import '../models/transitous/server_config.dart';
 import '../models/saved_trip.dart';
+import '../services/quick_access_service.dart';
 import '../services/rental_providers_service.dart';
 import '../utils/time_utils.dart';
 import '../widgets/route_field_box.dart';
@@ -166,18 +168,25 @@ class _BottomCardState extends State<BottomCard> {
     // service rather than handed down with them.
     return ValueListenableBuilder<RentalProviderPrefs>(
       valueListenable: RentalProvidersService.prefsListenable,
-      builder: (context, providers, _) => JourneySpine(
-        options: widget.options,
-        capabilities: widget.capabilities,
-        onChanged: widget.onOptionsChanged,
-        onAddViaStop: widget.onAddViaStop,
-        limitToMyProviders: providers.isActive,
-        hasRentalProviders: providers.groups.isNotEmpty,
-        onLimitToMyProvidersChanged: RentalProvidersService.setLimit,
-        opening: context.select<ThemeProvider, SearchOptionsOpening>(
-          (theme) => theme.searchOptionsOpening,
-        ),
-      ),
+      builder: (context, providers, _) =>
+          ValueListenableBuilder<QuickAccessLayout>(
+            valueListenable: QuickAccessService.layoutListenable,
+            builder: (context, layout, _) => JourneySpine(
+              layout: layout,
+              options: widget.options,
+              capabilities: widget.capabilities,
+              onChanged: widget.onOptionsChanged,
+              onAddViaStop: widget.onAddViaStop,
+              limitToMyProviders: providers.isActive,
+              rentalProviderNames: [
+                for (final group in providers.groups) group.name,
+              ],
+              onLimitToMyProvidersChanged: RentalProvidersService.setLimit,
+              opening: context.select<ThemeProvider, SearchOptionsOpening>(
+                (theme) => theme.searchOptionsOpening,
+              ),
+            ),
+          ),
     );
   }
 
