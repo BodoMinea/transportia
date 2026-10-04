@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../models/itinerary.dart';
 import '../../models/journey_stop.dart';
+import '../../models/ridden_stretch.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/color_utils.dart';
 import '../../utils/duration_formatter.dart';
@@ -41,6 +42,7 @@ class TripDetailsView extends StatelessWidget {
     required this.onStopTap,
     this.headerTrailing,
     this.trailingSlivers = const [],
+    this.ridden,
   });
 
   final Itinerary itinerary;
@@ -52,6 +54,10 @@ class TripDetailsView extends StatelessWidget {
 
   /// Slivers appended below the cards, such as a last-updated footer.
   final List<Widget> trailingSlivers;
+
+  /// The part of the trip a journey rides, when the trip is opened from one.
+  /// The stops outside it are drawn light.
+  final RiddenStretch? ridden;
 
   /// The leg the trip is about — the first that is actually ridden, since a
   /// trip fetched by id can be wrapped in walking legs.
@@ -103,6 +109,7 @@ class TripDetailsView extends StatelessWidget {
                   routeTextColor: routeTextColor,
                   modeIcon: getLegIcon(leg.mode),
                   onStopTap: onStopTap,
+                  riddenRange: ridden?.rangeOn(leg),
                 ),
               ],
             ),
@@ -285,8 +292,10 @@ class _TripJourneyCard extends StatelessWidget {
     required this.modeIcon,
     required this.onStopTap,
     required this.isLive,
+    required this.riddenRange,
   });
 
+  final ({int start, int end})? riddenRange;
   final List<JourneyStop> stops;
   final Color routeColor;
   final Color routeTextColor;
@@ -321,6 +330,7 @@ class _TripJourneyCard extends StatelessWidget {
               modeIcon: modeIcon,
               onStopTap: onStopTap,
               isLive: isLive,
+              riddenRange: riddenRange,
             ),
         ],
       ),

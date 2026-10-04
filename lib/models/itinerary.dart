@@ -585,6 +585,25 @@ class Leg {
     return index < 0 ? null : index;
   }
 
+  /// Where [from] and [to] sit in [stopSequence], as the indices of the two
+  /// ends of the stretch between them, or null when the leg does not call at
+  /// both, in that order.
+  ///
+  /// The end is searched backwards: a line that calls at a stop twice — a
+  /// loop, or a service that reverses — should give the later visit, or the
+  /// stretch would end before it began.
+  ({int start, int end})? stopRangeBetween(TransitPlace from, TransitPlace to) {
+    final sequence = stopSequence;
+
+    final start = sequence.indexWhere((place) => _samePlace(place, from));
+    if (start < 0) return null;
+
+    for (var i = sequence.length - 1; i > start; i--) {
+      if (_samePlace(sequence[i], to)) return (start: start, end: i);
+    }
+    return null;
+  }
+
   /// The part of this leg that [from] → [to] actually travels.
   ///
   /// `/trip` answers with the service end to end — the S7 from Ahrensfelde to
@@ -601,20 +620,9 @@ class Leg {
   Leg sliceBetween(TransitPlace from, TransitPlace to) {
     final sequence = stopSequence;
 
-    final start = sequence.indexWhere((place) => _samePlace(place, from));
-    if (start < 0) return this;
-
-    // Searched backwards: a line that calls at a stop twice — a loop, or a
-    // service that reverses — should give the later visit, or the slice
-    // would end before it began.
-    var end = -1;
-    for (var i = sequence.length - 1; i > start; i--) {
-      if (_samePlace(sequence[i], to)) {
-        end = i;
-        break;
-      }
-    }
-    if (end < 0) return this;
+    final range = stopRangeBetween(from, to);
+    if (range == null) return this;
+    final (:start, :end) = range;
     if (start == 0 && end == sequence.length - 1) return this;
 
     final origin = sequence[start];

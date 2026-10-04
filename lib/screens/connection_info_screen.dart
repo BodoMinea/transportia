@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../models/itinerary.dart';
+import '../models/ridden_stretch.dart';
 import '../providers/theme_provider.dart';
 import '../services/trip_details_service.dart';
 import '../theme/app_colors.dart';
@@ -23,7 +24,12 @@ const Duration _kLiveTimeTick = Duration(seconds: 5);
 class ConnectionInfoScreen extends StatefulWidget {
   final String tripId;
 
-  const ConnectionInfoScreen({super.key, required this.tripId});
+  /// The stretch of this trip a journey rides, when it was opened from one:
+  /// the stops and the line outside it are drawn light, in the list and on
+  /// the map. Null, as from a departures list, shows the trip as a whole.
+  final RiddenStretch? ridden;
+
+  const ConnectionInfoScreen({super.key, required this.tripId, this.ridden});
 
   @override
   State<ConnectionInfoScreen> createState() => _ConnectionInfoScreenState();
@@ -110,7 +116,11 @@ class _ConnectionInfoScreenState extends State<ConnectionInfoScreen> {
   void _openTripOnMap() {
     Navigator.of(context).push(
       CustomPageRoute(
-        child: ItineraryMapScreen(itinerary: _itinerary!, showCarousel: false),
+        child: ItineraryMapScreen(
+          itinerary: _itinerary!,
+          showCarousel: false,
+          ridden: widget.ridden,
+        ),
       ),
     );
   }
@@ -146,6 +156,7 @@ class _ConnectionInfoScreenState extends State<ConnectionInfoScreen> {
       itinerary: itinerary,
       onRefresh: _refreshTripDetails,
       onStopTap: _openStopSheet,
+      ridden: widget.ridden,
       headerTrailing: GestureDetector(
         onTap: _openTripOnMap,
         child: Container(

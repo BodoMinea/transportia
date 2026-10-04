@@ -14,13 +14,24 @@ class TimelineIndicatorBox extends StatelessWidget {
     super.key,
     required this.child,
     required this.lineColor,
+    this.topLineColor,
+    this.bottomLineColor,
     this.centerGap = 0.0,
     this.cutTop = false,
     this.cutBottom = false,
   });
 
   final Widget child;
+
+  /// The colour of the line either side of the dot.
   final Color lineColor;
+
+  /// The colour of the half above and below the dot where it differs from
+  /// [lineColor]: at the point where a line changes from one look to another,
+  /// each half belongs to the stretch it joins.
+  final Color? topLineColor;
+  final Color? bottomLineColor;
+
   final double centerGap;
   final bool cutTop;
   final bool cutBottom;
@@ -43,7 +54,7 @@ class TimelineIndicatorBox extends StatelessWidget {
                 width: _kIndicatorLineWidth,
                 height: sideLen,
                 child: DecoratedBox(
-                  decoration: BoxDecoration(color: lineColor),
+                  decoration: BoxDecoration(color: topLineColor ?? lineColor),
                 ),
               ),
             ),
@@ -54,7 +65,9 @@ class TimelineIndicatorBox extends StatelessWidget {
                 width: _kIndicatorLineWidth,
                 height: sideLen,
                 child: DecoratedBox(
-                  decoration: BoxDecoration(color: lineColor),
+                  decoration: BoxDecoration(
+                    color: bottomLineColor ?? lineColor,
+                  ),
                 ),
               ),
             ),

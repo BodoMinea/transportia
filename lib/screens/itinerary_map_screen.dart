@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/itinerary.dart';
+import '../models/ridden_stretch.dart';
 import '../providers/theme_provider.dart';
 import '../services/itinerary_navigation_tracker.dart';
 import '../services/itinerary_tracking_controller.dart';
@@ -24,6 +25,7 @@ import '../utils/journey_colors.dart' show isStreetLeg;
 import '../utils/leg_helper.dart';
 import '../utils/map_marker_utils.dart';
 import '../utils/polyline_utils.dart';
+import '../utils/ridden_line.dart';
 import '../utils/reported_time.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/delayed_time.dart';
@@ -47,12 +49,17 @@ class ItineraryMapScreen extends StatefulWidget {
   /// tracking and should not leave the rider to find the play button.
   final bool startTracking;
 
+  /// Set when the itinerary is a whole trip being looked at from inside a
+  /// journey: the part of its line outside this stretch is drawn light.
+  final RiddenStretch? ridden;
+
   const ItineraryMapScreen({
     super.key,
     required this.itinerary,
     this.showCarousel = true,
     this.initialLegIndex,
     this.startTracking = false,
+    this.ridden,
   });
 
   @override
@@ -95,6 +102,10 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
   static const double _transferDistanceThresholdMeters = 80.0;
   static const String _kStopsSourceId = 'itinerary-stops-source';
   static const String _kStopsLayerId = 'itinerary-stops-layer';
+  static const double _lineOpacity = 0.8;
+
+  /// A line the rider is not on, under the one they are.
+  static const double _unriddenLineOpacity = 0.3;
   static const double _walkLineWidth = 3.0;
   static const double _nonWalkLineWidth = 3.4;
   static const Color _walkLegColor = Color(0xFF9E9E9E);
@@ -659,16 +670,34 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
       final storedGeometry = List<LatLng>.from(geometry);
       geometries.add(storedGeometry);
 
+      // A trip opened from a journey is drawn whole, with the stretch the
+      // journey rides on top of the rest, which is light: the rider is not on
+      // it. A journey's own legs are only ever the stretch ridden.
+      final ridden = riddenPartOfLine(leg, storedGeometry, widget.ridden);
+      final lineWidth = leg.mode == 'WALK' ? _walkLineWidth : _nonWalkLineWidth;
       try {
-        final line = await controller.addLine(
-          LineOptions(
-            geometry: storedGeometry,
-            lineColor: colorToHex(color),
-            lineWidth: leg.mode == 'WALK' ? _walkLineWidth : _nonWalkLineWidth,
-            lineOpacity: 0.8,
+        if (ridden != null) {
+          _lines.add(
+            await controller.addLine(
+              LineOptions(
+                geometry: storedGeometry,
+                lineColor: colorToHex(color),
+                lineWidth: lineWidth,
+                lineOpacity: _unriddenLineOpacity,
+              ),
+            ),
+          );
+        }
+        _lines.add(
+          await controller.addLine(
+            LineOptions(
+              geometry: ridden ?? storedGeometry,
+              lineColor: colorToHex(color),
+              lineWidth: lineWidth,
+              lineOpacity: _lineOpacity,
+            ),
           ),
         );
-        _lines.add(line);
       } catch (e) {}
     }
     _legGeometries = geometries;

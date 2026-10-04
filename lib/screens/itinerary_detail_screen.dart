@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/itinerary.dart';
+import '../models/ridden_stretch.dart';
 import '../models/saved_trip.dart';
 import '../models/time_selection.dart';
 import '../providers/theme_provider.dart';
@@ -1800,9 +1801,16 @@ class _LegDetailsWidgetState extends State<LegDetailsWidget> {
       if (isWalkLeg || tripId == null || tripId.isEmpty) return badge;
       return GestureDetector(
         onTap: () {
-          Navigator.of(
-            context,
-          ).push(CustomPageRoute(child: ConnectionInfoScreen(tripId: tripId)));
+          // Opened from a journey, so the part of the trip this leg rides is
+          // told apart from the rest of it.
+          Navigator.of(context).push(
+            CustomPageRoute(
+              child: ConnectionInfoScreen(
+                tripId: tripId,
+                ridden: RiddenStretch.ofLeg(widget.leg),
+              ),
+            ),
+          );
         },
         child: badge,
       );

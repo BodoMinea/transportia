@@ -33,6 +33,10 @@ const double _kPassedLineOpacity = 0.6;
 /// How far a stop's own text is dimmed once the vehicle has gone past.
 const double _kPassedTextOpacity = 0.5;
 
+/// How far the accented line is dimmed where the rider is not travelling.
+/// Lighter than a passed stretch, which was ridden by someone.
+const double _kUnriddenLineOpacity = 0.3;
+
 /// The stops of one trip, drawn as a timeline with the vehicle placed on it.
 class TripTimeline extends StatelessWidget {
   const TripTimeline({
@@ -44,9 +48,16 @@ class TripTimeline extends StatelessWidget {
     required this.modeIcon,
     required this.onStopTap,
     required this.isLive,
+    this.riddenRange,
   });
 
   final List<JourneyStop> stops;
+
+  /// The indices into [stops] of where the rider gets on and off, when the
+  /// trip is being looked at from inside a journey. Stops and line outside
+  /// it are drawn light, to say the rider is not on them. Null draws the
+  /// whole trip as one.
+  final ({int start, int end})? riddenRange;
   final VehiclePosition position;
   final Color routeColor;
   final Color routeTextColor;
@@ -73,6 +84,29 @@ class TripTimeline extends StatelessWidget {
 
   Color get _passedRouteColor =>
       routeColor.withValues(alpha: _kPassedLineOpacity);
+
+  Color get _unriddenRouteColor =>
+      routeColor.withValues(alpha: _kUnriddenLineOpacity);
+
+  /// Whether the rider is not on the trip at [stopIndex].
+  bool _isUnridden(int stopIndex) {
+    final range = riddenRange;
+    return range != null && (stopIndex < range.start || stopIndex > range.end);
+  }
+
+  /// Whether the line between stop [before] and the stop after it runs
+  /// outside the stretch ridden.
+  bool _isSegmentUnridden(int before, int after) {
+    final range = riddenRange;
+    return range != null && (before < range.start || after > range.end);
+  }
+
+  /// The colour of a stop's dot: light outside the stretch ridden, dimmed
+  /// once passed, the route's own otherwise.
+  Color _stopColor(int stopIndex) {
+    if (_isUnridden(stopIndex)) return _unriddenRouteColor;
+    return _isPassed(stopIndex) ? _passedRouteColor : routeColor;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +135,7 @@ class TripTimeline extends StatelessWidget {
       stop: entry.stop!,
       stopIndex: entry.stopIndex,
       isTerminal: _isTerminal(entry.stopIndex),
-      isPassed: _isPassed(entry.stopIndex),
+      isPassed: _isPassed(entry.stopIndex) || _isUnridden(entry.stopIndex),
       isUpcoming: entry.stopIndex == _upcomingStopIndex,
       routeColor: routeColor,
       isLive: isLive,
@@ -116,11 +150,19 @@ class TripTimeline extends StatelessWidget {
     final dotSize = _isTerminal(stopIndex)
         ? _kTerminalDotSize
         : _kIntermediateDotSize;
-    final dotColor = _isPassed(stopIndex) ? _passedRouteColor : routeColor;
+    final dotColor = _stopColor(stopIndex);
     final isVehicleHere = position.isAtStop && stopIndex == position.stopIndex;
 
     return TimelineIndicatorBox(
       lineColor: dotColor,
+      // Where the stretch ridden begins or ends, the half of the line that
+      // faces the rest of the trip is the light one.
+      topLineColor: _isSegmentUnridden(stopIndex - 1, stopIndex)
+          ? _unriddenRouteColor
+          : null,
+      bottomLineColor: _isSegmentUnridden(stopIndex, stopIndex + 1)
+          ? _unriddenRouteColor
+          : null,
       centerGap: isVehicleHere ? _kVehicleMarkerSize : dotSize,
       cutTop: stopIndex == 0,
       cutBottom: stopIndex == stops.length - 1,
@@ -155,8 +197,31 @@ class TripTimeline extends StatelessWidget {
   );
 
   Widget _buildConnector(List<_TimelineEntry> entries, int index) {
+    if (_isConnectorUnridden(entries, index)) {
+      return SolidLineConnector(color: _unriddenRouteColor);
+    }
     final isPassed = index < entries.length && _isEntryPassed(entries[index]);
     return SolidLineConnector(color: isPassed ? _passedRouteColor : routeColor);
+  }
+
+  /// Whether the line drawn before the entry at [index] runs outside the
+  /// stretch ridden. It joins the stop before it to the next stop at or after
+  /// it, the vehicle entry between two being only a mark along the way.
+  bool _isConnectorUnridden(List<_TimelineEntry> entries, int index) {
+    if (riddenRange == null || index <= 0 || index >= entries.length) {
+      return false;
+    }
+
+    int? before;
+    for (var i = index - 1; i >= 0 && before == null; i--) {
+      if (!entries[i].isVehicle) before = entries[i].stopIndex;
+    }
+    int? after;
+    for (var i = index; i < entries.length && after == null; i++) {
+      if (!entries[i].isVehicle) after = entries[i].stopIndex;
+    }
+    if (before == null || after == null) return false;
+    return _isSegmentUnridden(before, after);
   }
 
   /// A vehicle entry only ever sits behind the vehicle, so the line up to it
