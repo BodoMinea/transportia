@@ -20,6 +20,7 @@ import '../models/routing_options.dart';
 import '../models/transitous/server_config.dart';
 import '../models/itinerary.dart';
 import '../models/my_location.dart';
+import '../models/nav_destination.dart';
 import '../models/saved_place.dart';
 import '../models/stop_time.dart';
 import '../models/time_selection.dart';
@@ -96,7 +97,7 @@ class MapScreen extends StatefulWidget {
   final ValueChanged<bool>? onCollapseChanged;
   final ValueChanged<double>? onCollapseProgressChanged;
   final ValueChanged<bool>? onOverlayVisibilityChanged;
-  final ValueChanged<int>? onTabChangeRequested;
+  final ValueChanged<NavDestination>? onTabChangeRequested;
   final ValueChanged<TransitousLocationSuggestion>? onTimetableRequested;
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -3807,8 +3808,9 @@ class _MapScreenState extends State<MapScreen>
     unawaited(_recordSavedPlace(suggestion));
     _dismissStopOverlay();
     if (widget.onTimetableRequested != null) {
+      // The shell brings Departures forward itself, as a tab or as a pushed
+      // screen; asking for it again here would push it twice.
       widget.onTimetableRequested!(suggestion);
-      widget.onTabChangeRequested?.call(1);
       return;
     }
     Navigator.of(context).push(
@@ -3822,7 +3824,7 @@ class _MapScreenState extends State<MapScreen>
     if (_isQuickSettings) {
       _closeQuickSettings();
     }
-    widget.onTabChangeRequested?.call(3);
+    widget.onTabChangeRequested?.call(NavDestination.settings);
   }
 
   Future<void> _loadStopTimesPreview(MapStop stop) async {

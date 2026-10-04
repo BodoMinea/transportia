@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_colors.dart';
@@ -9,11 +8,15 @@ class FloatingNavBar extends StatelessWidget {
   const FloatingNavBar({
     super.key,
     required this.currentIndex,
+    required this.icons,
     required this.onIndexChanged,
     required this.visibility,
   });
 
   final int currentIndex;
+
+  /// One per tab, in order; the bar is as long as the list.
+  final List<IconData> icons;
   final ValueChanged<int> onIndexChanged;
   final double visibility;
 
@@ -68,26 +71,12 @@ class FloatingNavBar extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _NavBarItem(
-                        icon: LucideIcons.route,
-                        isSelected: currentIndex == 0,
-                        onTap: () => onIndexChanged(0),
-                      ),
-                      _NavBarItem(
-                        icon: LucideIcons.clock,
-                        isSelected: currentIndex == 1,
-                        onTap: () => onIndexChanged(1),
-                      ),
-                      _NavBarItem(
-                        icon: LucideIcons.bookmark,
-                        isSelected: currentIndex == 2,
-                        onTap: () => onIndexChanged(2),
-                      ),
-                      _NavBarItem(
-                        icon: LucideIcons.settings,
-                        isSelected: currentIndex == 3,
-                        onTap: () => onIndexChanged(3),
-                      ),
+                      for (var i = 0; i < icons.length; i++)
+                        _NavBarItem(
+                          icon: icons[i],
+                          isSelected: currentIndex == i,
+                          onTap: () => onIndexChanged(i),
+                        ),
                     ],
                   ),
                 ),

@@ -3,10 +3,14 @@ import 'package:flutter/widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../models/home_section.dart';
+import '../models/tab_bar_item.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_colors.dart';
+import '../utils/list_reorder.dart';
 import '../widgets/app_icon_header.dart';
 import '../widgets/app_page_scaffold.dart';
+import '../widgets/app_toggle_switch.dart';
 import '../widgets/section_title.dart';
 import '../widgets/toggle_card.dart';
 import '../theme/app_text.dart';
@@ -70,6 +74,42 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     await themeProvider.setShowCalories(show);
   }
 
+  Future<void> _moveHomeSection(
+    List<HomeSectionConfig> sections,
+    int index,
+    int delta,
+  ) async {
+    final target = index + delta;
+    if (target < 0 || target >= sections.length) return;
+    await context.read<ThemeProvider>().setHomeSections(
+      reorderWithin(sections, sections, index, target),
+    );
+  }
+
+  Future<void> _toggleHomeSection(
+    List<HomeSectionConfig> sections,
+    HomeSection section,
+    bool enabled,
+  ) async {
+    await context.read<ThemeProvider>().setHomeSections([
+      for (final config in sections)
+        config.section == section ? config.copyWith(enabled: enabled) : config,
+    ]);
+  }
+
+  Future<void> _toggleTabBarItem(
+    List<TabBarItemConfig> items,
+    TabBarItem item,
+    bool enabledAsTab,
+  ) async {
+    await context.read<ThemeProvider>().setTabBarItems([
+      for (final config in items)
+        config.item == item
+            ? config.copyWith(enabledAsTab: enabledAsTab)
+            : config,
+    ]);
+  }
+
   /// What each choice shows, in the words the search card itself uses.
   static String _openingDescription(SearchOptionsOpening opening) =>
       switch (opening) {
@@ -90,6 +130,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     final searchMapEnabled = themeProvider.searchMapEnabled;
     final searchOptionsOpening = themeProvider.searchOptionsOpening;
     final showCalories = themeProvider.showCalories;
+    final homeSections = themeProvider.homeSections;
+    final tabBarItems = themeProvider.tabBarItems;
 
     return AppPageScaffold(
       title: 'Appearance',
@@ -362,6 +404,67 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                 onChanged: _saveShowCalories,
               ),
               const SizedBox(height: 32),
+              const SectionTitle(text: 'Home Screen'),
+              const SizedBox(height: 8),
+              Text(
+                'Choose which lists show under the search, and use the arrows '
+                'to put them in order',
+                style: AppText.bodyFaint,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.black.withValues(alpha: 0.02),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.black.withValues(alpha: 0.04),
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  children: [
+                    for (var i = 0; i < homeSections.length; i++)
+                      _HomeSectionRow(
+                        key: ValueKey(homeSections[i].section),
+                        config: homeSections[i],
+                        canMoveUp: i > 0,
+                        canMoveDown: i < homeSections.length - 1,
+                        onToggle: (enabled) => _toggleHomeSection(
+                          homeSections,
+                          homeSections[i].section,
+                          enabled,
+                        ),
+                        onMoveUp: () => _moveHomeSection(homeSections, i, -1),
+                        onMoveDown: () => _moveHomeSection(homeSections, i, 1),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              const SectionTitle(text: 'Tab Bar'),
+              const SizedBox(height: 8),
+              Text(
+                'Choose which screens are tabs at the bottom. One you turn '
+                'off moves into Settings instead.',
+                style: AppText.bodyFaint,
+              ),
+              const SizedBox(height: 16),
+              for (final config in tabBarItems) ...[
+                ToggleCard(
+                  icon: config.item == TabBarItem.departures
+                      ? LucideIcons.clock
+                      : LucideIcons.bookmark,
+                  title: config.item.label,
+                  subtitle: config.enabledAsTab
+                      ? 'Shown as a tab'
+                      : 'Shown in Settings',
+                  value: config.enabledAsTab,
+                  onChanged: (enabled) =>
+                      _toggleTabBarItem(tabBarItems, config.item, enabled),
+                ),
+                const SizedBox(height: 12),
+              ],
+              const SizedBox(height: 20),
               const SectionTitle(text: 'Interaction'),
               const SizedBox(height: 8),
               Text(
@@ -597,6 +700,101 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One home screen section: arrows to move it, its name, and its switch.
+class _HomeSectionRow extends StatelessWidget {
+  const _HomeSectionRow({
+    super.key,
+    required this.config,
+    required this.canMoveUp,
+    required this.canMoveDown,
+    required this.onToggle,
+    required this.onMoveUp,
+    required this.onMoveDown,
+  });
+
+  final HomeSectionConfig config;
+  final bool canMoveUp;
+  final bool canMoveDown;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onMoveUp;
+  final VoidCallback onMoveDown;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ReorderButton(
+                icon: LucideIcons.chevronUp,
+                label: 'Move ${config.section.label} up',
+                onPressed: canMoveUp ? onMoveUp : null,
+              ),
+              _ReorderButton(
+                icon: LucideIcons.chevronDown,
+                label: 'Move ${config.section.label} down',
+                onPressed: canMoveDown ? onMoveDown : null,
+              ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              config.section.label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: config.enabled
+                    ? AppColors.black
+                    : AppColors.black.withValues(alpha: 0.4),
+              ),
+            ),
+          ),
+          AppToggleSwitch(value: config.enabled, onChanged: onToggle),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReorderButton extends StatelessWidget {
+  const _ReorderButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(
+            icon,
+            size: 18,
+            color: AppColors.black.withValues(
+              alpha: onPressed != null ? 0.5 : 0.15,
+            ),
+          ),
         ),
       ),
     );

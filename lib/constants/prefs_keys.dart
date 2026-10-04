@@ -19,6 +19,14 @@ class PrefsKeys {
   /// screens. Absent means off.
   static const String showGtfsFields = 'show_gtfs_fields';
 
+  /// Which of the optional tabs are in the bottom bar, as `item:0|1` strings.
+  /// Absent means all of them.
+  static const String tabBarItems = 'tab_bar_items';
+
+  /// Which home screen sections are shown, and in what order, as
+  /// `section:0|1` strings. Absent means all of them in the default order.
+  static const String homeSections = 'home_sections';
+
   static const String mapShowStops = 'map_show_stops';
   static const String mapQuickButton = 'map_quick_button';
   static const String mapShowVehicles = 'map_show_vehicles';

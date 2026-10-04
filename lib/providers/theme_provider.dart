@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/prefs_keys.dart';
+import '../models/home_section.dart';
+import '../models/tab_bar_item.dart';
 
 enum AppThemeMode { light, dark, system }
 
@@ -26,6 +28,8 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const String _searchOptionsOpeningKey = PrefsKeys.searchOptionsOpening;
   static const String _showCaloriesKey = PrefsKeys.showCalories;
   static const String _showGtfsFieldsKey = PrefsKeys.showGtfsFields;
+  static const String _tabBarItemsKey = PrefsKeys.tabBarItems;
+  static const String _homeSectionsKey = PrefsKeys.homeSections;
 
   static const Color defaultAccentColor = Color.fromARGB(255, 0, 113, 133);
   static const String defaultMapStyle = 'default';
@@ -59,6 +63,8 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   SearchOptionsOpening _searchOptionsOpening = defaultSearchOptionsOpening;
   bool _showCalories = defaultShowCalories;
   bool _showGtfsFields = defaultShowGtfsFields;
+  List<TabBarItemConfig> _tabBarItems = TabBarItemConfig.defaults;
+  List<HomeSectionConfig> _homeSections = HomeSectionConfig.defaults;
   bool _isInitialized = false;
 
   static ThemeProvider? get instance => _instance;
@@ -76,6 +82,8 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   SearchOptionsOpening get searchOptionsOpening => _searchOptionsOpening;
   bool get showCalories => _showCalories;
   bool get showGtfsFields => _showGtfsFields;
+  List<TabBarItemConfig> get tabBarItems => List.unmodifiable(_tabBarItems);
+  List<HomeSectionConfig> get homeSections => List.unmodifiable(_homeSections);
 
   /// The rider's choice, as the appearance toggle shows it.
   bool get searchMapEnabled => _searchMapEnabled;
@@ -147,6 +155,22 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     _showGtfsFields =
         await prefs.getBool(_showGtfsFieldsKey) ?? defaultShowGtfsFields;
+
+    final storedTabBarItems = await prefs.getStringList(_tabBarItemsKey);
+    if (storedTabBarItems != null) {
+      _tabBarItems = TabBarItemConfig.reconcile([
+        for (final value in storedTabBarItems)
+          if (TabBarItemConfig.decode(value) case final config?) config,
+      ]);
+    }
+
+    final storedHomeSections = await prefs.getStringList(_homeSectionsKey);
+    if (storedHomeSections != null) {
+      _homeSections = HomeSectionConfig.reconcile([
+        for (final value in storedHomeSections)
+          if (HomeSectionConfig.decode(value) case final config?) config,
+      ]);
+    }
 
     _isInitialized = true;
     notifyListeners();
@@ -241,6 +265,26 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     final prefs = SharedPreferencesAsync();
     await prefs.setBool(_showGtfsFieldsKey, show);
+  }
+
+  Future<void> setTabBarItems(List<TabBarItemConfig> items) async {
+    _tabBarItems = List.unmodifiable(items);
+    notifyListeners();
+
+    final prefs = SharedPreferencesAsync();
+    await prefs.setStringList(_tabBarItemsKey, [
+      for (final config in items) config.encode(),
+    ]);
+  }
+
+  Future<void> setHomeSections(List<HomeSectionConfig> sections) async {
+    _homeSections = List.unmodifiable(sections);
+    notifyListeners();
+
+    final prefs = SharedPreferencesAsync();
+    await prefs.setStringList(_homeSectionsKey, [
+      for (final config in sections) config.encode(),
+    ]);
   }
 
   @override
