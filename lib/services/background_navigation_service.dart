@@ -225,10 +225,26 @@ String? _waitingLabel(Leg leg, ItineraryNavigationTracker tracker) {
 /// [progressLabel] (which only knows the stop *count*, for the carousel
 /// too): the notification also has the leg itself on hand, so it can name
 /// the destination stop and estimate when it'll actually be reached.
-String _stopsProgressLine(Leg leg, int remainingStops) {
+///
+/// With [virtualRemaining] — the rider's own pace, once it parts from the
+/// timetable's (see [virtualRemaining] in itinerary_navigation.dart) — the
+/// time left is an estimate and says so: "~9 min", never HH:MM.
+String _stopsProgressLine(
+  Leg leg,
+  int remainingStops, {
+  Duration? virtualRemaining,
+}) {
   if (remainingStops <= 0) return 'Arriving now';
 
   final stopName = leg.toName;
+  if (virtualRemaining != null) {
+    final rounded = (virtualRemaining.inSeconds / 60).round();
+    final estimate = rounded < 1 ? 1 : rounded;
+    return remainingStops == 1
+        ? '$stopName is next, in ~$estimate min'
+        : '$remainingStops stops, ~$estimate min until $stopName';
+  }
+
   final arrival = leg.endTime;
   final remaining = arrival.difference(DateTime.now());
   final isSoon = remaining.inMinutes < 15;
@@ -320,7 +336,11 @@ void _onServiceStart(ServiceInstance service) async {
     final progressLine =
         (leg == null ? null : _waitingLabel(leg, current)) ??
         (leg != null && leg.mode != 'WALK' && remainingStops != null
-            ? _stopsProgressLine(leg, remainingStops)
+            ? _stopsProgressLine(
+                leg,
+                remainingStops,
+                virtualRemaining: current.virtualRemainingNow(),
+              )
             : progressLabel(
                 remainingWalkMeters: current.remainingWalkMeters,
                 remainingStops: remainingStops,

@@ -61,6 +61,31 @@ class ItineraryNavigationTracker extends ChangeNotifier
   /// progress bar smoothly without changing the displayed stop count.
   double legProgress = 0;
 
+  /// GPS fixes received since the monitored leg began, which is how much the
+  /// pace read from it can be trusted.
+  int fixesOnLeg = 0;
+
+  bool _virtualEtaLatched = false;
+
+  /// How long the monitored ride has left by the rider's own pace, once that
+  /// differs from its timetable by enough to say so; null while the timetable
+  /// serves. See [virtualRemaining].
+  ///
+  /// Once given it is given for the rest of the leg, so the line does not go
+  /// back to a time of day as the two come within the margin again.
+  Duration? virtualRemainingNow({DateTime? now}) {
+    if (currentLegIndex >= legs.length) return null;
+    final remaining = virtualRemaining(
+      leg: legs[currentLegIndex].leg,
+      legProgress: legProgress,
+      fixes: fixesOnLeg,
+      now: now ?? DateTime.now(),
+      latched: _virtualEtaLatched,
+    );
+    if (remaining != null) _virtualEtaLatched = true;
+    return remaining;
+  }
+
   void start(LatLng initialPos, {int? startLegIndex}) {
     if (isActive || legs.isEmpty) return;
     isActive = true;
@@ -123,6 +148,8 @@ class ItineraryNavigationTracker extends ChangeNotifier
   void _resetLegProgress() {
     _stopIndex = 0;
     legProgress = 0;
+    fixesOnLeg = 0;
+    _virtualEtaLatched = false;
     final leg = legs[currentLegIndex].leg;
     if (leg.mode == 'WALK') {
       remainingWalkMeters = leg.distance;
@@ -139,7 +166,11 @@ class ItineraryNavigationTracker extends ChangeNotifier
     if (gpsSignalLost) gpsSignalLost = false;
     if (currentLegIndex >= legs.length) return;
 
+    fixesOnLeg++;
     _recomputeProgressFromPosition(_lastPosition!, advanceFrom: _stopIndex);
+    // Settles whether the pace is now to be told, while it is being learned,
+    // so the notification only has to ask.
+    virtualRemainingNow();
 
     final leg = legs[currentLegIndex].leg;
     final hasArrived = leg.mode == 'WALK'

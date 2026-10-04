@@ -116,3 +116,56 @@ String? progressLabel({
   }
   return null;
 }
+
+/// GPS fixes on a ride before its own pace is trusted over the timetable.
+const int kVirtualEtaMinFixes = 10;
+
+/// How far along a ride the rider must be, as a fraction of it, before the
+/// pace is read from it.
+const double kVirtualEtaMinProgress = 0.03;
+
+/// How far the pace may put the arrival from the one the leg gives before
+/// the rider is told the pace instead.
+const Duration kVirtualEtaMinDiscrepancy = Duration(minutes: 5);
+
+/// How long a ride has left, worked out from how far along it the rider is
+/// rather than from its timetable, or null while the timetable still serves.
+///
+/// A rider who boarded an earlier or a later vehicle than the journey planned
+/// is moving along the stops correctly, but [Leg.endTime] is that of the
+/// vehicle they were meant to be on. Once they have moved enough to say
+/// something — [kVirtualEtaMinFixes] fixes and [kVirtualEtaMinProgress] of the
+/// ride — the ride's scheduled length, less the share already covered, is
+/// what is left; if arriving then would be more than
+/// [kVirtualEtaMinDiscrepancy] from [Leg.endTime], that is what to say.
+///
+/// [latched] holds the answer once it has been given, so the line does not
+/// flip back to a time of day because the two came within the margin again.
+Duration? virtualRemaining({
+  required Leg leg,
+  required double legProgress,
+  required int fixes,
+  required DateTime now,
+  bool latched = false,
+}) {
+  if (leg.mode == 'WALK') return null;
+  if (fixes < kVirtualEtaMinFixes || legProgress < kVirtualEtaMinProgress) {
+    return null;
+  }
+
+  final scheduledStart = leg.scheduledStartTime;
+  final scheduledEnd = leg.scheduledEndTime;
+  final scheduled = scheduledStart != null && scheduledEnd != null
+      ? scheduledEnd.difference(scheduledStart)
+      : Duration(seconds: leg.duration);
+  if (scheduled <= Duration.zero) return null;
+
+  final left = (1 - legProgress.clamp(0.0, 1.0));
+  final remaining = Duration(
+    microseconds: (scheduled.inMicroseconds * left).round(),
+  );
+  if (latched) return remaining;
+
+  final discrepancy = now.add(remaining).difference(leg.endTime).abs();
+  return discrepancy > kVirtualEtaMinDiscrepancy ? remaining : null;
+}
