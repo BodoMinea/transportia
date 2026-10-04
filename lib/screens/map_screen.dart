@@ -67,6 +67,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/skeletons/skeleton_card.dart';
 import '../widgets/skeletons/skeleton_shimmer.dart';
 import '../widgets/last_updated_footer.dart';
+import '../widgets/nearby_departures_section.dart';
 import '../widgets/stop_departures_sheet.dart';
 import '../widgets/journey/trip_details_view.dart';
 import '../widgets/journey/trip_timeline.dart' show StopTapCallback;
@@ -2018,6 +2019,23 @@ class _MapScreenState extends State<MapScreen>
       timeSelection: _timeSelection,
       recentTrips: _recentTrips,
       onRecentTripTap: _onRecentTripTap,
+      nearbyDepartures: NearbyDeparturesSection(
+        center: _hasLocationPermission ? _lastUserLatLng : null,
+        onStopTap: _openNearbyStop,
+      ),
+    );
+  }
+
+  /// Shows what leaves a stop from the nearby departures list. A sheet rather
+  /// than the map's stop popup, because the list is there with or without a
+  /// map behind it.
+  void _openNearbyStop(MapStop stop) {
+    Haptics.lightTick();
+    showStopDeparturesSheet(
+      context,
+      stopId: stop.stopId,
+      stopName: stop.name,
+      referenceTime: DateTime.now(),
     );
   }
 

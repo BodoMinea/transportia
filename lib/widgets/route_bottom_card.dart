@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import '../models/home_section.dart';
 import '../models/rental_provider_prefs.dart';
 import '../providers/theme_provider.dart';
 import '../models/routing_options.dart';
@@ -51,6 +52,7 @@ class BottomCard extends StatefulWidget {
     required this.timeSelection,
     required this.recentTrips,
     required this.onRecentTripTap,
+    this.nearbyDepartures,
   });
 
   final bool isCollapsed;
@@ -92,6 +94,11 @@ class BottomCard extends StatefulWidget {
   final TimeSelection timeSelection;
   final List<SavedTrip> recentTrips;
   final ValueChanged<SavedTrip> onRecentTripTap;
+
+  /// The departures near the rider, for the home section of that name. Handed
+  /// in finished because it looks things up on its own; left out, the section
+  /// is not offered however it is set.
+  final Widget? nearbyDepartures;
 
   @override
   State<BottomCard> createState() => _BottomCardState();
@@ -263,14 +270,7 @@ class _BottomCardState extends State<BottomCard> {
                       ),
                   ],
                   below: [
-                    GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: widget.onUnfocus,
-                      child: _RecentTrips(
-                        trips: widget.recentTrips,
-                        onTap: widget.onRecentTripTap,
-                      ),
-                    ),
+                    ..._buildHomeSections(context),
                     // Clears the floating nav bar, which is a sibling
                     // painted over this card rather than beside it.
                     const SizedBox(height: FloatingNavBar.reservedHeight),
@@ -282,6 +282,31 @@ class _BottomCardState extends State<BottomCard> {
         ),
       ),
     );
+  }
+
+  /// The lists under the search, in the order the rider put them in and
+  /// without the ones they switched off.
+  List<Widget> _buildHomeSections(BuildContext context) {
+    final configs = context.select<ThemeProvider, List<HomeSectionConfig>>(
+      (theme) => theme.homeSections,
+    );
+    return [
+      for (final config in configs)
+        if (config.enabled)
+          switch (config.section) {
+            HomeSection.recentTrips => GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: widget.onUnfocus,
+              child: _RecentTrips(
+                trips: widget.recentTrips,
+                onTap: widget.onRecentTripTap,
+              ),
+            ),
+            HomeSection.departures => _NearbyDepartures(
+              child: widget.nearbyDepartures,
+            ),
+          },
+    ];
   }
 
   /// The grab bar over the map; on its own page the card just starts.
@@ -318,6 +343,28 @@ class _BottomCardState extends State<BottomCard> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The next departures from the stops around the rider, under a heading.
+class _NearbyDepartures extends StatelessWidget {
+  const _NearbyDepartures({required this.child});
+
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = this.child;
+    if (child == null) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Text('Nearby departures', style: AppText.heading),
+        const SizedBox(height: 12),
+        child,
+      ],
     );
   }
 }

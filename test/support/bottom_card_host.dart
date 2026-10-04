@@ -26,7 +26,11 @@ class BottomCardHost extends StatefulWidget {
     this.onSearch,
     this.onSwapRequested,
     this.asPage = false,
+    this.nearbyDepartures,
   });
+
+  /// Stands in for the nearby departures, which look things up on their own.
+  final Widget? nearbyDepartures;
 
   /// The card as the whole page, the way it shows with the map turned off.
   final bool asPage;
@@ -99,6 +103,7 @@ class BottomCardHostState extends State<BottomCardHost> {
             timeSelection: widget.timeSelection ?? TimeSelection.now(),
             recentTrips: widget.recentTrips,
             onRecentTripTap: widget.onRecentTripTap ?? (_) {},
+            nearbyDepartures: widget.nearbyDepartures,
           ),
         ),
       ),
