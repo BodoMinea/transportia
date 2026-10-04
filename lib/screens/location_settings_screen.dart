@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../widgets/app_icon_header.dart';
 import '../widgets/app_page_scaffold.dart';
 import '../widgets/app_toggle_switch.dart';
+import '../widgets/place_search_location_toggle.dart';
 import '../widgets/pressable_highlight.dart';
 import '../widgets/section_title.dart';
 import '../widgets/icon_badge.dart';
@@ -159,6 +160,16 @@ class _LocationSettingsScreenState extends State<LocationSettingsScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 32),
+            const SectionTitle(text: 'Place search'),
+            const SizedBox(height: 8),
+            Text(
+              'How strongly results lean towards you is set under Search and '
+              'routing options.',
+              style: AppText.bodyFaint,
+            ),
+            const SizedBox(height: 16),
+            const PlaceSearchLocationToggle(),
             const SizedBox(height: 32),
             const SectionTitle(text: 'Place details'),
             const SizedBox(height: 8),
