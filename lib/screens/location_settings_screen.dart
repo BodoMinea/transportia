@@ -6,13 +6,16 @@ import 'package:provider/provider.dart';
 
 import '../providers/backend_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/location_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_icon_header.dart';
 import '../widgets/app_page_scaffold.dart';
+import '../widgets/app_toggle_switch.dart';
 import '../widgets/pressable_highlight.dart';
 import '../widgets/section_title.dart';
 import '../widgets/icon_badge.dart';
 import '../widgets/custom_card.dart';
+import '../widgets/settings_tile.dart';
 import '../widgets/toggle_card.dart';
 import '../theme/app_text.dart';
 
@@ -27,6 +30,8 @@ class _LocationSettingsScreenState extends State<LocationSettingsScreen> {
   bool _isLoading = true;
   bool _isLocationServiceEnabled = false;
   PermissionStatus _permissionStatus = PermissionStatus.denied;
+  bool _hasLocationAlwaysPermission = false;
+  bool _hasNotificationPermission = false;
 
   @override
   void initState() {
@@ -40,11 +45,16 @@ class _LocationSettingsScreenState extends State<LocationSettingsScreen> {
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       final permission = await Permission.location.status;
+      final hasAlways = await LocationService.hasLocationAlwaysPermission();
+      final hasNotifications =
+          await LocationService.hasNotificationPermission();
 
       if (mounted) {
         setState(() {
           _isLocationServiceEnabled = serviceEnabled;
           _permissionStatus = permission;
+          _hasLocationAlwaysPermission = hasAlways;
+          _hasNotificationPermission = hasNotifications;
           _isLoading = false;
         });
       }
@@ -169,10 +179,68 @@ class _LocationSettingsScreenState extends State<LocationSettingsScreen> {
               value: backend.placeDetailsEnabled,
               onChanged: backend.setPlaceDetailsEnabled,
             ),
+            const SizedBox(height: 32),
+            const SectionTitle(text: 'Trip tracking'),
+            const SizedBox(height: 8),
+            Text(
+              'Following a trip from the map or a departure counts down the '
+              'stops or the distance as you go.',
+              style: AppText.bodyFaint,
+            ),
+            const SizedBox(height: 16),
+            _buildBackgroundTrackingCard(),
           ],
         ),
       ],
     );
+  }
+
+  bool get _hasBackgroundTrackingPermission =>
+      _hasLocationAlwaysPermission && _hasNotificationPermission;
+
+  /// Whether tracking carries on from a notification once the app is closed.
+  /// The switch only works once the system has given the two permissions
+  /// that needs, so until then it is shown off, and says what is missing.
+  Widget _buildBackgroundTrackingCard() {
+    final enabled = context.select<ThemeProvider, bool>(
+      (theme) => theme.backgroundTrackingEnabled,
+    );
+    final canSwitch = _hasBackgroundTrackingPermission;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.black.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.black.withValues(alpha: 0.04)),
+      ),
+      child: SettingsTile(
+        icon: LucideIcons.bellRing,
+        title: 'Track trips in the background',
+        subtitle: _backgroundTrackingSubtitle(),
+        trailingIcon: null,
+        trailing: Opacity(
+          opacity: canSwitch ? 1 : 0.4,
+          child: AppToggleSwitch(
+            value: enabled && canSwitch,
+            onChanged: canSwitch
+                ? context.read<ThemeProvider>().setBackgroundTrackingEnabled
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _backgroundTrackingSubtitle() {
+    if (_hasBackgroundTrackingPermission) {
+      return 'Counts down stops and distance in a notification, and keeps '
+          'going if you close the app. May use more battery.';
+    }
+    final missing = [
+      if (!_hasLocationAlwaysPermission) '"Allow all the time" location',
+      if (!_hasNotificationPermission) 'notification',
+    ].join(' and ');
+    return 'Needs $missing permission, asked for the first time you track a '
+        'trip. You can also give it in the system settings above.';
   }
 
   Widget _buildStatusCard(

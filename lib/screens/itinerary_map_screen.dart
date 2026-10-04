@@ -4,16 +4,22 @@ import 'package:flutter/widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/itinerary.dart';
 import '../providers/theme_provider.dart';
+import '../services/itinerary_navigation_tracker.dart';
+import '../services/itinerary_tracking_controller.dart';
+import '../services/location_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/changeover.dart';
 import '../utils/color_utils.dart';
 import '../utils/duration_formatter.dart';
 import '../utils/geo_utils.dart';
+import '../utils/haptics.dart';
 import '../utils/map_framing.dart';
 import '../utils/itinerary_leg_utils.dart';
+import '../utils/itinerary_navigation.dart';
 import '../utils/journey_colors.dart' show isStreetLeg;
 import '../utils/leg_helper.dart';
 import '../utils/map_marker_utils.dart';
@@ -36,11 +42,17 @@ class ItineraryMapScreen extends StatefulWidget {
   /// mid-journey ones into transfers. Null opens on the whole journey.
   final int? initialLegIndex;
 
+  /// Starts following the journey as soon as the map is up, when the rider is
+  /// on or near it. For the button on the itinerary screen, which asks for
+  /// tracking and should not leave the rider to find the play button.
+  final bool startTracking;
+
   const ItineraryMapScreen({
     super.key,
     required this.itinerary,
     this.showCarousel = true,
     this.initialLegIndex,
+    this.startTracking = false,
   });
 
   @override
@@ -66,6 +78,18 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
   List<List<LatLng>> _legGeometries = [];
   late final List<DisplayLegInfo> _displayLegs;
   late final List<Changeover> _changeovers;
+
+  /// The live tracking session for this journey, when there is one.
+  NavigationProgressState? _navTracker;
+  bool _canStartNavigation = false;
+  int? _lastNavLegIndex;
+  late final String _trackingFingerprint;
+
+  /// How near the rider has to be to the route for tracking to be offered.
+  static const double _navigationEligibilityThresholdMeters = 250.0;
+
+  /// Clears the app bar, which the tracking controls sit under.
+  static const double _navTopBarOffset = 84.0;
 
   static const double _transferZoomLevel = 16.5;
   static const double _transferDistanceThresholdMeters = 80.0;
@@ -93,16 +117,37 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
     super.initState();
     _displayLegs = buildDisplayLegs(widget.itinerary.legs);
     _changeovers = changeoversOf(_displayLegs);
+    _trackingFingerprint = ItineraryTrackingController.fingerprintFor(
+      widget.itinerary,
+    );
     // Page 0 is the whole journey, so leg N is page N + 1. _onStyleLoaded
     // already focuses whatever page it opens on.
     final requested = widget.initialLegIndex;
     _currentPage = requested != null && requested >= 0
         ? (requested + 1).clamp(0, _displayLegs.length)
         : 0;
+
+    // Tracking already running for this journey (coming back from the
+    // itinerary screen, say) is picked up here, and the carousel opens on the
+    // tracked leg. It has to happen before the controller below: a
+    // PageController's initial page is only read once.
+    final running = ItineraryTrackingController.active.value;
+    if (running != null &&
+        ItineraryTrackingController.isTracking(_trackingFingerprint)) {
+      _navTracker = running;
+      _lastNavLegIndex = running.currentLegIndex;
+      _currentPage = (running.currentLegIndex + 1).clamp(
+        0,
+        _displayLegs.length,
+      );
+      running.addListener(_onNavTrackerChanged);
+    }
+
     _pageController = PageController(
       initialPage: _currentPage,
       viewportFraction: widget.showCarousel ? _kCarouselPageFraction : 1.0,
     );
+    ItineraryTrackingController.active.addListener(_onControllerTrackerChanged);
   }
 
   @override
@@ -120,12 +165,21 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
   @override
   void dispose() {
     _controller?.onFeatureTapped.remove(_handleFeatureTapped);
+    ItineraryTrackingController.active.removeListener(
+      _onControllerTrackerChanged,
+    );
+    _navTracker?.removeListener(_onNavTrackerChanged);
+    // Tracking belongs to ItineraryTrackingController, not to this screen:
+    // closing the map to read the stop list on the itinerary screen does not
+    // stop it. Only this screen's own wakelock and listeners go.
+    unawaited(WakelockPlus.disable());
     _pageController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final tracker = _navTracker;
     return Container(
       color: AppColors.white,
       child: SafeArea(
@@ -152,6 +206,27 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
                 ),
               ],
             ),
+            if (widget.showCarousel)
+              Positioned(
+                left: 16,
+                right: 76,
+                top: _navTopBarOffset,
+                child: _NavigationStatusBanner(
+                  gpsSignalLost: tracker?.gpsSignalLost ?? false,
+                  arrived: tracker?.arrived ?? false,
+                ),
+              ),
+            if (widget.showCarousel && (_canStartNavigation || tracker != null))
+              Positioned(
+                top: _navTopBarOffset,
+                right: 16,
+                child: _NavigationToggleButton(
+                  isActive: tracker?.isActive == true,
+                  onPressed: tracker?.isActive == true
+                      ? _stopNavigation
+                      : _startNavigation,
+                ),
+              ),
             if (widget.showCarousel)
               Positioned(
                 left: 0,
@@ -190,6 +265,10 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (_shouldShowSwitchTrackingHint) ...[
+          _SwitchTrackingHint(onPressed: _switchTrackedLegToDisplayed),
+          const SizedBox(height: 8),
+        ],
         LayoutBuilder(
           builder: (context, constraints) => Stack(
             children: [
@@ -257,12 +336,23 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
       final changeover = entry.isTransfer
           ? _changeovers.where((c) => identical(c.transfer, leg)).firstOrNull
           : null;
+      final tracker = _navTracker;
+      final progressText =
+          (tracker != null &&
+              tracker.isActive &&
+              tracker.currentLegIndex == legIndex)
+          ? progressLabel(
+              remainingWalkMeters: tracker.remainingWalkMeters,
+              remainingStops: tracker.remainingStops,
+            )
+          : null;
       child = changeover != null
           ? _TransferCarouselCard(changeover: changeover)
           : _LegCarouselCard(
               leg: leg,
               legIndex: legIndex,
               accentColor: accentColor,
+              progressText: progressText,
             );
     }
 
@@ -282,8 +372,122 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
     if (index == 0) {
       unawaited(_fitCameraToBounds());
     } else {
+      // Not switching the tracked leg along with the page: the rider may
+      // only be looking ahead or back. build() offers to switch instead.
       unawaited(_focusLeg(index - 1));
     }
+  }
+
+  void _switchTrackedLegToDisplayed() {
+    final tracker = _navTracker;
+    if (tracker == null || _currentPage <= 0) return;
+    tracker.jumpToLeg(_currentPage - 1);
+    unawaited(Haptics.mediumTick());
+  }
+
+  /// True while tracking is on but the carousel is showing a different leg
+  /// from the one being followed.
+  bool get _shouldShowSwitchTrackingHint {
+    final tracker = _navTracker;
+    if (tracker == null || !tracker.isActive || _currentPage <= 0) {
+      return false;
+    }
+    return _currentPage - 1 != tracker.currentLegIndex;
+  }
+
+  /// Offers tracking when the rider is on or near the route, and starts it
+  /// when it was asked for on the way in.
+  Future<void> _evaluateNavigationEligibility() async {
+    if (!mounted) return;
+    await ItineraryTrackingController.attachIfRunning(_trackingFingerprint);
+    if (!mounted || _navTracker != null) return;
+    final hasPermission = await LocationService.hasPermission();
+    if (!hasPermission || !mounted) return;
+    final position = await LocationService.currentOrLastKnownLatLng();
+    if (position == null || !mounted || _legGeometries.isEmpty) return;
+    final distance = minDistanceToRoute(_legGeometries, position);
+    if (distance > _navigationEligibilityThresholdMeters || !mounted) return;
+    setState(() => _canStartNavigation = true);
+    if (widget.startTracking) unawaited(_startNavigation());
+  }
+
+  Future<void> _startNavigation() async {
+    if (_navTracker?.isActive == true) return;
+    // A fresh fix every time: reusing the one from when the screen opened
+    // would keep picking the leg that was nearest then, not where the rider
+    // is now.
+    final position = await LocationService.currentOrLastKnownLatLng();
+    if (position == null || !mounted) return;
+    unawaited(Haptics.mediumTick());
+    await ItineraryTrackingController.start(
+      legs: _displayLegs,
+      fingerprint: _trackingFingerprint,
+      initialPos: position,
+    );
+    // _onControllerTrackerChanged is already listening, and animates the
+    // carousel to the leg the session starts on.
+  }
+
+  void _stopNavigation() {
+    ItineraryTrackingController.stopIfMatches(_trackingFingerprint);
+  }
+
+  /// Keeps the screen awake only while this screen shows tracking that is
+  /// running; a plain journey view, or the app in the background with only
+  /// its notification left, sleeps as usual.
+  void _syncWakelock() {
+    unawaited(WakelockPlus.toggle(enable: _navTracker?.isActive == true));
+  }
+
+  /// Fires when the controller's session changes — started, stopped, or moved
+  /// from the app to the background service — and not for the ordinary
+  /// progress of one, which arrives through [_onNavTrackerChanged].
+  void _onControllerTrackerChanged() {
+    setState(_syncFromController);
+    _syncWakelock();
+  }
+
+  void _syncFromController() {
+    final session = ItineraryTrackingController.active.value;
+    final ours =
+        session != null &&
+        ItineraryTrackingController.isTracking(_trackingFingerprint);
+    final next = ours ? session : null;
+    if (identical(next, _navTracker)) return;
+
+    _navTracker?.removeListener(_onNavTrackerChanged);
+    _navTracker = next;
+    if (next == null) return;
+
+    next.addListener(_onNavTrackerChanged);
+    _lastNavLegIndex = next.currentLegIndex;
+    _animateToTrackedLeg(next.currentLegIndex);
+  }
+
+  void _onNavTrackerChanged() {
+    final tracker = _navTracker;
+    if (tracker == null || !mounted) return;
+
+    final legIndex = tracker.currentLegIndex;
+    if (legIndex != _lastNavLegIndex && legIndex < _displayLegs.length) {
+      _lastNavLegIndex = legIndex;
+      unawaited(Haptics.mediumTick());
+      _animateToTrackedLeg(legIndex);
+    }
+
+    setState(() {});
+    _syncWakelock();
+  }
+
+  void _animateToTrackedLeg(int legIndex) {
+    if (!_pageController.hasClients) return;
+    unawaited(
+      _pageController.animateToPage(
+        legIndex + 1,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOut,
+      ),
+    );
   }
 
   Future<void> _focusLeg(int legIndex) async {
@@ -409,6 +613,7 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
     if (_currentPage > 0) {
       await _focusLeg(_currentPage - 1);
     }
+    unawaited(_evaluateNavigationEligibility());
   }
 
   Future<void> _drawJourneyLegs() async {
@@ -1033,11 +1238,15 @@ class _LegCarouselCard extends StatelessWidget {
     required this.leg,
     required this.legIndex,
     required this.accentColor,
+    this.progressText,
   });
 
   final Leg leg;
   final int legIndex;
   final Color accentColor;
+
+  /// How far there is to go, on the leg being tracked and no other.
+  final String? progressText;
 
   @override
   Widget build(BuildContext context) {
@@ -1093,6 +1302,23 @@ class _LegCarouselCard extends StatelessWidget {
             ),
             label: leg.toName,
           ),
+          if (progressText != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(LucideIcons.navigation, size: 14, color: accentColor),
+                const SizedBox(width: 6),
+                Text(
+                  progressText!,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: accentColor,
+                  ),
+                ),
+              ],
+            ),
+          ],
           LegNoticeStack.headline(legNotices(leg)),
         ],
       ),
@@ -1328,6 +1554,180 @@ class _CarouselIndicator extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Offered while tracking follows one leg and the carousel shows another.
+class _SwitchTrackingHint extends StatelessWidget {
+  const _SwitchTrackingHint({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppColors.accentOf(context);
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        onTap: onPressed,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: accent,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x26000000),
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                LucideIcons.navigation,
+                size: 16,
+                color: AppColors.solidWhite,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Track this leg instead',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.solidWhite,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Starts tracking, and stops it again.
+class _NavigationToggleButton extends StatelessWidget {
+  const _NavigationToggleButton({
+    required this.isActive,
+    required this.onPressed,
+  });
+
+  final bool isActive;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppColors.accentOf(context);
+    return Semantics(
+      button: true,
+      label: isActive ? 'Stop tracking this trip' : 'Track this trip',
+      child: GestureDetector(
+        onTap: onPressed,
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: isActive ? accent : AppColors.white,
+            shape: BoxShape.circle,
+            border: Border.all(color: accent, width: isActive ? 0 : 1.5),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1F000000),
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Icon(
+            isActive ? LucideIcons.square : LucideIcons.play,
+            size: 20,
+            color: isActive ? AppColors.solidWhite : accent,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Says when tracking has lost the GPS, or has arrived. Empty otherwise.
+class _NavigationStatusBanner extends StatelessWidget {
+  const _NavigationStatusBanner({
+    required this.gpsSignalLost,
+    required this.arrived,
+  });
+
+  final bool gpsSignalLost;
+  final bool arrived;
+
+  @override
+  Widget build(BuildContext context) {
+    String? message;
+    var color = AppColors.solidBlack;
+    var icon = LucideIcons.info;
+
+    if (arrived) {
+      message = "You've arrived";
+      color = const Color(0xFF2E9E5B);
+      icon = LucideIcons.circleCheck;
+    } else if (gpsSignalLost) {
+      message = 'GPS signal lost — position may not update (e.g. underground)';
+      color = AppColors.cancelled;
+      icon = LucideIcons.satelliteDish;
+    }
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        final offsetTween = Tween<Offset>(
+          begin: const Offset(0, -1),
+          end: Offset.zero,
+        );
+        return SlideTransition(
+          position: animation.drive(offsetTween),
+          child: child,
+        );
+      },
+      child: message == null
+          ? const SizedBox.shrink(key: ValueKey('nav-banner-empty'))
+          : Container(
+              key: ValueKey(message),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x26000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: AppColors.solidWhite, size: 16),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      message,
+                      style: const TextStyle(
+                        color: AppColors.solidWhite,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }

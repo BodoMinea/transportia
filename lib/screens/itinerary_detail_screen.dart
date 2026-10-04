@@ -11,7 +11,9 @@ import '../models/itinerary.dart';
 import '../models/saved_trip.dart';
 import '../models/time_selection.dart';
 import '../providers/theme_provider.dart';
+import '../services/itinerary_navigation_tracker.dart';
 import '../services/itinerary_refresh_service.dart';
+import '../services/itinerary_tracking_controller.dart';
 import '../services/plan_request.dart';
 import '../services/saved_trips_service.dart';
 import '../utils/haptics.dart';
@@ -418,6 +420,12 @@ class _ItineraryDetailScreenState extends State<ItineraryDetailScreen> {
   @override
   void dispose() {
     _agoTicker?.cancel();
+    // Leaving the journey altogether, for the results or the saved trips,
+    // ends tracking. Closing the map back to this screen does not: that only
+    // lets go of a listener and leaves the session running.
+    ItineraryTrackingController.stopIfMatches(
+      ItineraryTrackingController.fingerprintFor(_itinerary),
+    );
     super.dispose();
   }
 
@@ -984,6 +992,11 @@ class JourneyOverviewWidget extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
+              // Not offered for a trip that is over: nothing left to follow.
+              if (!itinerary.endTime.isBefore(DateTime.now())) ...[
+                _TrackTripButton(itinerary: itinerary),
+                const SizedBox(width: 16),
+              ],
               GestureDetector(
                 onTap: () {
                   Navigator.of(context).push(
@@ -1049,6 +1062,75 @@ class JourneyOverviewWidget extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Opens the journey map and starts following the trip, or, while it is
+/// already being followed, takes the rider back to where it is.
+class _TrackTripButton extends StatelessWidget {
+  const _TrackTripButton({required this.itinerary});
+
+  final Itinerary itinerary;
+
+  @override
+  Widget build(BuildContext context) {
+    final fingerprint = ItineraryTrackingController.fingerprintFor(itinerary);
+    return ValueListenableBuilder<NavigationProgressState?>(
+      valueListenable: ItineraryTrackingController.active,
+      builder: (context, _, _) {
+        final isTracking = ItineraryTrackingController.isTracking(fingerprint);
+        final accent = AppColors.accentOf(context);
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            Haptics.lightTick();
+            Navigator.of(context).push(
+              CustomPageRoute(
+                child: ItineraryMapScreen(
+                  itinerary: itinerary,
+                  startTracking: !isTracking,
+                ),
+              ),
+            );
+          },
+          child: Semantics(
+            button: true,
+            label: isTracking
+                ? 'Tracking this trip, show it on the map'
+                : 'Track this trip',
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Container(
+                padding: isTracking
+                    ? const EdgeInsets.symmetric(horizontal: 8, vertical: 2)
+                    : EdgeInsets.zero,
+                decoration: BoxDecoration(
+                  color: isTracking ? AppColors.accentWash(accent) : null,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.navigation, size: 16, color: accent),
+                    if (isTracking) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        'Tracking',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: accent,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

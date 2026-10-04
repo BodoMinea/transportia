@@ -16,6 +16,7 @@ import 'gtfs_fields_row.dart';
 import 'pressable_highlight.dart';
 import 'route_badge_pill.dart';
 import 'skeletons/skeleton_shimmer.dart';
+import 'track_departure_button.dart';
 import '../theme/app_text.dart';
 
 /// How long the sheet takes to fade in and out.
@@ -297,6 +298,10 @@ class _DepartureTile extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             DelayedTime.end(departure),
+            if (!stopTime.cancelled) ...[
+              const SizedBox(width: 4),
+              TrackDepartureButton(stopTime: stopTime),
+            ],
           ],
         ),
       ),

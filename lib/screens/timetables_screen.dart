@@ -27,6 +27,7 @@ import '../widgets/gtfs_fields_row.dart';
 import '../widgets/route_badge_pill.dart';
 import '../widgets/buttons/primary_button.dart';
 import '../widgets/skeletons/skeleton_list.dart';
+import '../widgets/track_departure_button.dart';
 import '../widgets/bidirectional_paged_list.dart';
 import '../widgets/time_selection_overlay.dart';
 import '../widgets/validation_toast.dart';
@@ -851,6 +852,10 @@ class _StopTimeCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (!stopTime.cancelled) ...[
+              const SizedBox(width: 8),
+              Center(child: TrackDepartureButton(stopTime: stopTime)),
+            ],
           ],
         ),
       ),

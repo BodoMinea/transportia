@@ -9,6 +9,7 @@ import '../../utils/time_utils.dart';
 import '../error_notice.dart';
 import '../route_badge_pill.dart';
 import '../skeletons/skeleton_shimmer.dart';
+import '../track_departure_button.dart';
 import 'map_selection_modal.dart';
 import '../../theme/app_text.dart';
 
@@ -324,6 +325,10 @@ class _StopTimePreviewRow extends StatelessWidget {
             ),
           ],
         ),
+        if (!stopTime.cancelled) ...[
+          const SizedBox(width: 4),
+          TrackDepartureButton(stopTime: stopTime),
+        ],
       ],
     );
     if (onTap == null) return content;
