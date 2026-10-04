@@ -27,6 +27,11 @@ class PrefsKeys {
   /// `section:0|1` strings. Absent means all of them in the default order.
   static const String homeSections = 'home_sections';
 
+  /// Whether following a trip carries on from a notification once the app is
+  /// in the background. Absent means on; it is switched off for the rider
+  /// when they refuse the permissions it needs.
+  static const String backgroundTrackingEnabled = 'background_tracking_enabled';
+
   static const String mapShowStops = 'map_show_stops';
   static const String mapQuickButton = 'map_quick_button';
   static const String mapShowVehicles = 'map_show_vehicles';

@@ -30,6 +30,8 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const String _showGtfsFieldsKey = PrefsKeys.showGtfsFields;
   static const String _tabBarItemsKey = PrefsKeys.tabBarItems;
   static const String _homeSectionsKey = PrefsKeys.homeSections;
+  static const String _backgroundTrackingEnabledKey =
+      PrefsKeys.backgroundTrackingEnabled;
 
   static const Color defaultAccentColor = Color.fromARGB(255, 0, 113, 133);
   static const String defaultMapStyle = 'default';
@@ -40,6 +42,7 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
       SearchOptionsOpening.closed;
   static const bool defaultShowCalories = true;
   static const bool defaultShowGtfsFields = false;
+  static const bool defaultBackgroundTrackingEnabled = true;
 
   static const Color lightBackground = Color(0xFFFFFFFF);
   static const Color darkBackground = Color(0xFF161616);
@@ -63,6 +66,7 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   SearchOptionsOpening _searchOptionsOpening = defaultSearchOptionsOpening;
   bool _showCalories = defaultShowCalories;
   bool _showGtfsFields = defaultShowGtfsFields;
+  bool _backgroundTrackingEnabled = defaultBackgroundTrackingEnabled;
   List<TabBarItemConfig> _tabBarItems = TabBarItemConfig.defaults;
   List<HomeSectionConfig> _homeSections = HomeSectionConfig.defaults;
   bool _isInitialized = false;
@@ -82,6 +86,7 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   SearchOptionsOpening get searchOptionsOpening => _searchOptionsOpening;
   bool get showCalories => _showCalories;
   bool get showGtfsFields => _showGtfsFields;
+  bool get backgroundTrackingEnabled => _backgroundTrackingEnabled;
   List<TabBarItemConfig> get tabBarItems => List.unmodifiable(_tabBarItems);
   List<HomeSectionConfig> get homeSections => List.unmodifiable(_homeSections);
 
@@ -155,6 +160,10 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     _showGtfsFields =
         await prefs.getBool(_showGtfsFieldsKey) ?? defaultShowGtfsFields;
+
+    _backgroundTrackingEnabled =
+        await prefs.getBool(_backgroundTrackingEnabledKey) ??
+        defaultBackgroundTrackingEnabled;
 
     final storedTabBarItems = await prefs.getStringList(_tabBarItemsKey);
     if (storedTabBarItems != null) {
@@ -265,6 +274,16 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     final prefs = SharedPreferencesAsync();
     await prefs.setBool(_showGtfsFieldsKey, show);
+  }
+
+  Future<void> setBackgroundTrackingEnabled(bool enabled) async {
+    if (_backgroundTrackingEnabled == enabled) return;
+
+    _backgroundTrackingEnabled = enabled;
+    notifyListeners();
+
+    final prefs = SharedPreferencesAsync();
+    await prefs.setBool(_backgroundTrackingEnabledKey, enabled);
   }
 
   Future<void> setTabBarItems(List<TabBarItemConfig> items) async {
